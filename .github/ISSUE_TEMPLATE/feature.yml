@@ -1,0 +1,51 @@
+name: "Feature / Новая возможность"
+description: "Предложение функции, изменение поведения или архитектурное требование"
+title: "[feature] "
+labels:
+  - "type:feature"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Не расширяйте MVP «заодно»: функция должна иметь use case, риски, критерии приёмки и
+        архитектурное решение. Ссылка на спецификацию обязательна.
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Проблема / пользовательская потребность"
+      description: "Что болит у пользователя и почему это важно"
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: "Предлагаемое поведение"
+      description: "Сценарий использования и наблюдаемый результат"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: "Критерии приёмки"
+      description: "Проверяемые условия завершения"
+    validations:
+      required: true
+  - type: input
+    id: spec
+    attributes:
+      label: "Ссылка на spec/ADR"
+      description: ".specify/specs/NNN-slug/spec.md и/или docs/architecture/adr/NNNN"
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: "Влияние на безопасность, приватность и роли"
+      description: "Child/Parent инварианты, pairing/TLS, permissions, логи, аудио"
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: "Вне scope"
+      description: "Что явно не входит в эту задачу"

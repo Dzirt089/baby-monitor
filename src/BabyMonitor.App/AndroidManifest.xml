@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!--
+    Минимальный manifest bootstrap-фазы: приложение не использует сеть, микрофон,
+    сервисы и уведомления. Разрешения добавляются отдельной feature с security review.
+  -->
+  <application
+    android:allowBackup="false"
+    android:icon="@mipmap/appicon"
+    android:label="@string/app_name"
+    android:supportsRtl="true" />
+</manifest>

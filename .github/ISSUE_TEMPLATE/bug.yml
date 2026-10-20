@@ -1,0 +1,51 @@
+name: "Bug / Дефект"
+description: "Сообщить о воспроизводимом дефекте"
+title: "[bug] "
+labels:
+  - "type:bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Не прикладывайте аудиозаписи, pairing tokens, keystore, private keys и полные fingerprints.
+        Логи принимаются только очищенные от секретов, private IP и персональных данных.
+  - type: textarea
+    id: actual
+    attributes:
+      label: "Что произошло"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Что ожидалось"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Шаги воспроизведения"
+      description: "Роль (Child/Parent), состояние сессии, сеть, устройства"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: "Окружение"
+      description: "Модель устройства, Android API level, версия приложения, сборка CI/локальная"
+    validations:
+      required: true
+  - type: textarea
+    id: missed
+    attributes:
+      label: "Последствия и обходной путь"
+      description: "Потеря связи, ложная тревога, отсутствие звука, reconnect и т.п."
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: "Проверка безопасности"
+      options:
+        - label: "В отчёте нет секретов, аудиоданных, private IP и персональных данных"
+          required: true

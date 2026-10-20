@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>BabyMonitor.App</RootNamespace>
+    <ApplicationId>com.example.babymonitor</ApplicationId>
+    <ApplicationDisplayVersion Condition="'$(ApplicationDisplayVersion)' == ''">$(VersionPrefix)</ApplicationDisplayVersion>
+    <ApplicationVersion Condition="'$(ApplicationVersion)' == ''">$(BabyMonitorVersionCode)</ApplicationVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BabyMonitor.Application\BabyMonitor.Application.csproj" />
+    <ProjectReference Include="..\BabyMonitor.Infrastructure\BabyMonitor.Infrastructure.csproj" />
+    <ProjectReference Include="..\BabyMonitor.Platform.Android\BabyMonitor.Platform.Android.csproj" />
+  </ItemGroup>
+</Project>
