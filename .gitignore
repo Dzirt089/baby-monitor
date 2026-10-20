@@ -1,0 +1,65 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+artifacts/
+TestResults/
+TestResults*/
+coverage/
+*.trx
+*.coverage
+*.coverage.xml
+*.receipt
+
+# IDE / editor state
+.vs/
+.idea/
+*.user
+*.suo
+*.userprefs
+*.DotSettings.user
+*.sln.docstates
+
+# Android / .NET Android outputs and signing material
+*.apk
+*.aab
+*.aab.*
+*.apk.*
+*.idsig
+*.dex
+*.class
+*.hprof
+*.jks
+*.keystore
+*.keystore.b64
+*.p12
+*.pfx
+keystore/
+*.signing.properties
+signing.properties
+
+# Local machine / tool configuration
+local.properties
+.env
+.env.*
+secrets.json
+*.binlog
+*.nupkg
+*.snupkg
+*.snk
+.kotlin/
+.gradle/
+
+# OS / junk
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+*.tmp
+*.bak
+*.swp
+*.dmp
+
+# Local agent / tool scratch (никогда не коммитить)
+.agent/
+.dsh/
+.copilot/
