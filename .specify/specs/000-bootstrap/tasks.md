@@ -51,12 +51,12 @@
 ## Phase 6 — Git и GitHub
 
 - [x] T031 Инициализировать git (branch main) — `.git/`
-- [ ] T031a Создать initial commit в main — `.git/`
-- [ ] T032 Создать feature branch bootstrap/initial-foundation и commit каркаса — `.git/`
-- [ ] T033 Создать private GitHub repository baby-monitor без auto-init — GitHub
-- [ ] T034 Push main и feature branch, открыть PR (не merge) — GitHub
-- [ ] T035 Прочитать статус CI run на PR и зафиксировать факт — GitHub Actions
-- [ ] T036 Зафиксировать manual checklist настроек GitHub (branch protection/env/secrets/labels) — отчёт
+- [x] T031a Создать initial commit в main — `.git/` (29a5624)
+- [x] T032 Создать feature branch bootstrap/initial-foundation и commit каркаса — `.git/` (ee8c7e1)
+- [x] T033 Создать private GitHub repository baby-monitor без auto-init — GitHub (Dzirt089/baby-monitor, private)
+- [x] T034 Push main и feature branch, открыть PR (не merge) — GitHub (PR #1)
+- [x] T035 Прочитать статус CI run на PR и зафиксировать факт — GitHub Actions (run 39456208203: success)
+- [x] T036 Зафиксировать manual checklist настроек GitHub (branch protection/env/secrets/labels) — отчёт (T036 checklist в финальном отчёте)
 
 ## Verification Log
 
@@ -75,6 +75,10 @@
 | 2026-10-20 | Dependency scan | dotnet list package --vulnerable --include-transitive | уязвимых пакетов не найдено (8 проектов) |
 | 2026-10-20 | Git hygiene | git init + git ls-files --others --exclude-standard + check-ignore | 84 кандидата, bin/obj/artifacts/APK игнорируются, неожиданных нет |
 | 2026-10-20 | Workflow bash syntax | PyYAML + bash -n по всем run-блокам | 7 YAML OK, bash syntax OK |
+| 2026-10-20 | GitHub repository | MCP: create private repo | Dzirt089/baby-monitor, private, default main, auto-init=false |
+| 2026-10-20 | Push + PR | push main/bootstrap/initial-foundation | PR #1 открыт, не merged |
+| 2026-10-20 | Remote CI | GitHub Actions run 39456208203 (pull_request) | success; job build/test/debug-APK success |
+| 2026-10-20 | Labels | REST: 9 labels созданы | type:*, area:*, status:blocked, skip-changelog |
 | 2026-10-20 | Независимое ревью pass 1 | reviewer (отдельный агент) | PASS WITH COMMENTS, 0 blocker/major; MINOR/NIT исправлены |
 | 2026-10-20 | Независимое ревью pass 2 | reviewer (отдельный агент) | PASS WITH COMMENTS; checklist 10/10 PASS; MINOR/NIT исправлены до commit |
 

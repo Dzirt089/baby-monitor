@@ -1,7 +1,7 @@
 # Roadmap: Радионяня (Baby Monitor)
 
 **Обновлено**: 2026-10-20
-**Текущая фаза**: 000-bootstrap (In Progress)
+**Текущая фаза**: 000-bootstrap (Done) → следующий кандидат 001-audio-transport-spike
 
 Допустимые статусы milestone: Proposed, Ready, In Progress, Blocked, Done.
 Источники истины: этот файл (milestone status), спецификации в .specify/specs, задачи в tasks.md,
@@ -9,7 +9,7 @@ GitHub Issues/PR и CI. Отдельные PROGRESS/STATUS файлы не ве�
 
 | Milestone | Status | Goal | Exit criteria | Feature spec | GitHub issue/PR |
 |---|---|---|---|---|---|
-| 000-bootstrap | In Progress | Создать воспроизводимый фундамент репозитория и CI/CD | Solution, каркас, docs/ADR, тесты, CI, release-by-tag с secrets gate, private repo + PR; локальные проверки зелёные | [spec](../../.specify/specs/000-bootstrap/spec.md) | PR bootstrap/initial-foundation |
+| 000-bootstrap | Done | Создать воспроизводимый фундамент репозитория и CI/CD | Solution, каркас, docs/ADR, 58 тестов, CI (run success), release-by-tag с secrets gate, private repo + PR #1; локальные проверки зелёные | [spec](../../.specify/specs/000-bootstrap/spec.md) | PR #1 (открыт, не merged) |
 | 001-audio-transport-spike | Proposed | Проверить media-транспорт (SIPSorcery vs thin libwebrtc) на device matrix | ADR-0005 Accepted/Rejected с данными latency/CPU/battery/стабильности; IRealtimeTransport contract tests; решение о библиотеке | planned | — |
 | 002-device-discovery | Proposed | NSD/DNS-SD advertise/discover/resolve в LAN + понятные ошибки | Два устройства находят друг друга в одной сети; учитываются guest/AP isolation/VLAN; TXT без приватных данных | planned | — |
 | 003-foreground-monitoring | Proposed | Foreground service для Child (microphone) и Parent (mediaPlayback) с постоянным уведомлением | Service запускается явным действием, переживает уничтожение Activity, Stop в уведомлении, минимальные permissions, Android 13+/14+ проверены | planned | — |

@@ -2,7 +2,7 @@
 
 **Feature Branch**: bootstrap/initial-foundation
 **Created**: 2026-10-20
-**Status**: In Progress (bootstrap-фаза)
+**Status**: Done (2026-10-20; bootstrap PR открыт, merge не выполнялся)
 **Input**: BOOTSTRAP_PROMPT.md и AGENTS.md проекта «Радионяня»
 
 ## Контекст
@@ -97,10 +97,10 @@ bootstrap-спеку и понимает, что можно делать в boot
 - [x] AC-003: Architecture tests подтверждают dependency direction и гигиену (32 теста, включая negative-кейсы).
 - [x] AC-004: git status показывает только ожидаемые source/config/docs; bin/obj/artifacts игнорируются (проверено git check-ignore).
 - [x] AC-005: Независимый reviewer подтвердил соответствие AGENTS.md и bootstrap-scope (pass 1+2: PASS WITH COMMENTS, 0 blocker/major, checklist 10/10).
-- [ ] AC-006: Private GitHub repo создан, feature branch и PR открыты, PR не merged.
-- [ ] AC-007: CI run на PR выполнен (или честно зафиксировано, что remote-проверка недоступна).
-- [ ] AC-008: Список ручных GitHub settings (branch protection, environment release, secrets,
-  labels/milestone) приложен в отчёте; secrets не создавались.
+- [x] AC-006: Private GitHub repo создан (Dzirt089/baby-monitor), feature branch и PR #1 открыты, PR не merged.
+- [x] AC-007: CI run на PR выполнен успешно: run 39456208203, job build/test/debug-APK — success.
+- [x] AC-008: Список ручных GitHub settings (branch protection, environment release, secrets,
+  labels/milestone) приложен в финальном отчёте; secrets не создавались.
 
 ## Out of Scope
 
