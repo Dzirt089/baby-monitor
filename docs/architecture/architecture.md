@@ -41,7 +41,7 @@ Tests                          -> тестируемые проекты
 | BabyMonitor.Infrastructure | WebRTC, signaling, discovery, pairing, persistence, logging adapters | только маркер сборки |
 | BabyMonitor.Platform.Android | AudioRecord/AudioTrack, services, permissions, notifications, connectivity, Keystore | только маркер сборки |
 | BabyMonitor.App | MAUI или .NET for Android UI, MVVM, composition root | Android Activity-оболочка со статусом bootstrap |
-| Tests | unit/contract/architecture/device | domain/application/architecture tests |
+| Tests | unit/contract/architecture/device | domain/application/architecture tests + contract suite IRealtimeTransport (22 теста на fake) |
 
 ## 3. Целевой runtime (planned)
 

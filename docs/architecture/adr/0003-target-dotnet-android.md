@@ -33,7 +33,8 @@ workload не установлен.
 
 ## Последствия
 
-- Единый APK собирается из src/BabyMonitor.App (ApplicationId com.example.babymonitor).
+- Единый APK собирается из src/BabyMonitor.App (ApplicationId на bootstrap — com.example.babymonitor;
+  финальный id утверждён в [ADR-0010](0010-final-application-id.md)).
 - На CI требуется dotnet workload install android (ubuntu-latest; Temurin 21, минимально JDK 17+).
 - Ограничение API 24 сужает device matrix; для release readiness нужны реальные устройства
   разных производителей и API levels (см. AGENTS.md раздел 16).

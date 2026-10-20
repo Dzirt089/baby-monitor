@@ -13,6 +13,16 @@ public sealed class TargetFrameworkTests
     }
 
     [Theory]
+    [InlineData("BabyMonitor.Domain.Tests")]
+    [InlineData("BabyMonitor.Application.Tests")]
+    [InlineData("BabyMonitor.Architecture.Tests")]
+    [InlineData("BabyMonitor.Infrastructure.Tests")]
+    public void Тестовый_проект_таргетит_net10_0(string projectName)
+    {
+        AssertProjectProperty(projectName, "TargetFramework", "net10.0");
+    }
+
+    [Theory]
     [InlineData("BabyMonitor.Platform.Android")]
     [InlineData("BabyMonitor.App")]
     public void Android_проект_таргетит_net10_0_android(string projectName)
@@ -27,9 +37,9 @@ public sealed class TargetFrameworkTests
     }
 
     [Fact]
-    public void App_имеет_ApplicationId_com_example_babymonitor()
+    public void App_имеет_ApplicationId_io_github_dzirt089_babymonitor()
     {
-        AssertProjectProperty("BabyMonitor.App", "ApplicationId", "com.example.babymonitor");
+        AssertProjectProperty("BabyMonitor.App", "ApplicationId", "io.github.dzirt089.babymonitor");
     }
 
     [Theory]

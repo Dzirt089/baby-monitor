@@ -76,6 +76,7 @@ dotnet test --no-build
 dotnet test tests/BabyMonitor.Domain.Tests/BabyMonitor.Domain.Tests.csproj
 dotnet test tests/BabyMonitor.Application.Tests/BabyMonitor.Application.Tests.csproj
 dotnet test tests/BabyMonitor.Architecture.Tests/BabyMonitor.Architecture.Tests.csproj
+dotnet test tests/BabyMonitor.Infrastructure.Tests/BabyMonitor.Infrastructure.Tests.csproj
 ```
 
 Debug APK (только для локального smoke-теста, не для распространения; собирается self-contained,
@@ -83,7 +84,7 @@ Debug APK (только для локального smoke-теста, не дл�
 
 ```powershell
 dotnet publish src/BabyMonitor.App/BabyMonitor.App.csproj -c Debug -f net10.0-android -p:AndroidPackageFormat=apk -p:EmbedAssembliesIntoApk=true -o artifacts/debug-apk
-# APK: artifacts/debug-apk/com.example.babymonitor-Signed.apk
+# APK: artifacts/debug-apk/io.github.dzirt089.babymonitor-Signed.apk
 ```
 
 ## CI
@@ -94,7 +95,7 @@ architecture tests и собирает debug APK, который публику�
 (хранение 14 дней), но не как GitHub Release.
 
 Скачать APK: открыть нужный run в GitHub Actions → блок `Artifacts` → `debug-apk`
-(файл `com.example.babymonitor-Signed.apk`; это self-contained debug-сборка для локального smoke).
+(файл `io.github.dzirt089.babymonitor-Signed.apk`; это self-contained debug-сборка для локального smoke).
 
 ## Release
 
@@ -104,7 +105,7 @@ SemVer-тегу `vMAJOR.MINOR.PATCH`, который создаёт челове
 1. проверяет формат тега и наличие раздела версии в `CHANGELOG.md`;
 2. заново выполняет restore/build/test;
 3. собирает release APK и подписывает его **только** при наличии signing secrets
-   в защищённом GitHub Environment `release`;
+   в GitHub Environment `release` (manual approval — только на планах GitHub с protection rules);
 4. считает SHA-256, создаёт GitHub Release и прикладывает APK и checksum;
 5. никогда не создаёт и не двигает теги.
 
@@ -112,15 +113,15 @@ SemVer-тегу `vMAJOR.MINOR.PATCH`, который создаёт челове
 диагностический dry-run (без production-подписи) доступен только ручным запуском workflow,
 его артефакт не предназначен для установки как релиз.
 
-> **ApplicationId:** `com.example.babymonitor` — placeholder из bootstrap-промпта. Финальный
-> applicationId утверждается владельцем **до первого тега**: после публикации его смена означает
-> другое приложение и ломает цепочку обновлений. При смене id синхронно обновите
-> `tests/BabyMonitor.Architecture.Tests/TargetFrameworkTests.cs` и release-проверку (ApplicationId
-> в workflow читается из csproj через `dotnet msbuild -getProperty:ApplicationId`).
+> **ApplicationId:** `io.github.dzirt089.babymonitor` — утверждён в [ADR-0010](docs/architecture/adr/0010-final-application-id.md)
+> до первого тега. После публикации смена id означает другое приложение и ломает цепочку обновлений.
+> Если id когда-либо изменится — нужен новый ADR, обновление `TargetFrameworkTests` и README;
+> release workflow читает ApplicationId из csproj через `dotnet msbuild -getProperty:ApplicationId`.
 
 Первый release **не выполнялся**:
-до него требуется постоянный keystore и настроенный Environment `release`
-с manual approval. Подробности — [docs/architecture/adr/0009-android-versioning.md](docs/architecture/adr/0009-android-versioning.md).
+постоянный keystore и Environment `release` с signing secrets подготовлены, однако manual approval
+на GitHub Free для private-репозитория недоступен (см. [release-runbook](docs/operations/release-runbook.md)).
+Подробности версионирования — [docs/architecture/adr/0009-android-versioning.md](docs/architecture/adr/0009-android-versioning.md).
 
 ## Подпись и секреты
 

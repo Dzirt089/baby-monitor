@@ -54,7 +54,7 @@
 - [x] T031a Создать initial commit в main — `.git/` (29a5624)
 - [x] T032 Создать feature branch bootstrap/initial-foundation и commit каркаса — `.git/` (ee8c7e1)
 - [x] T033 Создать private GitHub repository baby-monitor без auto-init — GitHub (Dzirt089/baby-monitor, private)
-- [x] T034 Push main и feature branch, открыть PR (не merge) — GitHub (PR #1)
+- [x] T034 Push main и feature branch, открыть PR (не merge) — GitHub (PR #1 merged в main, merge-commit 7095f75)
 - [x] T035 Прочитать статус CI run на PR и зафиксировать факт — GitHub Actions (run 39456208203: success)
 - [x] T036 Зафиксировать manual checklist настроек GitHub (branch protection/env/secrets/labels) — отчёт (T036 checklist в финальном отчёте)
 
@@ -63,7 +63,7 @@
 | Дата | Проверка | Команда/способ | Результат |
 |---|---|---|---|
 | 2026-10-20 | Локальная сборка Debug/Release | dotnet restore + dotnet build -c Debug/Release | 0 warnings, 0 errors |
-| 2026-10-20 | Debug APK | dotnet publish ... -p:AndroidPackageFormat=apk -p:EmbedAssembliesIntoApk=true | APK собран, package com.example.babymonitor, versionCode 100, versionName 0.1.0 |
+| 2026-10-20 | Debug APK | dotnet publish ... -p:AndroidPackageFormat=apk -p:EmbedAssembliesIntoApk=true | APK собран, package com.example.babymonitor (bootstrap-заглушка; финальный id — ADR-0010), versionCode 100, versionName 0.1.0 |
 | 2026-10-20 | YAML синтаксис | PyYAML safe_load по всем .github/**/*.yml | 7/7 OK |
 | 2026-10-20 | AGENTS.md неизменность | SHA-256 сравнение с оригиналом | совпадает |
 | 2026-10-20 | Secret/path scan | Select-String по трекаемым кандидатам | совпадений нет |
@@ -78,6 +78,11 @@
 | 2026-10-20 | GitHub repository | MCP: create private repo | Dzirt089/baby-monitor, private, default main, auto-init=false |
 | 2026-10-20 | Push + PR | push main/bootstrap/initial-foundation | PR #1 открыт, не merged |
 | 2026-10-20 | Remote CI | GitHub Actions run 39456208203 (pull_request) | success; job build/test/debug-APK success |
+| 2026-10-20 | Post-merge CI | GitHub Actions run 39458177656 (push main, 7095f75) | success |
+| 2026-10-20 | Admin GitHub | API: labels 9, milestone MVP, environment release, 4 env secrets | выполнено (см. release-runbook) |
+| 2026-10-20 | GitHub Free limits | API: branch protection / rulesets / env reviewers / secret scanning | 403/422: недоступно для private без Pro/GHAS |
+| 2026-10-20 | Permanent keystore | keytool: RSA 4096, срок 100 лет | создан вне репозитория; local signed APK verified постоянным сертификатом |
+| 2026-10-20 | ApplicationId | ADR-0010; rebuild + aapt | io.github.dzirt089.babymonitor, versionCode 100, versionName 0.1.0 |
 | 2026-10-20 | Labels | REST: 9 labels созданы | type:*, area:*, status:blocked, skip-changelog |
 | 2026-10-20 | Независимое ревью pass 1 | reviewer (отдельный агент) | PASS WITH COMMENTS, 0 blocker/major; MINOR/NIT исправлены |
 | 2026-10-20 | Независимое ревью pass 2 | reviewer (отдельный агент) | PASS WITH COMMENTS; checklist 10/10 PASS; MINOR/NIT исправлены до commit |

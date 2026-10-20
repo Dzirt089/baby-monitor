@@ -2,7 +2,7 @@
 
 **Feature Branch**: bootstrap/initial-foundation
 **Created**: 2026-10-20
-**Status**: Done (2026-10-20; bootstrap PR открыт, merge не выполнялся)
+**Status**: Done (2026-10-20; PR #1 merged в main, merge-commit 7095f75)
 **Input**: BOOTSTRAP_PROMPT.md и AGENTS.md проекта «Радионяня»
 
 ## Контекст
@@ -93,20 +93,22 @@ bootstrap-спеку и понимает, что можно делать в boot
 ## Acceptance Criteria
 
 - [x] AC-001: dotnet restore + build --no-restore + test (3 test-проекта) локально зелёные (58/58, 0 warnings).
-- [x] AC-002: Debug APK собирается локально; ApplicationId com.example.babymonitor; versionCode 100, versionName 0.1.0; smoke на emulator-5554.
+- [x] AC-002: Debug APK собирается локально; ApplicationId com.example.babymonitor (на момент bootstrap; финальный — io.github.dzirt089.babymonitor, ADR-0010); versionCode 100, versionName 0.1.0; smoke на emulator-5554.
 - [x] AC-003: Architecture tests подтверждают dependency direction и гигиену (32 теста, включая negative-кейсы).
 - [x] AC-004: git status показывает только ожидаемые source/config/docs; bin/obj/artifacts игнорируются (проверено git check-ignore).
 - [x] AC-005: Независимый reviewer подтвердил соответствие AGENTS.md и bootstrap-scope (pass 1+2: PASS WITH COMMENTS, 0 blocker/major, checklist 10/10).
-- [x] AC-006: Private GitHub repo создан (Dzirt089/baby-monitor), feature branch и PR #1 открыты, PR не merged.
+- [x] AC-006: Private GitHub repo создан (Dzirt089/baby-monitor); PR #1 merged в main (merge-commit 7095f75).
 - [x] AC-007: CI run на PR выполнен успешно: run 39456208203, job build/test/debug-APK — success.
-- [x] AC-008: Список ручных GitHub settings (branch protection, environment release, secrets,
-  labels/milestone) приложен в финальном отчёте; secrets не создавались.
+- [x] AC-008: Административные настройки: milestone и labels созданы; environment `release` и
+  4 signing secrets настроены; branch protection/rulesets и environment reviewers недоступны
+  на GitHub Free для private-репозитория (зафиксировано в [release-runbook](../../../docs/operations/release-runbook.md)).
 
 ## Out of Scope
 
 WebRTC/SIPSorcery/Opus, AudioRecord/AudioTrack, NSD/mDNS, pairing, foreground service, уведомления,
-ViewModels/экраны ролей, любые runtime-пакеты, signing key/keystore, первый release, GitHub
-milestone/issues (кроме labels при доступности), настройка branch protection через API.
+ViewModels/экраны ролей, любые runtime-пакеты, первый release, GitHub milestone/issues (кроме labels
+при доступности). Admin-настройка GitHub (milestone/labels/environment/secrets/keystore) выполнялась
+отдельно после bootstrap по поручению владельца и не входила в исходный scope.
 
 ## Dependencies & Assumptions
 
@@ -114,8 +116,8 @@ milestone/issues (кроме labels при доступности), настро
   Android SDK platform android-36/build-tools 36.
 - GitHub-доступ через MCP/токен пользователя; repository создаётся private без auto-init.
 - MAUI-нагрузка не установлена; UI-фреймворк остаётся Proposed ADR, каркас — .NET for Android.
-- APPLICATION_ID com.example.babymonitor и repo name baby-monitor — значения по умолчанию
-  bootstrap-промпта; могут быть изменены владельцем до первого релиза.
+- APPLICATION_ID: на bootstrap использовалась заглушка com.example.babymonitor; финальный id
+  утверждён в ADR-0010 (io.github.dzirt089.babymonitor) до первого тега; repo name baby-monitor.
 
 ## Success Criteria
 

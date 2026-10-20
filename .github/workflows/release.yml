@@ -2,7 +2,8 @@ name: Release
 
 # Релиз создаётся только по SemVer-тегу vMAJOR.MINOR.PATCH, который создаёт человек.
 # Workflow никогда не создаёт и не двигает теги. Подпись возможна только при наличии
-# signing secrets в защищённом GitHub Environment "release".
+# signing secrets в GitHub Environment "release" (manual approval — только на планах GitHub
+# с protection rules; см. docs/operations/release-runbook.md).
 on:
   push:
     tags:
@@ -121,6 +122,13 @@ jobs:
             --logger "trx;LogFileName=architecture.trx" \
             --results-directory TestResults
 
+      - name: Test Infrastructure (contract tests)
+        run: |
+          dotnet test tests/BabyMonitor.Infrastructure.Tests/BabyMonitor.Infrastructure.Tests.csproj \
+            --no-build -c Release \
+            --logger "trx;LogFileName=infrastructure.trx" \
+            --results-directory TestResults
+
       - name: Publish unsigned dry-run APK (manual dispatch only)
         if: github.event_name == 'workflow_dispatch'
         run: |
@@ -153,7 +161,8 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # Protected environment: manual approval и signing secrets настраиваются владельцем вручную.
+    # Environment release: signing secrets настроены; manual approval доступен только на планах
+    # с protection rules (на GitHub Free недоступен — см. release-runbook).
     environment: release
     permissions:
       contents: write
@@ -266,6 +275,13 @@ jobs:
           dotnet test tests/BabyMonitor.Architecture.Tests/BabyMonitor.Architecture.Tests.csproj \
             --no-build -c Release \
             --logger "trx;LogFileName=architecture.trx" \
+            --results-directory TestResults
+
+      - name: Test Infrastructure (contract tests)
+        run: |
+          dotnet test tests/BabyMonitor.Infrastructure.Tests/BabyMonitor.Infrastructure.Tests.csproj \
+            --no-build -c Release \
+            --logger "trx;LogFileName=infrastructure.trx" \
             --results-directory TestResults
 
       - name: Restore signing keystore

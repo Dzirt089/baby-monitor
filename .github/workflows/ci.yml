@@ -93,6 +93,14 @@ jobs:
             --results-directory TestResults \
             --collect "XPlat Code Coverage"
 
+      - name: Test Infrastructure (contract tests)
+        run: |
+          dotnet test tests/BabyMonitor.Infrastructure.Tests/BabyMonitor.Infrastructure.Tests.csproj \
+            --no-build -c Release \
+            --logger "trx;LogFileName=infrastructure.trx" \
+            --results-directory TestResults \
+            --collect "XPlat Code Coverage"
+
       - name: Package debug APK (artifact only, not a release)
         run: |
           dotnet publish src/BabyMonitor.App/BabyMonitor.App.csproj \

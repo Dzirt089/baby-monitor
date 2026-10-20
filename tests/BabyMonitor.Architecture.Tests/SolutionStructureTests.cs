@@ -13,10 +13,11 @@ public sealed class SolutionStructureTests
         "BabyMonitor.Domain.Tests",
         "BabyMonitor.Application.Tests",
         "BabyMonitor.Architecture.Tests",
+        "BabyMonitor.Infrastructure.Tests",
     ];
 
     [Fact]
-    public void Solution_содержит_ровно_восемь_ожидаемых_проектов()
+    public void Solution_содержит_ровно_девять_ожидаемых_проектов()
     {
         var declaredProjectNames = ArchitectureTestSupport.LoadSolutionProjects()
             .Select(project => ArchitectureTestSupport.GetProjectName(project.DeclaredPath))
