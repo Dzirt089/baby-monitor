@@ -10,5 +10,6 @@
     <Project Path="tests/BabyMonitor.Domain.Tests/BabyMonitor.Domain.Tests.csproj" />
     <Project Path="tests/BabyMonitor.Application.Tests/BabyMonitor.Application.Tests.csproj" />
     <Project Path="tests/BabyMonitor.Architecture.Tests/BabyMonitor.Architecture.Tests.csproj" />
+    <Project Path="tests/BabyMonitor.Infrastructure.Tests/BabyMonitor.Infrastructure.Tests.csproj" />
   </Folder>
 </Solution>

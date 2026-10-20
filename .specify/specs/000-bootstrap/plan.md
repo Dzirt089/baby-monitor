@@ -1,6 +1,6 @@
 # Implementation Plan: 000-bootstrap
 
-**Spec**: [spec.md](./spec.md) | **Status**: In Progress | **Created**: 2026-10-20
+**Spec**: [spec.md](./spec.md) | **Status**: Done (2026-10-20; PR #1 merged 7095f75; admin-настройки — post-merge) | **Created**: 2026-10-20
 
 ## Summary
 
@@ -21,8 +21,9 @@ repository, запушить feature branch и открыть bootstrap PR. Ре
 
 ## Constitution Check
 
-- Принцип I (privacy/security): bootstrap не добавляет сеть/аудио/разрешения; manifest пуст;
-  release secrets не создаются, keystore не генерируется.
+- Принцип I (privacy/security): bootstrap не добавляет сеть/аудио/разрешения; manifest пуст.
+  В bootstrap release secrets/keystore не создавались; post-merge admin-настройка environment release
+  и постоянный keystore выполнены отдельно по поручению владельца (docs/operations/release-runbook.md).
 - Принцип II (роли): UI не реализует роли; домен фиксирует Complement-инвариант.
 - Принцип III (зависимости): проверяется architecture tests.
 - Принцип IV (надёжность): N/A в bootstrap; DI/аудио не добавляются заранее.

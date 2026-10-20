@@ -10,6 +10,7 @@ public sealed class PackageManagementTests
         "BabyMonitor.Domain.Tests",
         "BabyMonitor.Application.Tests",
         "BabyMonitor.Architecture.Tests",
+        "BabyMonitor.Infrastructure.Tests",
     ];
 
     private static readonly string[] PrivateTestPackages =

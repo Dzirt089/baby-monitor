@@ -4,7 +4,7 @@
     <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
     <OutputType>Exe</OutputType>
     <RootNamespace>BabyMonitor.App</RootNamespace>
-    <ApplicationId>com.example.babymonitor</ApplicationId>
+    <ApplicationId>io.github.dzirt089.babymonitor</ApplicationId>
     <ApplicationDisplayVersion Condition="'$(ApplicationDisplayVersion)' == ''">$(VersionPrefix)</ApplicationDisplayVersion>
     <ApplicationVersion Condition="'$(ApplicationVersion)' == ''">$(BabyMonitorVersionCode)</ApplicationVersion>
   </PropertyGroup>

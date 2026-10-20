@@ -26,8 +26,8 @@ versionName. Git-теги имеют формат vMAJOR.MINOR.PATCH; release wo
   ApplicationDisplayVersion и BabyMonitorVersionCode/ApplicationVersion выводятся из них
   в Directory.Build.props и BabyMonitor.App.csproj.
 - verify-job проверяет SemVer-тег и раздел CHANGELOG и заново собирает/тестирует commit;
-  release-job после approval защищённого environment повторно валидирует тег и собирает подписанный
-  APK с версией из тега.
+  release-job после валидации environment release повторно проверяет тег и собирает подписанный
+  APK с версией из тега (manual approval — только при доступном плане GitHub).
 - Bootstrap-фаза: 0.1.0 → versionCode 100 (значения по умолчанию в Directory.Build.props).
 - Диапазоны MINOR/PATCH и лимит Android проверяются дважды: в Directory.Build.props (любая
   сборка с некорректной версией падает) и в release workflow (понятная ошибка до публикации).

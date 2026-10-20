@@ -62,6 +62,7 @@ public sealed class ProjectReferenceTests
             "BabyMonitor.Domain.Tests",
             "BabyMonitor.Application.Tests",
             "BabyMonitor.Architecture.Tests",
+            "BabyMonitor.Infrastructure.Tests",
         ];
         var violations = new List<string>();
 
@@ -86,6 +87,15 @@ public sealed class ProjectReferenceTests
         Assert.True(
             violations.Count == 0,
             "Тестовые проекты должны ссылаться только на существующие проекты из src: " + string.Join("; ", violations));
+    }
+
+    [Fact]
+    public void Infrastructure_Tests_ссылается_только_на_Application_и_Infrastructure()
+    {
+        AssertProjectReferences(
+            "BabyMonitor.Infrastructure.Tests",
+            "BabyMonitor.Application",
+            "BabyMonitor.Infrastructure");
     }
 
     private static void AssertProjectReferences(string projectName, params string[] expectedReferenceNames)
