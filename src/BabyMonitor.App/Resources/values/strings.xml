@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Радионяня</string>
+    <string name="bootstrap_status">Каркас приложения создан. Мониторинг, обнаружение устройств и передача звука ещё не реализованы.</string>
+    <string name="bootstrap_note">Приложение не является медицинским изделием и не заменяет наблюдение взрослого.</string>
+</resources>

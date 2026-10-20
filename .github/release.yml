@@ -1,0 +1,17 @@
+changelog:
+  exclude:
+    labels:
+      - "skip-changelog"
+  categories:
+    - title: "Новые возможности"
+      labels:
+        - "type:feature"
+    - title: "Исправления"
+      labels:
+        - "type:bug"
+    - title: "Безопасность"
+      labels:
+        - "type:security"
+    - title: "Прочее"
+      labels:
+        - "*"

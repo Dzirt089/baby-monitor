@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BabyMonitor.Domain/BabyMonitor.Domain.csproj" />
+    <Project Path="src/BabyMonitor.Application/BabyMonitor.Application.csproj" />
+    <Project Path="src/BabyMonitor.Infrastructure/BabyMonitor.Infrastructure.csproj" />
+    <Project Path="src/BabyMonitor.Platform.Android/BabyMonitor.Platform.Android.csproj" />
+    <Project Path="src/BabyMonitor.App/BabyMonitor.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BabyMonitor.Domain.Tests/BabyMonitor.Domain.Tests.csproj" />
+    <Project Path="tests/BabyMonitor.Application.Tests/BabyMonitor.Application.Tests.csproj" />
+    <Project Path="tests/BabyMonitor.Architecture.Tests/BabyMonitor.Architecture.Tests.csproj" />
+  </Folder>
+</Solution>

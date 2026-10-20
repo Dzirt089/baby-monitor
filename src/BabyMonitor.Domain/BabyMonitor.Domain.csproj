@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Domain зависит только от BCL: никаких ProjectReference и runtime-пакетов. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>BabyMonitor.Domain</RootNamespace>
+  </PropertyGroup>
+</Project>
