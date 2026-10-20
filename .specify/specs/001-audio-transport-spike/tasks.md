@@ -33,8 +33,9 @@
 | 2026-10-20 | Независимое ревью | reviewer-001 pass 1+2 | CHANGES REQUIRED → PASS WITH COMMENTS; MAJOR 0; CHK 10/10 PASS |
 | 2026-10-20 | Signing smoke | local signed release APK постоянным keystore | сертификат не debug, versionCode 100, versionName 0.1.0 |
 | 2026-10-20 | Device matrix | phase 3 | **BLOCKED**: нет 2 реальных Android-устройств |
+| 2026-10-20 | PR #4 + CI | push ветки 001-audio-transport-spike | PR https://github.com/Dzirt089/baby-monitor/pull/4; run 39462684630 success |
 
 ## Phase 4 — Решение
 
 - [ ] T011 Перевести ADR-0005 в Accepted/Rejected по данным — `docs/architecture/adr/0005-media-transport-library.md`
-- [ ] T012 PR #2, CI green, независимое ревью — GitHub
+- [x] T012 PR #4 (open), CI green (run 39462684630), независимое ревью pass 1+2 — GitHub
