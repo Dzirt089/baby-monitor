@@ -7,10 +7,9 @@ using BabyMonitor.Domain.Devices;
 namespace BabyMonitor.Application.Pairing;
 
 /// <summary>
-/// Сессия сопряжения Child: создаёт одноразовое приглашение, проверяет ответ Parent,
-/// выводит verification code и сохраняет доверие только после подтверждения пользователя.
-/// Token одноразовый: повторный HandleResponse отклоняется. Сессия должна быть Dispose после
-/// завершения (освобождает эфемерный private key).
+/// Сессия сопряжения Child: одноразовое приглашение, проверка ответа Parent, вывод verification
+/// code, сохранение доверия после подтверждения пользователя. Операции сериализованы; token
+/// одноразовый; Dispose освобождает эфемерный ключ и зануляет транскрипт с token.
 /// </summary>
 public sealed class ChildPairingSession : IDisposable
 {
@@ -27,9 +26,11 @@ public sealed class ChildPairingSession : IDisposable
     private readonly ECDiffieHellman _ephemeral;
     private readonly byte[] _invitationTranscript;
     private readonly byte[] _invitationTranscriptHash;
+    private readonly SemaphoreSlim _gate = new(1, 1);
     private SessionState _state = SessionState.Created;
     private PairingVerification? _verification;
     private DeviceIdentityPublicKey? _peerIdentity;
+    private int _disposed;
 
     private ChildPairingSession(
         IPairingKeyStore keyStore,
@@ -124,53 +125,60 @@ public sealed class ChildPairingSession : IDisposable
     {
         ArgumentNullException.ThrowIfNull(response);
         cancellationToken.ThrowIfCancellationRequested();
-
-        if (_state is not SessionState.Created)
-        {
-            return Result<PairingVerification>.Failure(new Error(
-                PairingErrorCodes.TokenReused,
-                "Приглашение уже использовано или сессия завершена."));
-        }
-
-        if (_timeProvider.GetUtcNow() > Invitation.ExpiresAt)
-        {
-            _state = SessionState.Failed;
-            return Result<PairingVerification>.Failure(new Error(
-                PairingErrorCodes.Expired,
-                "Срок действия приглашения истёк."));
-        }
-
-        var responseTranscript = PairingCrypto.BuildResponseTranscript(_invitationTranscriptHash, response);
-        if (!PairingCrypto.VerifySignature(
-                response.ParentIdentity.SubjectPublicKeyInfo.ToArray(),
-                responseTranscript,
-                response.ParentSignature))
-        {
-            return Result<PairingVerification>.Failure(new Error(
-                PairingErrorCodes.InvalidSignature,
-                "Подпись родительского устройства не прошла проверку."));
-        }
-
-        byte[] sharedSecret;
+        await _gate.WaitAsync(cancellationToken);
         try
         {
-            sharedSecret = PairingCrypto.DeriveSharedSecret(_ephemeral, response.ParentEphemeralPublicKey);
+            if (_state is not SessionState.Created)
+            {
+                return Result<PairingVerification>.Failure(new Error(
+                    PairingErrorCodes.TokenReused,
+                    "Приглашение уже использовано или сессия завершена."));
+            }
+
+            if (_timeProvider.GetUtcNow() > Invitation.ExpiresAt)
+            {
+                _state = SessionState.Failed;
+                return Result<PairingVerification>.Failure(new Error(
+                    PairingErrorCodes.Expired,
+                    "Срок действия приглашения истёк."));
+            }
+
+            var parentPublicKey = response.ParentIdentity.SubjectPublicKeyInfo.ToArray();
+            var responseTranscript = PairingCrypto.BuildResponseTranscript(_invitationTranscriptHash, response);
+            if (!PairingCrypto.TryValidateIdentityPublicKey(parentPublicKey)
+                || !PairingCrypto.TryVerifySignature(parentPublicKey, responseTranscript, response.ParentSignature))
+            {
+                return Result<PairingVerification>.Failure(new Error(
+                    PairingErrorCodes.InvalidSignature,
+                    "Подпись родительского устройства не прошла проверку."));
+            }
+
+            byte[] sharedSecret;
+            try
+            {
+                sharedSecret = PairingCrypto.DeriveSharedSecret(_ephemeral, response.ParentEphemeralPublicKey);
+            }
+            catch (Exception exception) when (exception is CryptographicException or ArgumentException)
+            {
+                return Result<PairingVerification>.Failure(new Error(
+                    PairingErrorCodes.InvalidSignature,
+                    "Не удалось вывести общий секрет с родительским устройством."));
+            }
+
+            var combinedTranscriptHash = PairingCrypto.CombineTranscripts(_invitationTranscript, responseTranscript);
+            var code = PairingCrypto.DeriveVerificationCode(sharedSecret, combinedTranscriptHash);
+            CryptographicOperations.ZeroMemory(sharedSecret);
+            CryptographicOperations.ZeroMemory(responseTranscript);
+
+            _peerIdentity = response.ParentIdentity;
+            _verification = new PairingVerification(code, combinedTranscriptHash);
+            _state = SessionState.Responded;
+            return Result<PairingVerification>.Success(_verification);
         }
-        catch (CryptographicException)
+        finally
         {
-            return Result<PairingVerification>.Failure(new Error(
-                PairingErrorCodes.InvalidSignature,
-                "Не удалось вывести общий секрет с родительским устройством."));
+            _gate.Release();
         }
-
-        var combinedTranscriptHash = PairingCrypto.CombineTranscripts(_invitationTranscript, responseTranscript);
-        var code = PairingCrypto.DeriveVerificationCode(sharedSecret, combinedTranscriptHash);
-        CryptographicOperations.ZeroMemory(sharedSecret);
-
-        _peerIdentity = response.ParentIdentity;
-        _verification = new PairingVerification(code, combinedTranscriptHash);
-        _state = SessionState.Responded;
-        return Result<PairingVerification>.Success(_verification);
     }
 
     /// <summary>Подтверждает код пользователем и сохраняет доверенное устройство.</summary>
@@ -188,42 +196,60 @@ public sealed class ChildPairingSession : IDisposable
         ArgumentNullException.ThrowIfNull(verification);
         ArgumentNullException.ThrowIfNull(trustedDeviceStore);
         cancellationToken.ThrowIfCancellationRequested();
-
-        if (_state is not SessionState.Responded || _verification is null || _peerIdentity is null)
+        await _gate.WaitAsync(cancellationToken);
+        try
         {
-            return Result<PairedDevice>.Failure(new Error(
-                PairingErrorCodes.InvalidState,
-                "Pairing-сессия не готова к подтверждению."));
-        }
+            if (_state is not SessionState.Responded || _verification is null || _peerIdentity is null)
+            {
+                return Result<PairedDevice>.Failure(new Error(
+                    PairingErrorCodes.InvalidState,
+                    "Pairing-сессия не готова к подтверждению."));
+            }
 
-        if (!userConfirmed)
+            if (!userConfirmed)
+            {
+                _state = SessionState.Failed;
+                return Result<PairedDevice>.Failure(new Error(
+                    PairingErrorCodes.UserRejected,
+                    "Пользователь отклонил сопряжение."));
+            }
+
+            if (!CodesEqual(verification.Code, _verification.Code))
+            {
+                return Result<PairedDevice>.Failure(new Error(
+                    PairingErrorCodes.CodeMismatch,
+                    "Verification code не совпал."));
+            }
+
+            var device = new PairedDevice(_peerIdentity, DeviceRole.Child, _timeProvider.GetUtcNow());
+            var saved = await trustedDeviceStore.SaveAsync(device, cancellationToken);
+            if (!saved.IsSuccess)
+            {
+                return Result<PairedDevice>.Failure(saved.Error!);
+            }
+
+            _state = SessionState.Confirmed;
+            return Result<PairedDevice>.Success(device);
+        }
+        finally
         {
-            _state = SessionState.Failed;
-            return Result<PairedDevice>.Failure(new Error(
-                PairingErrorCodes.UserRejected,
-                "Пользователь отклонил сопряжение."));
+            _gate.Release();
         }
-
-        if (!CodesEqual(verification.Code, _verification.Code))
-        {
-            return Result<PairedDevice>.Failure(new Error(
-                PairingErrorCodes.CodeMismatch,
-                "Verification code не совпал."));
-        }
-
-        var device = new PairedDevice(_peerIdentity, DeviceRole.Child, _timeProvider.GetUtcNow());
-        var saved = await trustedDeviceStore.SaveAsync(device, cancellationToken);
-        if (!saved.IsSuccess)
-        {
-            return Result<PairedDevice>.Failure(saved.Error!);
-        }
-
-        _state = SessionState.Confirmed;
-        return Result<PairedDevice>.Success(device);
     }
 
-    /// <summary>Освобождает эфемерный private key сессии.</summary>
-    public void Dispose() => _ephemeral.Dispose();
+    /// <summary>Освобождает эфемерный ключ и зануляет транскрипт с token.</summary>
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+        {
+            return;
+        }
+
+        _ephemeral.Dispose();
+        CryptographicOperations.ZeroMemory(_invitationTranscript);
+        CryptographicOperations.ZeroMemory(_invitationTranscriptHash);
+        _gate.Dispose();
+    }
 
     private static bool CodesEqual(string left, string right)
     {

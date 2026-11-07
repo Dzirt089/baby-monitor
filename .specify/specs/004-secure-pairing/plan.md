@@ -25,8 +25,8 @@
 - Verification code: HKDF-SHA256(sharedSecret, salt=SHA256(invitationTranscript|responseTranscript),
   info="babymonitor-pairing-v1-code", 4 bytes) -> mod 1_000_000 -> 6 digits.
 - Token: 32 random bytes base64url; expiry 5 минут; single-use state machine.
-- QR JSON: {v, t, exp(epoch seconds), i(base64url SPKI), e(base64url ephemeral SPKI),
-  s(base64url signature)} prefixed "bm-pair:"; DPAPI/JSON options без лишних полей.
+- QR payload: "bm-pair:v1." + base64url(version|token|expiresAt|child SPKI|child ephemeral SPKI|
+  signature); length-prefixed binary, JSON не используется (Application без System.Text.Json).
 - Никаких private keys/shared secret в QR, логах, ошибках, trusted store.
 
 ## Risks

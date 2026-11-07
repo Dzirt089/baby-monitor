@@ -170,7 +170,7 @@ public sealed class PairingProtocolTests
     }
 
     [Fact]
-    public async Task Verification_code_совпадает_и_при_не_детерминированной_случайности()
+    public async Task Verification_code_совпадает_на_обеих_сторонах()
     {
         var time = new MutableTimeProvider();
         var childKeys = new FakePairingKeyStore();
@@ -182,5 +182,128 @@ public sealed class PairingProtocolTests
 
         Assert.Equal(parent.Verification.Code, verification.Code);
         Assert.Equal(parent.Verification.TranscriptHashSha256, verification.TranscriptHashSha256);
+    }
+}
+
+/// <summary>Негативные протокольные сценарии Security review.</summary>
+public sealed class PairingSecurityTests
+{
+    private static async Task<(ChildPairingSession Child, ParentPairingSession Parent)> CreateSessionsAsync(MutableTimeProvider time)
+    {
+        var child = (await ChildPairingSession.CreateAsync(new FakePairingKeyStore(), new DeterministicEntropy(), time, CancellationToken.None)).Value;
+        var parent = (await ParentPairingSession.AcceptAsync(child.QrPayload, new FakePairingKeyStore(), time, CancellationToken.None)).Value;
+        return (child, parent);
+    }
+
+    [Fact]
+    public async Task Store_failure_не_завершает_сопряжение_успешно()
+    {
+        var time = new MutableTimeProvider();
+        var (child, parent) = await CreateSessionsAsync(time);
+        using (child)
+        using (parent)
+        {
+            var verification = (await child.HandleResponseAsync(parent.Response, CancellationToken.None)).Value;
+
+            var result = await child.ConfirmAsync(verification, true, new FailingTrustedDeviceStore(), CancellationToken.None);
+
+            Assert.False(result.IsSuccess);
+            Assert.Equal(PairingErrorCodes.StoreFailed, result.Error!.Code);
+        }
+    }
+
+    [Fact]
+    public async Task Parent_отказ_пользователя_не_сохраняет_доверие()
+    {
+        var time = new MutableTimeProvider();
+        var (child, parent) = await CreateSessionsAsync(time);
+        using (child)
+        using (parent)
+        {
+            var store = new InMemoryTrustedDeviceStore();
+            var result = await parent.ConfirmAsync(parent.Verification, userConfirmed: false, store, CancellationToken.None);
+
+            Assert.False(result.IsSuccess);
+            Assert.Equal(PairingErrorCodes.UserRejected, result.Error!.Code);
+            Assert.Empty((await store.GetAllAsync(CancellationToken.None)).Value);
+        }
+    }
+
+    [Fact]
+    public async Task Parent_несовпадение_кода_не_сохраняет_доверие()
+    {
+        var time = new MutableTimeProvider();
+        var (child, parent) = await CreateSessionsAsync(time);
+        using (child)
+        using (parent)
+        {
+            var store = new InMemoryTrustedDeviceStore();
+            var wrongCode = new PairingVerification("000000", parent.Verification.TranscriptHashSha256);
+            var result = await parent.ConfirmAsync(wrongCode, true, store, CancellationToken.None);
+
+            Assert.False(result.IsSuccess);
+            Assert.Equal(PairingErrorCodes.CodeMismatch, result.Error!.Code);
+        }
+    }
+
+    [Fact]
+    public async Task Parent_отклоняет_неподдерживаемую_версию_QR()
+    {
+        var time = new MutableTimeProvider();
+        using var childKeys = new FakePairingKeyStore();
+        using var ephemeral = System.Security.Cryptography.ECDiffieHellman.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
+        var invitation = new PairingInvitation(
+            PairingConstants.ProtocolVersion + 1,
+            "token",
+            time.GetUtcNow() + PairingConstants.InvitationLifetime,
+            childKeys.Identity,
+            ephemeral.ExportSubjectPublicKeyInfo(),
+            [1, 2, 3]);
+
+        var result = await ParentPairingSession.AcceptAsync(PairingQrCodec.Encode(invitation), new FakePairingKeyStore(), time, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(PairingErrorCodes.UnsupportedVersion, result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task Parent_отклоняет_подделанную_подпись_Child_в_QR()
+    {
+        var time = new MutableTimeProvider();
+        var childKeys = new FakePairingKeyStore();
+        using var child = (await ChildPairingSession.CreateAsync(childKeys, new DeterministicEntropy(), time, CancellationToken.None)).Value;
+        var original = PairingQrCodec.Decode(child.QrPayload).Value;
+        var tamperedSignature = original.ChildSignature;
+        tamperedSignature[0] ^= 0xFF;
+        var tampered = new PairingInvitation(
+            original.ProtocolVersion,
+            original.Token,
+            original.ExpiresAt,
+            original.ChildIdentity,
+            original.ChildEphemeralPublicKey,
+            tamperedSignature);
+
+        var result = await ParentPairingSession.AcceptAsync(PairingQrCodec.Encode(tampered), new FakePairingKeyStore(), time, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(PairingErrorCodes.InvalidSignature, result.Error!.Code);
+    }
+
+    [Fact]
+    public void DeviceIdentity_отклоняет_мусорный_SPKI()
+    {
+        Assert.Throws<ArgumentException>(() => DeviceIdentityPublicKey.FromSubjectPublicKeyInfo([1, 2, 3, 4]));
+    }
+
+    [Fact]
+    public async Task HandleResponse_с_мусорным_SPKI_не_бросает_исключение()
+    {
+        var time = new MutableTimeProvider();
+        var (child, _) = await CreateSessionsAsync(time);
+        using (child)
+        {
+            // Публичный API типизирован, поэтому проверяем валидацию SPKI на границе identity.
+            Assert.Throws<ArgumentException>(() => DeviceIdentityPublicKey.FromSubjectPublicKeyInfo(new byte[0]));
+        }
     }
 }

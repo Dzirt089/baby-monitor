@@ -4,40 +4,35 @@ namespace BabyMonitor.Application.Pairing;
 
 /// <summary>
 /// Публичная identity устройства: SubjectPublicKeyInfo (ECDSA P-256) и SHA-256 fingerprint.
-/// Private key никогда не покидает Android Keystore; этот объект содержит только публичные данные.
+/// Private key никогда не покидает Android Keystore. Конструктор закрыт: fingerprint всегда
+/// вычисляется из SPKI, поэтому подмена fingerprint невозможна.
 /// </summary>
 public sealed class DeviceIdentityPublicKey : IEquatable<DeviceIdentityPublicKey>
 {
     private readonly byte[] _subjectPublicKeyInfo;
 
-    /// <summary>Создаёт публичную identity из SPKI и fingerprint.</summary>
-    /// <param name="subjectPublicKeyInfo">DER SubjectPublicKeyInfo.</param>
-    /// <param name="fingerprintSha256">Hex lowercase SHA-256 fingerprint.</param>
-    /// <exception cref="ArgumentException">Пустые данные или fingerprint.</exception>
-    public DeviceIdentityPublicKey(byte[] subjectPublicKeyInfo, string fingerprintSha256)
+    private DeviceIdentityPublicKey(byte[] subjectPublicKeyInfo)
     {
-        ArgumentNullException.ThrowIfNull(subjectPublicKeyInfo);
-        ArgumentException.ThrowIfNullOrWhiteSpace(fingerprintSha256);
-        if (subjectPublicKeyInfo.Length == 0)
-        {
-            throw new ArgumentException("SPKI не может быть пустым.", nameof(subjectPublicKeyInfo));
-        }
-
-        _subjectPublicKeyInfo = (byte[])subjectPublicKeyInfo.Clone();
-        FingerprintSha256 = fingerprintSha256;
+        _subjectPublicKeyInfo = subjectPublicKeyInfo;
+        FingerprintSha256 = Convert.ToHexString(SHA256.HashData(subjectPublicKeyInfo)).ToLowerInvariant();
     }
 
-    /// <summary>Создаёт identity, вычисляя fingerprint = SHA-256(SPKI).</summary>
+    /// <summary>Создаёт identity из DER SubjectPublicKeyInfo (P-256).</summary>
     /// <param name="subjectPublicKeyInfo">DER SubjectPublicKeyInfo.</param>
     /// <returns>Публичная identity.</returns>
+    /// <exception cref="ArgumentException">SPKI пуст или не является ECDSA P-256 ключом.</exception>
     public static DeviceIdentityPublicKey FromSubjectPublicKeyInfo(byte[] subjectPublicKeyInfo)
     {
         ArgumentNullException.ThrowIfNull(subjectPublicKeyInfo);
-        var fingerprint = Convert.ToHexString(SHA256.HashData(subjectPublicKeyInfo)).ToLowerInvariant();
-        return new DeviceIdentityPublicKey(subjectPublicKeyInfo, fingerprint);
+        if (!PairingCrypto.TryValidateIdentityPublicKey(subjectPublicKeyInfo))
+        {
+            throw new ArgumentException("Ожидался ECDSA P-256 SubjectPublicKeyInfo.", nameof(subjectPublicKeyInfo));
+        }
+
+        return new DeviceIdentityPublicKey((byte[])subjectPublicKeyInfo.Clone());
     }
 
-    /// <summary>DER SubjectPublicKeyInfo (копия).</summary>
+    /// <summary>DER SubjectPublicKeyInfo (immutable view).</summary>
     public ReadOnlyMemory<byte> SubjectPublicKeyInfo => _subjectPublicKeyInfo;
 
     /// <summary>Hex lowercase SHA-256 fingerprint публичного ключа.</summary>

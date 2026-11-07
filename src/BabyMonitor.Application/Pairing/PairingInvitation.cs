@@ -2,9 +2,13 @@ namespace BabyMonitor.Application.Pairing;
 
 /// <summary>
 /// Приглашение Child на сопряжение. Token — секрет: не логируется и не попадает в Error.
+/// Массивы отдаются копиями, чтобы подписанные/проверенные данные нельзя было мутировать.
 /// </summary>
-public sealed record PairingInvitation
+public sealed class PairingInvitation
 {
+    private readonly byte[] _childEphemeralPublicKey;
+    private readonly byte[] _childSignature;
+
     /// <summary>Создаёт приглашение.</summary>
     /// <param name="protocolVersion">Версия протокола.</param>
     /// <param name="token">Одноразовый token (base64url).</param>
@@ -34,8 +38,8 @@ public sealed record PairingInvitation
         Token = token;
         ExpiresAt = expiresAt;
         ChildIdentity = childIdentity;
-        ChildEphemeralPublicKey = (byte[])childEphemeralPublicKey.Clone();
-        ChildSignature = (byte[])childSignature.Clone();
+        _childEphemeralPublicKey = (byte[])childEphemeralPublicKey.Clone();
+        _childSignature = (byte[])childSignature.Clone();
     }
 
     /// <summary>Версия протокола.</summary>
@@ -50,9 +54,9 @@ public sealed record PairingInvitation
     /// <summary>Публичная identity Child.</summary>
     public DeviceIdentityPublicKey ChildIdentity { get; }
 
-    /// <summary>SPKI эфемерного ECDH-ключа Child.</summary>
-    public byte[] ChildEphemeralPublicKey { get; }
+    /// <summary>SPKI эфемерного ECDH-ключа Child (копия).</summary>
+    public byte[] ChildEphemeralPublicKey => (byte[])_childEphemeralPublicKey.Clone();
 
-    /// <summary>Подпись Child над транскриптом приглашения.</summary>
-    public byte[] ChildSignature { get; }
+    /// <summary>Подпись Child над транскриптом приглашения (копия).</summary>
+    public byte[] ChildSignature => (byte[])_childSignature.Clone();
 }

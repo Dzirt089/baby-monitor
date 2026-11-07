@@ -83,3 +83,22 @@ internal sealed class InMemoryTrustedDeviceStore : ITrustedDeviceStore
     public Task<Result<bool>> IsTrustedAsync(string fingerprintSha256, CancellationToken cancellationToken) =>
         Task.FromResult(Result<bool>.Success(_devices.ContainsKey(fingerprintSha256)));
 }
+
+/// <summary>Trusted store, который всегда падает (проверка store_failed).</summary>
+internal sealed class FailingTrustedDeviceStore : ITrustedDeviceStore
+{
+    public Task<Result<PairedDevice?>> FindAsync(string fingerprintSha256, CancellationToken cancellationToken) =>
+        Task.FromResult(Result<PairedDevice?>.Success(null));
+
+    public Task<Result<IReadOnlyList<PairedDevice>>> GetAllAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(Result<IReadOnlyList<PairedDevice>>.Success([]));
+
+    public Task<Result> SaveAsync(PairedDevice device, CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Failure(new Error(PairingErrorCodes.StoreFailed, "Trusted store недоступен.")));
+
+    public Task<Result> RemoveAsync(string fingerprintSha256, CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Failure(new Error(PairingErrorCodes.StoreFailed, "Trusted store недоступен.")));
+
+    public Task<Result<bool>> IsTrustedAsync(string fingerprintSha256, CancellationToken cancellationToken) =>
+        Task.FromResult(Result<bool>.Success(false));
+}

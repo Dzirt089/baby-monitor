@@ -11,7 +11,7 @@
 - [ ] CHK-009 Application без Android-типов (architecture tests).
 - [x] CHK-010 Replay/expiry/tamper/malformed QR покрыты тестами.
 - [-] CHK-011 End-to-end pairing и Keystore на реальных устройствах — **BLOCKED**.
-- [ ] CHK-012 Трассируемость FR → tasks.md.
+- [x] CHK-012 Трассируемость FR → tasks.md.
 
 ## Review Record
 

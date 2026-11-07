@@ -43,7 +43,9 @@ media должны аутентифицироваться по этой identity
   identity Child, эфемерный ECDH-ключ Child и подпись Child; private keys и session secrets в QR
   запрещены.
 - **FR-003**: Token одноразовый, живёт <= 5 минут; повторное использование отклоняется
-  `pairing.token_reused`, истёкший — `pairing.expired`.
+  `pairing.token_reused`, истёкший — `pairing.expired`. Одноразовость обеспечивает Child-сессия
+  (issued token); Parent может принять тот же QR повторно в пределах срока, но доверие требует
+  подтверждения Child. Persistent replay-store для signaling — 005.
 - **FR-004**: Parent проверяет подпись Child и срок; Child проверяет подпись Parent; обе стороны
   выводят shared secret по ECDH P-256 и verification code (6 цифр) через HKDF-SHA256 над
   транскриптом; код на обеих сторонах совпадает.
@@ -51,7 +53,9 @@ media должны аутентифицироваться по этой identity
   (`pairing.user_rejected` иначе); сохраняются только публичная identity, fingerprint, роль
   peer и время.
 - **FR-006**: Типизированные ошибки: invalid_qr, unsupported_version, expired, token_reused,
-  invalid_signature, identity_mismatch, code_mismatch, user_rejected, store_failed.
+  invalid_signature, code_mismatch, user_rejected, store_failed, invalid_state.
+  identity_mismatch зарезервирован для привязки identity в signaling (005): в 004 identity
+  восстанавливается только из валидированного SPKI, fingerprint вычисляется из SPKI.
 - **FR-007**: Секреты (token, private keys, shared secret, session key) не логируются и не попадают
   в сообщения об ошибках; QR payload считается секретом.
 - **FR-008**: Только проверенная криптография: BCL System.Security.Cryptography + Android Keystore;
@@ -71,11 +75,11 @@ media должны аутентифицироваться по этой identity
 
 ## Acceptance Criteria
 
-- [ ] AC-001: Application-контракты и протокол реализованы, сборка без warnings.
-- [ ] AC-002: Unit-тесты протокола (happy/replay/expiry/tamper/QR/код/отказ) зелёные.
+- [x] AC-001: Application-контракты и протокол реализованы, сборка без warnings.
+- [x] AC-002: Unit-тесты протокола (happy/replay/expiry/tamper/QR/код/отказ/SPKI/версия) зелёные.
 - [ ] AC-003: Android Keystore identity adapter + trusted store adapter компилируются; architecture
   tests подтверждают отсутствие Android-типов в Application.
-- [ ] AC-004: QR/ошибки не содержат секретов; тесты проверяют отсутствие private key material.
+- [x] AC-004: QR/ошибки не содержат секретов; тесты проверяют отсутствие private key material.
 - [ ] AC-005: Полное сопряжение двух реальных устройств (QR scan, код, переподключение) —
   **BLOCKED: нет реальных устройств**; emulator/unit — частичная проверка.
 - [-] AC-006: Проверка на разных OEM/API для Keystore — **BLOCKED: нет устройств** (007).

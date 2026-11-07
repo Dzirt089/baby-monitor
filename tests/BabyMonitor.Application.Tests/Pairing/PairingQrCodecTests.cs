@@ -7,7 +7,7 @@ public sealed class PairingQrCodecTests
 {
     private static PairingInvitation CreateInvitation(FakePairingKeyStore keys, DateTimeOffset expiresAt)
     {
-        var ephemeral = System.Security.Cryptography.ECDiffieHellman.Create();
+        using var ephemeral = System.Security.Cryptography.ECDiffieHellman.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
         var signature = keys.SignAsync([], CancellationToken.None).GetAwaiter().GetResult().Value;
         return new PairingInvitation(
             PairingConstants.ProtocolVersion,
@@ -72,5 +72,70 @@ public sealed class PairingQrCodecTests
 
         Assert.StartsWith(PairingConstants.QrPrefix + "v1.", payload, StringComparison.Ordinal);
         Assert.DoesNotContain("{", payload, StringComparison.Ordinal);
+    }
+}
+
+/// <summary>Граничные/негативные случаи QR-декодирования (security).</summary>
+public sealed class PairingQrSecurityTests
+{
+    [Fact]
+    public void Повреждённый_SPKI_identity_отклоняется_как_invalid_qr()
+    {
+        using var keys = new FakePairingKeyStore();
+        using var ephemeral = System.Security.Cryptography.ECDiffieHellman.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
+        var invitation = new PairingInvitation(
+            PairingConstants.ProtocolVersion,
+            "token",
+            DateTimeOffset.FromUnixTimeSeconds(1_800_000_000),
+            keys.Identity,
+            ephemeral.ExportSubjectPublicKeyInfo(),
+            [1, 2, 3]);
+        var payload = PairingQrCodec.Encode(invitation);
+        var body = payload[(PairingConstants.QrPrefix.Length + "v1.".Length)..];
+        var bytes = System.Buffers.Text.Base64Url.DecodeFromChars(body);
+
+        using var stream = new MemoryStream(bytes);
+        using var reader = new BinaryReader(stream);
+        var version = reader.ReadInt32();
+        var tokenLength = reader.ReadInt32();
+        var tokenBytes = reader.ReadBytes(tokenLength);
+        var expiresAt = reader.ReadInt64();
+        var identityLength = reader.ReadInt32();
+        var identityBytes = reader.ReadBytes(identityLength);
+        var ephemeralLength = reader.ReadInt32();
+        var ephemeralBytes = reader.ReadBytes(ephemeralLength);
+        var signatureLength = reader.ReadInt32();
+        var signatureBytes = reader.ReadBytes(signatureLength);
+        identityBytes[0] ^= 0xFF;
+
+        using var output = new MemoryStream();
+        using (var writer = new BinaryWriter(output, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write(version);
+            writer.Write(tokenBytes.Length);
+            writer.Write(tokenBytes);
+            writer.Write(expiresAt);
+            writer.Write(identityBytes.Length);
+            writer.Write(identityBytes);
+            writer.Write(ephemeralBytes.Length);
+            writer.Write(ephemeralBytes);
+            writer.Write(signatureBytes.Length);
+            writer.Write(signatureBytes);
+        }
+
+        var malformed = PairingConstants.QrPrefix + "v1." + System.Buffers.Text.Base64Url.EncodeToString(output.ToArray());
+        var decoded = PairingQrCodec.Decode(malformed);
+
+        Assert.False(decoded.IsSuccess);
+        Assert.Equal(PairingErrorCodes.InvalidQr, decoded.Error!.Code);
+    }
+
+    [Fact]
+    public void Слишком_большой_payload_отклоняется()
+    {
+        var decoded = PairingQrCodec.Decode(PairingConstants.QrPrefix + "v1." + new string('A', 20_000));
+
+        Assert.False(decoded.IsSuccess);
+        Assert.Equal(PairingErrorCodes.InvalidQr, decoded.Error!.Code);
     }
 }

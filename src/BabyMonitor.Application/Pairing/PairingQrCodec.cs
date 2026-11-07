@@ -7,10 +7,13 @@ namespace BabyMonitor.Application.Pairing;
 /// Кодирование/разбор QR payload приглашения. Формат — версионированный бинарный payload в
 /// base64url (без JSON): version, token, expiresAt, identity SPKI, ephemeral SPKI, signature.
 /// Payload содержит token (секрет); private keys и shared secrets в QR отсутствуют.
+/// Невалидные/недоверенные SPKI отклоняются на границе декодирования (invalid_qr).
 /// </summary>
 public static class PairingQrCodec
 {
     private const string VersionPrefix = "v1.";
+    private const int MaxPayloadBytes = 8 * 1024;
+    private const int MaxFieldBytes = 4 * 1024;
 
     /// <summary>Кодирует приглашение в QR-payload.</summary>
     /// <param name="invitation">Приглашение Child.</param>
@@ -44,7 +47,8 @@ public static class PairingQrCodec
 
         var body = payload[PairingConstants.QrPrefix.Length..];
         if (!body.StartsWith(VersionPrefix, StringComparison.Ordinal)
-            || !PairingCrypto.TryFromBase64Url(body[VersionPrefix.Length..], out var bytes))
+            || !PairingCrypto.TryFromBase64Url(body[VersionPrefix.Length..], out var bytes)
+            || bytes.Length is 0 or > MaxPayloadBytes)
         {
             return Failure();
         }
@@ -72,7 +76,9 @@ public static class PairingQrCodec
                 || expiresAtUnixSeconds <= 0
                 || childIdentity.Length == 0
                 || childEphemeralPublicKey.Length == 0
-                || childSignature.Length == 0)
+                || childSignature.Length == 0
+                || !PairingCrypto.TryValidateIdentityPublicKey(childIdentity)
+                || !PairingCrypto.TryValidateEphemeralPublicKey(childEphemeralPublicKey))
             {
                 return Failure();
             }
@@ -104,11 +110,17 @@ public static class PairingQrCodec
     private static byte[] ReadBytes(BinaryReader reader)
     {
         var length = reader.ReadInt32();
-        if (length is < 0 or > 64 * 1024)
+        if (length is < 0 or > MaxFieldBytes)
         {
             throw new ArgumentException("Некорректная длина поля QR.");
         }
 
-        return reader.ReadBytes(length);
+        var data = reader.ReadBytes(length);
+        if (data.Length != length)
+        {
+            throw new EndOfStreamException();
+        }
+
+        return data;
     }
 }

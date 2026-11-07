@@ -9,7 +9,7 @@ namespace BabyMonitor.Application.Pairing;
 /// <summary>
 /// Сессия сопряжения Parent: принимает QR Child, проверяет версию/срок/подпись, формирует
 /// подписанный ответ, выводит verification code и сохраняет доверие после подтверждения.
-/// Сессия должна быть Dispose после завершения (освобождает эфемерный private key).
+/// Подтверждение сериализовано; Dispose освобождает эфемерный ключ.
 /// </summary>
 public sealed class ParentPairingSession : IDisposable
 {
@@ -25,7 +25,9 @@ public sealed class ParentPairingSession : IDisposable
     private readonly ECDiffieHellman _ephemeral;
     private readonly PairingResponse _response;
     private readonly PairingVerification _verification;
+    private readonly SemaphoreSlim _gate = new(1, 1);
     private SessionState _state = SessionState.AwaitingConfirmation;
+    private int _disposed;
 
     private ParentPairingSession(
         IPairingKeyStore keyStore,
@@ -90,7 +92,7 @@ public sealed class ParentPairingSession : IDisposable
         }
 
         var invitationTranscript = PairingCrypto.BuildInvitationTranscript(invitation);
-        if (!PairingCrypto.VerifySignature(
+        if (!PairingCrypto.TryVerifySignature(
                 invitation.ChildIdentity.SubjectPublicKeyInfo.ToArray(),
                 invitationTranscript,
                 invitation.ChildSignature))
@@ -127,7 +129,7 @@ public sealed class ParentPairingSession : IDisposable
         {
             sharedSecret = PairingCrypto.DeriveSharedSecret(ephemeral, invitation.ChildEphemeralPublicKey);
         }
-        catch (CryptographicException)
+        catch (Exception exception) when (exception is CryptographicException or ArgumentException)
         {
             ephemeral.Dispose();
             return Result<ParentPairingSession>.Failure(new Error(
@@ -138,6 +140,8 @@ public sealed class ParentPairingSession : IDisposable
         var combinedTranscriptHash = PairingCrypto.CombineTranscripts(invitationTranscript, responseTranscript);
         var code = PairingCrypto.DeriveVerificationCode(sharedSecret, combinedTranscriptHash);
         CryptographicOperations.ZeroMemory(sharedSecret);
+        CryptographicOperations.ZeroMemory(invitationTranscript);
+        CryptographicOperations.ZeroMemory(responseTranscript);
 
         var session = new ParentPairingSession(
             keyStore,
@@ -164,42 +168,58 @@ public sealed class ParentPairingSession : IDisposable
         ArgumentNullException.ThrowIfNull(verification);
         ArgumentNullException.ThrowIfNull(trustedDeviceStore);
         cancellationToken.ThrowIfCancellationRequested();
-
-        if (_state is not SessionState.AwaitingConfirmation)
+        await _gate.WaitAsync(cancellationToken);
+        try
         {
-            return Result<PairedDevice>.Failure(new Error(
-                PairingErrorCodes.InvalidState,
-                "Pairing-сессия не готова к подтверждению."));
-        }
+            if (_state is not SessionState.AwaitingConfirmation)
+            {
+                return Result<PairedDevice>.Failure(new Error(
+                    PairingErrorCodes.InvalidState,
+                    "Pairing-сессия не готова к подтверждению."));
+            }
 
-        if (!userConfirmed)
+            if (!userConfirmed)
+            {
+                _state = SessionState.Failed;
+                return Result<PairedDevice>.Failure(new Error(
+                    PairingErrorCodes.UserRejected,
+                    "Пользователь отклонил сопряжение."));
+            }
+
+            if (!CodesEqual(verification.Code, _verification.Code))
+            {
+                return Result<PairedDevice>.Failure(new Error(
+                    PairingErrorCodes.CodeMismatch,
+                    "Verification code не совпал."));
+            }
+
+            var device = new PairedDevice(Invitation.ChildIdentity, DeviceRole.Parent, _timeProvider.GetUtcNow());
+            var saved = await trustedDeviceStore.SaveAsync(device, cancellationToken);
+            if (!saved.IsSuccess)
+            {
+                return Result<PairedDevice>.Failure(saved.Error!);
+            }
+
+            _state = SessionState.Confirmed;
+            return Result<PairedDevice>.Success(device);
+        }
+        finally
         {
-            _state = SessionState.Failed;
-            return Result<PairedDevice>.Failure(new Error(
-                PairingErrorCodes.UserRejected,
-                "Пользователь отклонил сопряжение."));
+            _gate.Release();
         }
-
-        if (!CodesEqual(verification.Code, _verification.Code))
-        {
-            return Result<PairedDevice>.Failure(new Error(
-                PairingErrorCodes.CodeMismatch,
-                "Verification code не совпал."));
-        }
-
-        var device = new PairedDevice(Invitation.ChildIdentity, DeviceRole.Parent, _timeProvider.GetUtcNow());
-        var saved = await trustedDeviceStore.SaveAsync(device, cancellationToken);
-        if (!saved.IsSuccess)
-        {
-            return Result<PairedDevice>.Failure(saved.Error!);
-        }
-
-        _state = SessionState.Confirmed;
-        return Result<PairedDevice>.Success(device);
     }
 
-    /// <summary>Освобождает эфемерный private key сессии.</summary>
-    public void Dispose() => _ephemeral.Dispose();
+    /// <summary>Освобождает эфемерный ключ сессии.</summary>
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+        {
+            return;
+        }
+
+        _ephemeral.Dispose();
+        _gate.Dispose();
+    }
 
     private static bool CodesEqual(string left, string right)
     {

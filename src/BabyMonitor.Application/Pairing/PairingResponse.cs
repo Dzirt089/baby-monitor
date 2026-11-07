@@ -1,8 +1,11 @@
 namespace BabyMonitor.Application.Pairing;
 
-/// <summary>Ответ Parent на приглашение Child: публичная identity, эфемерный ключ и подпись.</summary>
-public sealed record PairingResponse
+/// <summary>Ответ Parent на приглашение Child: identity, эфемерный ключ и подпись (копии).</summary>
+public sealed class PairingResponse
 {
+    private readonly byte[] _parentEphemeralPublicKey;
+    private readonly byte[] _parentSignature;
+
     /// <summary>Создаёт ответ Parent.</summary>
     /// <param name="parentIdentity">Публичная identity Parent.</param>
     /// <param name="parentEphemeralPublicKey">SPKI эфемерного ECDH-ключа Parent.</param>
@@ -22,16 +25,16 @@ public sealed record PairingResponse
         }
 
         ParentIdentity = parentIdentity;
-        ParentEphemeralPublicKey = (byte[])parentEphemeralPublicKey.Clone();
-        ParentSignature = (byte[])parentSignature.Clone();
+        _parentEphemeralPublicKey = (byte[])parentEphemeralPublicKey.Clone();
+        _parentSignature = (byte[])parentSignature.Clone();
     }
 
     /// <summary>Публичная identity Parent.</summary>
     public DeviceIdentityPublicKey ParentIdentity { get; }
 
-    /// <summary>SPKI эфемерного ECDH-ключа Parent.</summary>
-    public byte[] ParentEphemeralPublicKey { get; }
+    /// <summary>SPKI эфемерного ECDH-ключа Parent (копия).</summary>
+    public byte[] ParentEphemeralPublicKey => (byte[])_parentEphemeralPublicKey.Clone();
 
-    /// <summary>Подпись Parent над транскриптом ответа.</summary>
-    public byte[] ParentSignature { get; }
+    /// <summary>Подпись Parent над транскриптом ответа (копия).</summary>
+    public byte[] ParentSignature => (byte[])_parentSignature.Clone();
 }
