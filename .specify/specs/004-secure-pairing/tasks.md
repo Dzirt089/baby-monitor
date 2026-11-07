@@ -12,20 +12,20 @@
 
 ## Phase 2 — Android adapters
 
-- [ ] T006 Android Keystore ECDSA P-256 identity adapter — `src/BabyMonitor.Platform.Android/Security/`
-- [ ] T007 Android trusted store (только публичные данные) — `src/BabyMonitor.Platform.Android/Security/`
-- [ ] T008 Architecture tests: Application без Android-типов; private key не в QR/store — `tests/BabyMonitor.Architecture.Tests/`
+- [x] T006 Android Keystore ECDSA P-256 identity adapter — `src/BabyMonitor.Platform.Android/Security/`
+- [x] T007 Android trusted store (только публичные данные) — `src/BabyMonitor.Platform.Android/Security/`
+- [x] T008 Architecture tests: Application без Android-типов; private key не в QR/store — `tests/BabyMonitor.Architecture.Tests/`
 
 ## Phase 3 — Проверки
 
-- [ ] T009 Local gates: build Debug/Release, tests, format
-- [ ] T010 Emulator smoke: install/launch (pairing UI отсутствует до 006)
+- [x] T009 Local gates: build Debug/Release, tests, format
+- [x] T010 Emulator smoke: install/launch (pairing UI отсутствует до 006)
 - [-] T011 End-to-end pairing двух устройств (QR/код/переподключение) — **BLOCKED: нет реальных устройств**
 - [-] T012 Keystore на OEM/API матрице — **BLOCKED: нет устройств** (007)
-- [ ] T013 PR → CI → независимое ревью → merge
+- [x] T013 PR → CI → независимое ревью → merge
 
 ## Verification Log
 
 | Дата | Проверка | Результат |
 |---|---|---|
-| 2026-11-07 | Phase 1 build/tests | Application 101/101 (20 pairing tests), build 0 warnings |
+| 2026-11-07 | Phase 1 build/tests | Domain 6 + Application 115 + Architecture 45 + Infrastructure 63 = 229/229 pass; build 0 warnings; format OK |

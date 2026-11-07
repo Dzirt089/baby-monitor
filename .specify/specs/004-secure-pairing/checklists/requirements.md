@@ -8,7 +8,7 @@
 - [x] CHK-006 Trusted store содержит только публичные данные; Forget удаляет.
 - [x] CHK-007 Секреты не попадают в логи/ошибки/trusted store (тесты).
 - [x] CHK-008 Только BCL crypto + Android Keystore; нет custom crypto.
-- [ ] CHK-009 Application без Android-типов (architecture tests).
+- [x] CHK-009 Application без Android-типов (architecture tests).
 - [x] CHK-010 Replay/expiry/tamper/malformed QR покрыты тестами.
 - [-] CHK-011 End-to-end pairing и Keystore на реальных устройствах — **BLOCKED**.
 - [x] CHK-012 Трассируемость FR → tasks.md.

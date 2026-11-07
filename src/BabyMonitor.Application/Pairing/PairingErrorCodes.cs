@@ -30,6 +30,9 @@ public static class PairingErrorCodes
     /// <summary>Не удалось сохранить trusted device.</summary>
     public const string StoreFailed = "pairing.store_failed";
 
+    /// <summary>Android Keystore недоступен или операция подписи не удалась.</summary>
+    public const string KeystoreUnavailable = "pairing.keystore_unavailable";
+
     /// <summary>Порядок операций протокола нарушен.</summary>
     public const string InvalidState = "pairing.invalid_state";
 }
