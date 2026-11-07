@@ -139,3 +139,59 @@ public sealed class PairingQrSecurityTests
         Assert.Equal(PairingErrorCodes.InvalidQr, decoded.Error!.Code);
     }
 }
+
+/// <summary>Повреждение ephemeral SPKI в QR (security boundary).</summary>
+public sealed class PairingQrEphemeralSecurityTests
+{
+    [Fact]
+    public void Повреждённый_ephemeral_SPKI_отклоняется_как_invalid_qr()
+    {
+        using var keys = new FakePairingKeyStore();
+        using var ephemeral = System.Security.Cryptography.ECDiffieHellman.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
+        var invitation = new PairingInvitation(
+            PairingConstants.ProtocolVersion,
+            "token",
+            DateTimeOffset.FromUnixTimeSeconds(1_800_000_000),
+            keys.Identity,
+            ephemeral.ExportSubjectPublicKeyInfo(),
+            [1, 2, 3]);
+        var payload = PairingQrCodec.Encode(invitation);
+        var body = payload[(PairingConstants.QrPrefix.Length + "v1.".Length)..];
+        var bytes = System.Buffers.Text.Base64Url.DecodeFromChars(body);
+
+        using var stream = new MemoryStream(bytes);
+        using var reader = new BinaryReader(stream);
+        var version = reader.ReadInt32();
+        var tokenLength = reader.ReadInt32();
+        var tokenBytes = reader.ReadBytes(tokenLength);
+        var expiresAt = reader.ReadInt64();
+        var identityLength = reader.ReadInt32();
+        var identityBytes = reader.ReadBytes(identityLength);
+        var ephemeralLength = reader.ReadInt32();
+        var ephemeralBytes = reader.ReadBytes(ephemeralLength);
+        var signatureLength = reader.ReadInt32();
+        var signatureBytes = reader.ReadBytes(signatureLength);
+        ephemeralBytes[0] ^= 0xFF;
+
+        using var output = new MemoryStream();
+        using (var writer = new BinaryWriter(output, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write(version);
+            writer.Write(tokenBytes.Length);
+            writer.Write(tokenBytes);
+            writer.Write(expiresAt);
+            writer.Write(identityBytes.Length);
+            writer.Write(identityBytes);
+            writer.Write(ephemeralBytes.Length);
+            writer.Write(ephemeralBytes);
+            writer.Write(signatureBytes.Length);
+            writer.Write(signatureBytes);
+        }
+
+        var malformed = PairingConstants.QrPrefix + "v1." + System.Buffers.Text.Base64Url.EncodeToString(output.ToArray());
+        var decoded = PairingQrCodec.Decode(malformed);
+
+        Assert.False(decoded.IsSuccess);
+        Assert.Equal(PairingErrorCodes.InvalidQr, decoded.Error!.Code);
+    }
+}

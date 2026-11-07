@@ -31,6 +31,10 @@ public static class PairingQrCodec
         WriteBytes(writer, invitation.ChildEphemeralPublicKey);
         WriteBytes(writer, invitation.ChildSignature);
         writer.Flush();
+        if (stream.Length > MaxPayloadBytes)
+        {
+            throw new ArgumentException("Приглашение превышает допустимый размер QR.", nameof(invitation));
+        }
 
         return PairingConstants.QrPrefix + VersionPrefix + PairingCrypto.ToBase64Url(stream.ToArray());
     }

@@ -296,14 +296,78 @@ public sealed class PairingSecurityTests
     }
 
     [Fact]
-    public async Task HandleResponse_с_мусорным_SPKI_не_бросает_исключение()
+    public async Task Confirm_до_HandleResponse_возвращает_invalid_state()
     {
         var time = new MutableTimeProvider();
-        var (child, _) = await CreateSessionsAsync(time);
+        var (child, parent) = await CreateSessionsAsync(time);
         using (child)
+        using (parent)
         {
-            // Публичный API типизирован, поэтому проверяем валидацию SPKI на границе identity.
-            Assert.Throws<ArgumentException>(() => DeviceIdentityPublicKey.FromSubjectPublicKeyInfo(new byte[0]));
+            var verification = new PairingVerification("000000", new byte[32]);
+            var result = await child.ConfirmAsync(verification, true, new InMemoryTrustedDeviceStore(), CancellationToken.None);
+
+            Assert.False(result.IsSuccess);
+            Assert.Equal(PairingErrorCodes.InvalidState, result.Error!.Code);
         }
+    }
+
+    [Fact]
+    public async Task Повторный_Confirm_возвращает_invalid_state()
+    {
+        var time = new MutableTimeProvider();
+        var (child, parent) = await CreateSessionsAsync(time);
+        using (child)
+        using (parent)
+        {
+            var verification = (await child.HandleResponseAsync(parent.Response, CancellationToken.None)).Value;
+            var store = new InMemoryTrustedDeviceStore();
+            var first = await child.ConfirmAsync(verification, true, store, CancellationToken.None);
+            Assert.True(first.IsSuccess);
+
+            var second = await child.ConfirmAsync(verification, true, store, CancellationToken.None);
+
+            Assert.False(second.IsSuccess);
+            Assert.Equal(PairingErrorCodes.InvalidState, second.Error!.Code);
+        }
+    }
+
+    [Fact]
+    public void PairingVerification_отклоняет_нецифровой_код()
+    {
+        Assert.Throws<ArgumentException>(() => new PairingVerification("12ab56", new byte[32]));
+        Assert.Throws<ArgumentException>(() => new PairingVerification("12345", new byte[32]));
+    }
+
+    [Fact]
+    public async Task Parent_store_failure_не_сохраняет_доверие()
+    {
+        var time = new MutableTimeProvider();
+        var (child, parent) = await CreateSessionsAsync(time);
+        using (child)
+        using (parent)
+        {
+            var result = await parent.ConfirmAsync(parent.Verification, true, new FailingTrustedDeviceStore(), CancellationToken.None);
+
+            Assert.False(result.IsSuccess);
+            Assert.Equal(PairingErrorCodes.StoreFailed, result.Error!.Code);
+        }
+    }
+
+    [Fact]
+    public async Task Parent_может_принять_тот_же_QR_повторно_в_пределах_срока()
+    {
+        var time = new MutableTimeProvider();
+        using var child = (await ChildPairingSession.CreateAsync(new FakePairingKeyStore(), new DeterministicEntropy(), time, CancellationToken.None)).Value;
+        var qr = child.QrPayload;
+
+        var first = await ParentPairingSession.AcceptAsync(qr, new FakePairingKeyStore(), time, CancellationToken.None);
+        var second = await ParentPairingSession.AcceptAsync(qr, new FakePairingKeyStore(), time, CancellationToken.None);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        Assert.Matches("^[0-9]{6}$", first.Value.Verification.Code);
+        Assert.Matches("^[0-9]{6}$", second.Value.Verification.Code);
+        first.Value.Dispose();
+        second.Value.Dispose();
     }
 }

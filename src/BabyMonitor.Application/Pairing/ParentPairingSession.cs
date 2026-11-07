@@ -97,6 +97,7 @@ public sealed class ParentPairingSession : IDisposable
                 invitationTranscript,
                 invitation.ChildSignature))
         {
+            CryptographicOperations.ZeroMemory(invitationTranscript);
             return Result<ParentPairingSession>.Failure(new Error(
                 PairingErrorCodes.InvalidSignature,
                 "Подпись детского устройства не прошла проверку."));
@@ -132,6 +133,8 @@ public sealed class ParentPairingSession : IDisposable
         catch (Exception exception) when (exception is CryptographicException or ArgumentException)
         {
             ephemeral.Dispose();
+            CryptographicOperations.ZeroMemory(invitationTranscript);
+            CryptographicOperations.ZeroMemory(responseTranscript);
             return Result<ParentPairingSession>.Failure(new Error(
                 PairingErrorCodes.InvalidSignature,
                 "Не удалось вывести общий секрет с детским устройством."));
@@ -171,6 +174,13 @@ public sealed class ParentPairingSession : IDisposable
         await _gate.WaitAsync(cancellationToken);
         try
         {
+            if (Volatile.Read(ref _disposed) == 1)
+            {
+                return Result<PairedDevice>.Failure(new Error(
+                    PairingErrorCodes.InvalidState,
+                    "Pairing-сессия уже освобождена."));
+            }
+
             if (_state is not SessionState.AwaitingConfirmation)
             {
                 return Result<PairedDevice>.Failure(new Error(
@@ -209,7 +219,10 @@ public sealed class ParentPairingSession : IDisposable
         }
     }
 
-    /// <summary>Освобождает эфемерный ключ сессии.</summary>
+    /// <summary>
+    /// Освобождает эфемерный ключ сессии. Dispose не должен вызываться конкурентно с активными
+    /// ConfirmAsync: сначала завершите операции.
+    /// </summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 1)

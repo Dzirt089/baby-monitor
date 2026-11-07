@@ -128,6 +128,13 @@ public sealed class ChildPairingSession : IDisposable
         await _gate.WaitAsync(cancellationToken);
         try
         {
+            if (Volatile.Read(ref _disposed) == 1)
+            {
+                return Result<PairingVerification>.Failure(new Error(
+                    PairingErrorCodes.InvalidState,
+                    "Pairing-сессия уже освобождена."));
+            }
+
             if (_state is not SessionState.Created)
             {
                 return Result<PairingVerification>.Failure(new Error(
@@ -148,6 +155,7 @@ public sealed class ChildPairingSession : IDisposable
             if (!PairingCrypto.TryValidateIdentityPublicKey(parentPublicKey)
                 || !PairingCrypto.TryVerifySignature(parentPublicKey, responseTranscript, response.ParentSignature))
             {
+                CryptographicOperations.ZeroMemory(responseTranscript);
                 return Result<PairingVerification>.Failure(new Error(
                     PairingErrorCodes.InvalidSignature,
                     "Подпись родительского устройства не прошла проверку."));
@@ -160,6 +168,7 @@ public sealed class ChildPairingSession : IDisposable
             }
             catch (Exception exception) when (exception is CryptographicException or ArgumentException)
             {
+                CryptographicOperations.ZeroMemory(responseTranscript);
                 return Result<PairingVerification>.Failure(new Error(
                     PairingErrorCodes.InvalidSignature,
                     "Не удалось вывести общий секрет с родительским устройством."));
@@ -199,6 +208,13 @@ public sealed class ChildPairingSession : IDisposable
         await _gate.WaitAsync(cancellationToken);
         try
         {
+            if (Volatile.Read(ref _disposed) == 1)
+            {
+                return Result<PairedDevice>.Failure(new Error(
+                    PairingErrorCodes.InvalidState,
+                    "Pairing-сессия уже освобождена."));
+            }
+
             if (_state is not SessionState.Responded || _verification is null || _peerIdentity is null)
             {
                 return Result<PairedDevice>.Failure(new Error(
@@ -237,7 +253,10 @@ public sealed class ChildPairingSession : IDisposable
         }
     }
 
-    /// <summary>Освобождает эфемерный ключ и зануляет транскрипт с token.</summary>
+    /// <summary>
+    /// Освобождает эфемерный ключ и зануляет транскрипт с token. Dispose не должен вызываться
+    /// конкурентно с активными HandleResponseAsync/ConfirmAsync: сначала завершите операции.
+    /// </summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 1)
