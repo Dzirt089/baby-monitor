@@ -12,8 +12,8 @@ public sealed record ForegroundSessionSnapshot
     /// <summary>Создаёт снимок foreground-сессии.</summary>
     /// <param name="role">Роль устройства; Child или Parent.</param>
     /// <param name="state">Состояние foreground-сессии.</param>
-    /// <param name="error">Ошибка для состояния Failed.</param>
-    /// <exception cref="ArgumentException">Роль Unknown.</exception>
+    /// <param name="error">Ошибка только для состояния Failed.</param>
+    /// <exception cref="ArgumentException">Роль Unknown или Error передан для не-Failed состояния.</exception>
     /// <exception cref="ArgumentNullException">Для Failed не передана ошибка.</exception>
     public ForegroundSessionSnapshot(DeviceRole role, MonitoringForegroundState state, Error? error = null)
     {
@@ -25,6 +25,10 @@ public sealed record ForegroundSessionSnapshot
         if (state is MonitoringForegroundState.Failed)
         {
             ArgumentNullException.ThrowIfNull(error, nameof(error));
+        }
+        else if (error is not null)
+        {
+            throw new ArgumentException("Error допустим только для состояния Failed.", nameof(error));
         }
 
         Role = role;

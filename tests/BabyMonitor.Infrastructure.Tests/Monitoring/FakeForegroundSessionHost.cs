@@ -108,3 +108,25 @@ internal sealed class FakeNotificationPermission : INotificationPermission
                 new Error(ForegroundSessionErrorCodes.NotificationPermissionDenied, "Нет разрешения на уведомления.")));
     }
 }
+
+/// <summary>Ручной test double IMicrophonePermission (Child-only разрешение).</summary>
+internal sealed class FakeMicrophonePermission : IMicrophonePermission
+{
+    private readonly bool _granted;
+
+    public FakeMicrophonePermission(bool granted = true) => _granted = granted;
+
+    public Task<Result<bool>> EnsureGrantedAsync(CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return Task.FromCanceled<Result<bool>>(cancellationToken);
+        }
+
+        return _granted
+            ? Task.FromResult(Result<bool>.Success(true))
+            : Task.FromResult(Result<bool>.Failure(new Error(
+                ForegroundSessionErrorCodes.MicrophonePermissionDenied,
+                "Нет разрешения на микрофон.")));
+    }
+}

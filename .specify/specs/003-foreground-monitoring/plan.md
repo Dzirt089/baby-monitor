@@ -34,6 +34,15 @@
 | Уничтожение процесса/Activity | service независим, activity не хранится; emulator smoke частично |
 | Преждевременное аудио в 003 | сервис не открывает микрофон/playback до 005 |
 
+## Стратегия проверки platform-only путей
+
+Activity visibility, POST_NOTIFICATIONS/RECORD_AUDIO запросы, Android 14+ FGS restrictions и
+notification работают только на Android. Contract suite в CI (net10.0) проверяет fake-хост;
+Android-адаптер покрыт build, merged-manifest architecture tests, review и emulator install smoke.
+Реальный старт service/notification — только UI (006) или instrumentation; device matrix BLOCKED.
+MainActivity реализует IActivityVisibility, но app-scoped host в 006 не должен хранить Activity
+ссылку: нужен app-scoped visibility-state или weak reference (зафиксировано для 006).
+
 ## Gate
 
 Device-проверки не заявляются выполненными без реальных устройств.

@@ -122,8 +122,13 @@ public sealed class MonitoringForegroundService : Service
     private void HandleStart(Intent intent)
     {
         var roleText = intent.GetStringExtra(ExtraRole);
-        if (!Enum.TryParse<DeviceRole>(roleText, ignoreCase: false, out var role)
-            || role is not (DeviceRole.Child or DeviceRole.Parent))
+        var role = roleText switch
+        {
+            nameof(DeviceRole.Child) => DeviceRole.Child,
+            nameof(DeviceRole.Parent) => DeviceRole.Parent,
+            _ => DeviceRole.Unknown
+        };
+        if (role is DeviceRole.Unknown)
         {
             Log.Warn(LogTag, "Foreground service start rejected: invalid role.");
             PublishTerminalIfNeeded();
@@ -278,6 +283,12 @@ public sealed class MonitoringForegroundService : Service
             .SetOngoing(state is MonitoringForegroundState.Running)
             .SetOnlyAlertOnce(true)
             .SetShowWhen(false);
+
+        if (OperatingSystem.IsAndroidVersionAtLeast(31))
+        {
+            // Android 12+ иначе может отложить foreground-уведомление (и Stop) до ~10 секунд.
+            builder.SetForegroundServiceBehavior((int)NotificationForegroundService.Immediate);
+        }
 
         builder.AddAction(new Notification.Action.Builder(
             Icon.CreateWithResource(this, global::Android.Resource.Drawable.IcDialogInfo),

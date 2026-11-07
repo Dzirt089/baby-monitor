@@ -49,6 +49,17 @@ public sealed class ForegroundSessionSnapshotTests
     }
 
     [Fact]
+    public void Error_для_не_Failed_состояния_запрещён()
+    {
+        var error = new Error(ForegroundSessionErrorCodes.ServiceUnavailable, "Ошибка.");
+
+        var exception = Assert.Throws<ArgumentException>(
+            () => new ForegroundSessionSnapshot(DeviceRole.Child, MonitoringForegroundState.Running, error));
+
+        Assert.Equal("error", exception.ParamName);
+    }
+
+    [Fact]
     public void Stopped_терминален()
     {
         var snapshot = new ForegroundSessionSnapshot(DeviceRole.Parent, MonitoringForegroundState.Stopped);

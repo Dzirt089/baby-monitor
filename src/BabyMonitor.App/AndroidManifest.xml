@@ -2,8 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <!--
     Разрешения 002 (discovery) и 003 (foreground monitoring).
-    Микрофон/аудио здесь отсутствуют: Parent не получает RECORD_AUDIO из-за discovery;
-    media pipeline и microphone permission появятся в 005 вместе с реальным аудио.
+    RECORD_AUDIO объявлен только для роли Child: Android 14+ требует его для FGS-типа microphone.
+    Parent не запрашивает это разрешение и не открывает микрофон; AudioRecord появится в 005.
     ACCESS_LOCAL_NETWORK — runtime permission (Android 16+ opt-in, Android 17 targetSdk 37+ enforced).
     POST_NOTIFICATIONS — runtime permission Android 13+; без него foreground notification не виден.
   -->
@@ -15,6 +15,7 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
   <application
     android:allowBackup="false"

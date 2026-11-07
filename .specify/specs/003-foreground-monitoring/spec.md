@@ -44,10 +44,12 @@ Child service объявляет тип `microphone`, Parent — `mediaPlayback`
   launch intent, Stop работает через PendingIntent без UI.
 - **FR-006**: Остановка идемпотентна; отсутствие активной сессии — `not_running`; все ресурсы освобождаются.
 - **FR-007**: Manifest: FOREGROUND_SERVICE, FOREGROUND_SERVICE_MICROPHONE,
-  FOREGROUND_SERVICE_MEDIA_PLAYBACK, POST_NOTIFICATIONS; microphone/audio permissions не добавляются
-  до 005; service `exported=false`.
-- **FR-008**: Android 13+ notification permission и Android 14+ foreground restrictions учтены:
-  старт из видимой Activity, типы FGS соответствуют роли, no background start.
+  FOREGROUND_SERVICE_MEDIA_PLAYBACK, POST_NOTIFICATIONS, RECORD_AUDIO. RECORD_AUDIO нужен Android 14+
+  для FGS-типа microphone (Child); запрашивается только для Child, Parent его не запрашивает и
+  микрофон не открывает. AudioRecord открывается только в 005; service `exported=false`.
+- **FR-008**: Android 13+ notification permission и Android 14+ foreground restrictions:
+  старт из видимой Activity, FGS-тип соответствует роли, RECORD_AUDIO запрашивается до Child-старта,
+  no background start; device-проверки на реальных прошивках остаются BLOCKED.
 
 ## Non-Functional Requirements
 
@@ -61,12 +63,14 @@ Child service объявляет тип `microphone`, Parent — `mediaPlayback`
 
 - [x] AC-001: Порт/снимок/ошибки в Application; сборка без warnings.
 - [x] AC-002: Fake + contract suite (start/stop/идемпотентность/события/ошибки) зелёный в CI.
-- [x] AC-003: Android foreground service компилируется; manifest permissions/типы FGS проверены
-  architecture tests; emulator smoke: APK install, POST_NOTIFICATIONS grant, service объявлен в
-  package. Runtime-старт service через adb **невозможен по дизайну** (non-exported service:
-  "Requires permission not exported"); старт/notification проверяются только UI-действием (006) или
-  instrumentation — частично **BLOCKED**.
-- [x] AC-004: POST_NOTIFICATIONS adapter + typed denial; без разрешения старт отклоняется.
+- [x] AC-003: Android foreground service компилируется; merged manifest (service exported=false,
+  foregroundServiceType=microphone|mediaPlayback) и permissions проверены architecture tests;
+  emulator smoke: APK install, POST_NOTIFICATIONS grant, service объявлен в package. Runtime-старт
+  service через adb **невозможен по дизайну** (non-exported); реальный старт/notification требуют UI
+  (006) или instrumentation — **BLOCKED** без них.
+- [x] AC-004: POST_NOTIFICATIONS adapter + typed denial; для Child дополнительно RECORD_AUDIO
+  (Android 14+ FGS microphone), запрашивается только Child; без разрешений старт отклоняется
+  типизированными ошибками.
 - [-] AC-005: Activity может быть уничтожена при живом service — **BLOCKED**: нет устройств;
   emulator-старт service невозможен без UI/instrumentation (non-exported).
 - [-] AC-006: Android 13+ notification permission и 14+ foreground restrictions на реальных

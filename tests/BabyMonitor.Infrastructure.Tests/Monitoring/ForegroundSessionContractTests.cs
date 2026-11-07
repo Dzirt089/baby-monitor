@@ -118,6 +118,56 @@ public abstract class ForegroundSessionContractTests
     }
 
     [Fact]
+    public async Task GetSnapshotAsync_после_старта_возвращает_Running()
+    {
+        var host = CreateHost();
+        await host.StartAsync(DeviceRole.Child, CancellationToken.None);
+
+        var result = await host.GetSnapshotAsync(CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(MonitoringForegroundState.Running, result.Value.State);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_после_остановки_возвращает_терминальный_Stopped()
+    {
+        var host = CreateHost();
+        await host.StartAsync(DeviceRole.Child, CancellationToken.None);
+        await host.StopAsync(CancellationToken.None);
+
+        var result = await host.GetSnapshotAsync(CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(MonitoringForegroundState.Stopped, result.Value.State);
+    }
+
+    [Fact]
+    public async Task Повторный_StopAsync_возвращает_not_running()
+    {
+        var host = CreateHost();
+        await host.StartAsync(DeviceRole.Child, CancellationToken.None);
+        await host.StopAsync(CancellationToken.None);
+
+        var second = await host.StopAsync(CancellationToken.None);
+
+        Assert.False(second.IsSuccess);
+        Assert.Equal(ForegroundSessionErrorCodes.NotRunning, second.Error!.Code);
+    }
+
+    [Fact]
+    public async Task StopAsync_с_отменённым_токеном_бросает_OperationCanceledException()
+    {
+        var host = CreateHost();
+        await host.StartAsync(DeviceRole.Child, CancellationToken.None);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await host.StopAsync(cts.Token));
+    }
+
+    [Fact]
     public async Task SnapshotChanged_уведомляет_о_старте_и_смене_состояния()
     {
         var host = CreateHost();

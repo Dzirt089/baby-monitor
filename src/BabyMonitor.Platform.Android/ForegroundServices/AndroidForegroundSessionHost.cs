@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using Android.App;
 using Android.Content;
 using Android.OS;
 using Android.Util;
@@ -23,6 +24,7 @@ public sealed class AndroidForegroundSessionHost : IForegroundSessionHost, IDisp
 
     private readonly Context _context;
     private readonly INotificationPermission _notificationPermission;
+    private readonly IMicrophonePermission _microphonePermission;
     private readonly IActivityVisibility _activityVisibility;
     private readonly object _sync = new();
     private readonly ServiceConnection _connection;
@@ -35,17 +37,21 @@ public sealed class AndroidForegroundSessionHost : IForegroundSessionHost, IDisp
     /// <summary>Создаёт host foreground-сессии.</summary>
     /// <param name="context">Android context приложения.</param>
     /// <param name="notificationPermission">Порт разрешения на уведомления.</param>
+    /// <param name="microphonePermission">Порт разрешения на микрофон (используется только Child).</param>
     /// <param name="activityVisibility">Провайдер видимости Activity.</param>
     public AndroidForegroundSessionHost(
         Context context,
         INotificationPermission notificationPermission,
+        IMicrophonePermission microphonePermission,
         IActivityVisibility activityVisibility)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(notificationPermission);
+        ArgumentNullException.ThrowIfNull(microphonePermission);
         ArgumentNullException.ThrowIfNull(activityVisibility);
         _context = context.ApplicationContext ?? context;
         _notificationPermission = notificationPermission;
+        _microphonePermission = microphonePermission;
         _activityVisibility = activityVisibility;
         _connection = new ServiceConnection(this);
     }
@@ -89,6 +95,16 @@ public sealed class AndroidForegroundSessionHost : IForegroundSessionHost, IDisp
             return Result<ForegroundSessionSnapshot>.Failure(permission.Error!);
         }
 
+        if (role is DeviceRole.Child)
+        {
+            // Android 14+ требует RECORD_AUDIO для FGS-типа microphone; Parent сюда не попадает.
+            var microphone = await _microphonePermission.EnsureGrantedAsync(cancellationToken);
+            if (!microphone.IsSuccess)
+            {
+                return Result<ForegroundSessionSnapshot>.Failure(microphone.Error!);
+            }
+        }
+
         var bound = await EnsureBoundAsync(cancellationToken);
         if (!bound.IsSuccess)
         {
@@ -127,6 +143,14 @@ public sealed class AndroidForegroundSessionHost : IForegroundSessionHost, IDisp
         service.SnapshotChanged += OnSnapshot;
         try
         {
+            // Permission-диалог мог поставить Activity на паузу; повторно проверяем видимость.
+            if (!_activityVisibility.IsVisible)
+            {
+                return Result<ForegroundSessionSnapshot>.Failure(new Error(
+                    ForegroundSessionErrorCodes.BackgroundStartDenied,
+                    "Запуск мониторинга возможен только при видимом экране приложения."));
+            }
+
             var intent = new Intent(_context, typeof(MonitoringForegroundService))
                 .SetAction(MonitoringForegroundService.ActionStart)
                 .PutExtra(MonitoringForegroundService.ExtraRole, role.ToString());
@@ -148,6 +172,13 @@ public sealed class AndroidForegroundSessionHost : IForegroundSessionHost, IDisp
             return Result<ForegroundSessionSnapshot>.Failure(new Error(
                 ForegroundSessionErrorCodes.ServiceUnavailable,
                 "Foreground service не подтвердил запуск."));
+        }
+        catch (ForegroundServiceStartNotAllowedException exception)
+        {
+            Log.Warn(LogTag, "Foreground service start not allowed: " + exception.GetType().Name);
+            return Result<ForegroundSessionSnapshot>.Failure(new Error(
+                ForegroundSessionErrorCodes.BackgroundStartDenied,
+                "Android запретил запуск foreground service из фона."));
         }
         catch (Exception exception) when (exception is not System.OperationCanceledException)
         {
@@ -194,6 +225,14 @@ public sealed class AndroidForegroundSessionHost : IForegroundSessionHost, IDisp
         service.SnapshotChanged += OnSnapshot;
         try
         {
+            // Permission-диалог мог поставить Activity на паузу; повторно проверяем видимость.
+            if (!_activityVisibility.IsVisible)
+            {
+                return Result<ForegroundSessionSnapshot>.Failure(new Error(
+                    ForegroundSessionErrorCodes.BackgroundStartDenied,
+                    "Запуск мониторинга возможен только при видимом экране приложения."));
+            }
+
             var intent = new Intent(_context, typeof(MonitoringForegroundService))
                 .SetAction(MonitoringForegroundService.ActionStop);
             _context.StartService(intent);

@@ -6,6 +6,9 @@ public static class ForegroundSessionErrorCodes
     /// <summary>Нет разрешения на уведомления (Android 13+), без него нельзя показать Stop.</summary>
     public const string NotificationPermissionDenied = "foreground.notification_permission_denied";
 
+    /// <summary>Нет разрешения на микрофон (RECORD_AUDIO), требуется Child для FGS типа microphone.</summary>
+    public const string MicrophonePermissionDenied = "foreground.microphone_permission_denied";
+
     /// <summary>Попытка запуска, когда Activity не видна (Android требует явное действие пользователя).</summary>
     public const string BackgroundStartDenied = "foreground.background_start_denied";
 

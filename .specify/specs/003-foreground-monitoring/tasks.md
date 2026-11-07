@@ -29,6 +29,7 @@
 
 | Дата | Проверка | Результат |
 |---|---|---|
-| 2026-11-07 | Build + tests | build 0 warnings; Domain 6, Application 80, Architecture 41, Infrastructure 56 = 183/183 pass; format exit 0 |
+| 2026-11-07 | Build + tests | build 0 warnings; Domain 6, Application 81, Architecture 43, Infrastructure 60 = 190/190 pass; format exit 0 |
 | 2026-11-07 | Emulator smoke (AVD API 35) | install OK; POST_NOTIFICATIONS granted; service объявлен в package; adb-старт non-exported service отклонён Android — runtime/notification BLOCKED без UI/instrumentation |
+| 2026-11-07 | Review fixes | MAJOR: RECORD_AUDIO для Child FGS microphone (Android 14+) + permission plumbing; MINOR/NIT закрыты; 190/190 tests |
 | 2026-11-07 | Device matrix | **BLOCKED**: нет реальных Android-устройств (Activity destroyed, 13+/14+, Doze/OEM) |

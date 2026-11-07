@@ -15,7 +15,10 @@ namespace BabyMonitor.Application.Abstractions.Monitoring;
 /// </remarks>
 public interface IForegroundSessionHost
 {
-    /// <summary>Текущий снимок foreground-сессии; null, если сессия не запускалась/остановлена.</summary>
+    /// <summary>
+    /// Последний известный снимок foreground-сессии; null только до первого запуска.
+    /// После Stop возвращается терминальный снимок Stopped (не null).
+    /// </summary>
     ForegroundSessionSnapshot? Current { get; }
 
     /// <summary>Уведомление об изменении снимка foreground-сессии.</summary>
@@ -39,8 +42,8 @@ public interface IForegroundSessionHost
     Task<Result<ForegroundSessionSnapshot>> StopAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Возвращает текущий снимок foreground-сессии. Если сессия не запущена, возвращается
-    /// типизированная ошибка <see cref="ForegroundSessionErrorCodes.NotRunning"/>.
+    /// Возвращает текущий снимок foreground-сессии. NotRunning возвращается только до первого
+    /// запуска; после Stop возвращается терминальный снимок Stopped.
     /// </summary>
     /// <param name="cancellationToken">Отмена запроса.</param>
     /// <returns>Снимок либо ошибка.</returns>
