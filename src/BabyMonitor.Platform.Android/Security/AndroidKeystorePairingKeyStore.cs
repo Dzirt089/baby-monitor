@@ -1,3 +1,4 @@
+using Android.Runtime;
 using Android.Security.Keystore;
 using Android.Util;
 using BabyMonitor.Application.Abstractions.Security;
@@ -78,8 +79,11 @@ public sealed class AndroidKeystorePairingKeyStore : IPairingKeyStore
 
             using (keyStore)
             {
-                if (keyStore.GetKey(KeyAlias, null) is not IPrivateKey privateKey)
+                var keyEntry = keyStore.GetKey(KeyAlias, null);
+                var privateKey = TryCastPrivateKey(keyEntry);
+                if (privateKey is null)
                 {
+                    Log.Warn(LogTag, "Keystore key lookup failed: private key is unavailable.");
                     return Result<byte[]>.Failure(new Error(
                         PairingErrorCodes.KeystoreUnavailable,
                         "Android Keystore не содержит identity-ключа."));
@@ -110,6 +114,27 @@ public sealed class AndroidKeystorePairingKeyStore : IPairingKeyStore
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Приводит результат KeyStore.GetKey к IPrivateKey. .NET for Android может вернуть
+    /// интерфейсную обёртку (IKey), поэтому используется JavaCast, а не pattern matching.
+    /// </summary>
+    private static IPrivateKey? TryCastPrivateKey(IKey? keyEntry)
+    {
+        if (keyEntry is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return keyEntry.JavaCast<IPrivateKey>();
+        }
+        catch (Exception exception) when (exception is InvalidCastException or Java.Lang.ClassCastException)
+        {
+            return null;
         }
     }
 

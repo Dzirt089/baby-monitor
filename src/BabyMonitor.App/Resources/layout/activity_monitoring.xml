@@ -37,7 +37,7 @@
             android:visibility="gone" />
 
         <TextView
-            android:id="@+id/monitoring_diagnostics"
+            android:id="@+id/monitoring_diagnostics_text"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
@@ -60,6 +60,15 @@
             android:minHeight="56dp"
             android:contentDescription="@string/cd_monitoring_stop"
             android:text="@string/monitoring_stop" />
+
+        <Button
+            android:id="@+id/monitoring_diagnostics"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:contentDescription="@string/monitoring_diagnostics_button"
+            android:minHeight="56dp"
+            android:text="@string/monitoring_diagnostics_button" />
 
         <Button
             android:id="@+id/monitoring_back"

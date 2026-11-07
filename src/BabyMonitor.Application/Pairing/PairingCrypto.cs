@@ -129,6 +129,11 @@ internal static class PairingCrypto
         return value.ToString("D" + PairingConstants.VerificationCodeDigits, System.Globalization.CultureInfo.InvariantCulture);
     }
 
+    /// <summary>
+    /// Проверяет ECDSA-подпись. Кодировка подписи не фиксируется: правомерны обе стандартные
+    /// формы — IEEE P1363 (r||s, которую возвращает BCL ECDsa.SignData) и DER SEQUENCE
+    /// (её возвращает Android Keystore для SHA256withECDSA). Ключ валидируется до проверки.
+    /// </summary>
     public static bool TryVerifySignature(byte[] subjectPublicKeyInfo, byte[] data, byte[] signature)
     {
         ArgumentNullException.ThrowIfNull(signature);
@@ -141,7 +146,8 @@ internal static class PairingCrypto
         {
             using var key = ECDsa.Create();
             key.ImportSubjectPublicKeyInfo(subjectPublicKeyInfo, out _);
-            return key.VerifyData(data, signature, HashAlgorithmName.SHA256);
+            return key.VerifyData(data, signature, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation)
+                || key.VerifyData(data, signature, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence);
         }
         catch (CryptographicException)
         {

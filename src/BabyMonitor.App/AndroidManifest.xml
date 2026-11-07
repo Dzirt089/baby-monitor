@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <!--
-    Разрешения 002 (discovery) и 003 (foreground monitoring).
+    Разрешения 002 (discovery), 003 (foreground monitoring) и 006 phase 2 (pairing UI).
     RECORD_AUDIO объявлен только для роли Child: Android 14+ требует его для FGS-типа microphone.
     Parent не запрашивает это разрешение и не открывает микрофон; AudioRecord появится в 005.
     ACCESS_LOCAL_NETWORK — runtime permission (Android 16+ opt-in, Android 17 targetSdk 37+ enforced).
     POST_NOTIFICATIONS — runtime permission Android 13+; без него foreground notification не виден.
+    CAMERA — runtime permission 006 phase 2: используется только экраном сопряжения для сканирования
+    QR по явному действию пользователя; кадры не сохраняются. Камера необязательна (uses-feature
+    required=false): сценарий без камеры использует диагностический paste-fallback.
   -->
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -16,6 +19,10 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <uses-permission android:name="android.permission.CAMERA" />
+
+  <!-- Pairing UI работает и без камеры (paste-fallback); camera hardware не обязателен. -->
+  <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
   <application
     android:allowBackup="false"

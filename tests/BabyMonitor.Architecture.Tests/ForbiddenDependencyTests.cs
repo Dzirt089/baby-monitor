@@ -15,6 +15,7 @@ public sealed class ForbiddenDependencyTests
         new("Microsoft.Maui", "MAUI не входит в чистые слои"),
         new("System.Net.Sockets", "сокеты относятся к Infrastructure"),
         new("SIPSorcery", "media-библиотека относится к Infrastructure"),
+        new("ZXing", "QR-библиотека относится к Platform.Android (ADR-0011)"),
         new("Microsoft.Extensions.Logging", "логирование в Domain/Application запрещено"),
         new("Microsoft.Extensions.DependencyInjection", "DI container в Domain/Application запрещён"),
         new("System.Text.Json", "JSON относится к адаптерам, а не к Domain/Application"),

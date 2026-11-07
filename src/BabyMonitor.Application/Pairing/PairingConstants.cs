@@ -17,4 +17,7 @@ public static class PairingConstants
 
     /// <summary>Префикс QR-payload.</summary>
     public const string QrPrefix = "bm-pair:";
+
+    /// <summary>Префикс QR-payload ответа Parent (офлайн QR-обмен 006).</summary>
+    public const string ResponseQrPrefix = "bm-pair-resp:";
 }
