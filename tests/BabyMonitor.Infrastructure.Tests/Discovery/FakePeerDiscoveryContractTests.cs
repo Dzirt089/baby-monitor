@@ -1,4 +1,5 @@
 using BabyMonitor.Application.Abstractions.Discovery;
+using BabyMonitor.Application.Results;
 
 namespace BabyMonitor.Infrastructure.Tests.Discovery;
 
@@ -29,5 +30,28 @@ public sealed class FakePeerDiscoveryContractTests : PeerDiscoveryContractTests
         await session.StopAsync(CancellationToken.None);
         Assert.Single(peers);
         Assert.Equal(expected, peers[0]);
+    }
+
+    [Fact]
+    public async Task Fail_переводит_сессию_в_Failed_и_сохраняет_LastError()
+    {
+        var discovery = new FakePeerDiscovery();
+        var session = (FakePeerDiscoverySession)(await discovery.StartAsync(CancellationToken.None)).Value;
+        var failure = new Error(DiscoveryErrorCodes.ResolveFailed, "Resolve не выполнен.");
+        PeerDiscoveryStateChangedEventArgs? failedEvent = null;
+        session.StateChanged += (_, args) =>
+        {
+            if (args.State is PeerDiscoveryState.Failed)
+            {
+                failedEvent = args;
+            }
+        };
+
+        session.Fail(failure);
+
+        Assert.Equal(PeerDiscoveryState.Failed, session.State);
+        Assert.Same(failure, session.LastError);
+        Assert.NotNull(failedEvent);
+        Assert.Same(failure, failedEvent.Error);
     }
 }

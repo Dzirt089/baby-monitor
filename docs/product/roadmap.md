@@ -29,8 +29,11 @@ GitHub Issues/PR и CI. Отдельные PROGRESS/STATUS файлы не ве�
 
 ## Ближайший шаг
 
-**002-device-discovery** — следующий milestone (Proposed → Ready/In Progress в этом цикле).
-**001** остаётся In Progress: лицензия SIPSorcery принята владельцем (ADR-0005 переводится в Accepted
-отдельным docs-PR, версия пакета pin ≥10.0.17, THIRD-PARTY-NOTICES), а device matrix (phase 3)
-остаётся **BLOCKED: нет реальных устройств**; emulator не валиден для audio-метрик. Реализация
-media-адаптера выполняется в 003/005, не раньше.
+**002-device-discovery** — phase 1 (контракт + contract suite + TXT privacy) и phase 2 (Android NSD
+adapter + permissions + multicast lock) реализованы в PR #8; emulator smoke discovery неприменим без
+UI/инструментации, device matrix **BLOCKED: нет реальных устройств**. Phase 2 покрыта build,
+architecture tests и review; contract suite для platform-адаптера требует net10.0-android test host
+(device tests, BLOCKED).
+**001** остаётся In Progress: лицензия SIPSorcery принята владельцем (ADR-0005 Accepted, pin ≥10.0.17,
+THIRD-PARTY-NOTICES); device matrix (phase 3) **BLOCKED: нет реальных устройств**; media-адаптер —
+в 003/005, не раньше.

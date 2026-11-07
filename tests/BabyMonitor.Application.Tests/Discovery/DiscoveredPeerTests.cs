@@ -34,11 +34,13 @@ public sealed class DiscoveredPeerTests
         Assert.Throws<ArgumentNullException>(() => new DiscoveredPeer("peer-1", null!, DeviceRole.Child, 1));
     }
 
-    [Fact]
-    public void Родительская_роль_не_допустима_для_обнаруженного_peer()
+    [Theory]
+    [InlineData(DeviceRole.Parent)]
+    [InlineData(DeviceRole.Unknown)]
+    public void Родительская_и_неизвестная_роль_не_допустимы_для_обнаруженного_peer(DeviceRole role)
     {
         var exception = Assert.Throws<ArgumentException>(
-            () => new DiscoveredPeer("peer-1", Endpoint, DeviceRole.Parent, 1));
+            () => new DiscoveredPeer("peer-1", Endpoint, role, 1));
 
         Assert.Equal("role", exception.ParamName);
     }

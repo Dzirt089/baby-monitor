@@ -7,7 +7,10 @@ namespace BabyMonitor.Application.Abstractions.Discovery;
 /// </summary>
 /// <remarks>
 /// Переходы состояний: Starting → Advertising → Failed | Stopped; Failed → Stopped;
-/// Stopped — терминальное состояние. TXT содержит только protocol version и роль.
+/// Stopped — терминальное состояние. Starting является внутренним: StartAsync возвращает сессию
+/// уже в Advertising. TXT содержит только protocol version и роль.
+/// DisposeAsync эквивалентен StopAsync: снимает сервис из mDNS, освобождает NSD/multicast-ресурсы;
+/// повторный вызов безопасен.
 /// </remarks>
 public interface IPeerAdvertiserSession : IAsyncDisposable
 {

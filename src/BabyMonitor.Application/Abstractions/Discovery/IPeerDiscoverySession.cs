@@ -8,7 +8,10 @@ namespace BabyMonitor.Application.Abstractions.Discovery;
 /// </summary>
 /// <remarks>
 /// Переходы состояний: Starting → Discovering → Failed | Stopped; Failed → Stopped; Stopped —
-/// терминальное состояние. Discovery не даёт доверия peer: identity проверяется pairing-слоем.
+/// терминальное состояние. Starting является внутренним: StartAsync возвращает сессию уже
+/// в Discovering. Discovery не даёт доверия peer: identity проверяется pairing-слоем.
+/// DisposeAsync эквивалентен StopAsync: останавливает discovery, освобождает NSD listeners,
+/// multicast lock и фоновые задачи; повторный вызов безопасен.
 /// </remarks>
 public interface IPeerDiscoverySession : IAsyncDisposable
 {
@@ -31,8 +34,8 @@ public interface IPeerDiscoverySession : IAsyncDisposable
     IAsyncEnumerable<DiscoveredPeer> DiscoverPeersAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Останавливает discovery и освобождает NSD-ресурсы. Идемпотентно; после возврата
-    /// состояние Stopped. Отмена не отменяет освобождение ресурсов.
+    /// Останавливает discovery и освобождает NSD listeners, multicast lock и фоновые задачи.
+    /// Идемпотентно; после возврата состояние Stopped. Отмена не отменяет освобождение ресурсов.
     /// </summary>
     /// <param name="cancellationToken">Ограничение ожидания остановки.</param>
     Task StopAsync(CancellationToken cancellationToken);

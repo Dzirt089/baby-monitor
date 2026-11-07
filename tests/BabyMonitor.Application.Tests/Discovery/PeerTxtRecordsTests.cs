@@ -43,7 +43,7 @@ public sealed class PeerTxtRecordsTests
     [Fact]
     public void Parse_восстанавливает_объявление_из_созданных_TXT()
     {
-        var original = new PeerAdvertisement(DeviceRole.Child, 3);
+        var original = new PeerAdvertisement(DeviceRole.Child, PeerDiscoveryConstants.CurrentProtocolVersion);
 
         var parsed = PeerTxtRecords.Parse(PeerTxtRecords.Create(original));
 
@@ -67,6 +67,31 @@ public sealed class PeerTxtRecordsTests
         Assert.Equal(1, parsed.Value.ProtocolVersion);
     }
 
+    [Theory]
+    [InlineData("empty")]
+    [InlineData("no-version")]
+    [InlineData("no-role")]
+    public void Parse_без_обязательных_ключей_возвращает_invalid_txt(string scenario)
+    {
+        var txt = scenario switch
+        {
+            "empty" => new Dictionary<string, string>(StringComparer.Ordinal),
+            "no-version" => new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [PeerDiscoveryConstants.TxtRoleKey] = "Child"
+            },
+            _ => new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [PeerDiscoveryConstants.TxtProtocolVersionKey] = "1"
+            }
+        };
+
+        var parsed = PeerTxtRecords.Parse(txt);
+
+        Assert.False(parsed.IsSuccess);
+        Assert.Equal(DiscoveryErrorCodes.InvalidTxt, parsed.Error!.Code);
+    }
+
     [Fact]
     public void Parse_без_TXT_возвращает_invalid_txt()
     {
@@ -80,6 +105,7 @@ public sealed class PeerTxtRecordsTests
     [InlineData("")]
     [InlineData("0")]
     [InlineData("-1")]
+    [InlineData("2")]
     [InlineData("abc")]
     public void Parse_с_некорректной_версией_возвращает_invalid_txt(string version)
     {
@@ -100,6 +126,7 @@ public sealed class PeerTxtRecordsTests
     [InlineData("Unknown")]
     [InlineData("child")]
     [InlineData("999")]
+    [InlineData("1")]
     public void Parse_с_недопустимой_ролью_возвращает_invalid_txt(string role)
     {
         var txt = new Dictionary<string, string>(StringComparer.Ordinal)

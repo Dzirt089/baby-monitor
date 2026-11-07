@@ -17,4 +17,11 @@ public static class PeerDiscoveryConstants
 
     /// <summary>Текущая версия discovery-протокола.</summary>
     public const int CurrentProtocolVersion = 1;
+
+    /// <summary>
+    /// Временный порт transport-сервиса, который Child публикует до реализации media-транспорта
+    /// (003/005). Не является протокольным обещанием; при появлении реального transport port
+    /// берётся из transport-конфигурации.
+    /// </summary>
+    public const int ProvisionalTransportPort = 47800;
 }

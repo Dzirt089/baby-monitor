@@ -31,6 +31,17 @@
 | Privacy leak через TXT | unit-тест allowed-keys + review |
 | Permission differences между API levels | permission adapter + architecture tests |
 
+## Стратегия проверки реального NSD-адаптера
+
+Contract suite (`BabyMonitor.Infrastructure.Tests`, net10.0) не может ссылаться на
+`BabyMonitor.Platform.Android` (net10.0-android), поэтому в CI он гоняет только fake-реализации.
+Реальный NSD-адаптер проверяется: (a) сборкой Platform.Android и всего solution без warnings;
+(b) architecture tests (manifest permissions/no microphone/platform isolation); (c) независимым
+review; (d) device tests — **BLOCKED: нет реальных устройств** (нужен net10.0-android test host
+или ручной прогон на телефоне). Чистая логика (TXT wire-format, валидация endpoint/роли) вынесена
+в Application и покрыта unit-тестами. Это ограничение зафиксировано в PR и отчёте, а не выдаётся
+за полную проверку.
+
 ## Gate
 
 Device-проверки не заявляются выполненными без реальных устройств. Pairing/доверие — только 004.

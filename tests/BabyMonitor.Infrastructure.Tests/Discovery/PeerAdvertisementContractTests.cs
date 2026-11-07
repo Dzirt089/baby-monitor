@@ -82,6 +82,19 @@ public abstract class PeerAdvertisementContractTests
     }
 
     [Fact]
+    public async Task StopAsync_с_отменённым_токеном_переводит_сессию_в_Stopped()
+    {
+        var advertiser = CreateAdvertiser();
+        var session = (await advertiser.StartAsync(CreateAdvertisement(), CancellationToken.None)).Value;
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await session.StopAsync(cts.Token);
+
+        Assert.Equal(PeerAdvertisementState.Stopped, session.State);
+    }
+
+    [Fact]
     public async Task DisposeAsync_останавливает_сессию()
     {
         var advertiser = CreateAdvertiser();

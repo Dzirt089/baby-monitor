@@ -12,16 +12,18 @@ public static class PeerTxtRecords
 {
     /// <summary>Создаёт TXT-словарь для advertisement (только разрешённые ключи).</summary>
     /// <param name="advertisement">Объявление Child.</param>
-    /// <returns>Словарь с ключами v и role.</returns>
+    /// <returns>Immutable-словарь с ключами v и role; role — исходное имя DeviceRole.Child.</returns>
     public static IReadOnlyDictionary<string, string> Create(PeerAdvertisement advertisement)
     {
         ArgumentNullException.ThrowIfNull(advertisement);
 
-        return new Dictionary<string, string>(StringComparer.Ordinal)
+        var records = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [PeerDiscoveryConstants.TxtProtocolVersionKey] = advertisement.ProtocolVersion.ToString(CultureInfo.InvariantCulture),
-            [PeerDiscoveryConstants.TxtRoleKey] = advertisement.Role.ToString()
+            [PeerDiscoveryConstants.TxtRoleKey] = nameof(DeviceRole.Child)
         };
+
+        return new System.Collections.ObjectModel.ReadOnlyDictionary<string, string>(records);
     }
 
     /// <summary>
@@ -39,18 +41,18 @@ public static class PeerTxtRecords
 
         if (!txtRecords.TryGetValue(PeerDiscoveryConstants.TxtProtocolVersionKey, out var versionText)
             || !int.TryParse(versionText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var version)
-            || version <= 0)
+            || version is < 1 or > PeerDiscoveryConstants.CurrentProtocolVersion)
         {
-            return Result<PeerAdvertisement>.Failure(new Error(DiscoveryErrorCodes.InvalidTxt, "Некорректная версия discovery-протокола peer."));
+            return Result<PeerAdvertisement>.Failure(new Error(DiscoveryErrorCodes.InvalidTxt, "Некорректная или неподдерживаемая версия discovery-протокола peer."));
         }
 
+        // Wire-формат role — исходное имя DeviceRole.Child ("Child"), не числовое значение enum.
         if (!txtRecords.TryGetValue(PeerDiscoveryConstants.TxtRoleKey, out var roleText)
-            || !Enum.TryParse<DeviceRole>(roleText, ignoreCase: false, out var role)
-            || role is not DeviceRole.Child)
+            || !string.Equals(roleText, nameof(DeviceRole.Child), StringComparison.Ordinal))
         {
             return Result<PeerAdvertisement>.Failure(new Error(DiscoveryErrorCodes.InvalidTxt, "Некорректная роль peer в TXT."));
         }
 
-        return Result<PeerAdvertisement>.Success(new PeerAdvertisement(role, version));
+        return Result<PeerAdvertisement>.Success(new PeerAdvertisement(DeviceRole.Child, version));
     }
 }

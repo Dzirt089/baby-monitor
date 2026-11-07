@@ -68,22 +68,51 @@ public abstract class PeerDiscoveryContractTests
     public async Task DiscoverPeersAsync_завершается_после_остановки_сессии()
     {
         var discovery = CreateDiscovery();
-        var session = (await discovery.StartAsync(CancellationToken.None)).Value;
+        await using var session = (await discovery.StartAsync(CancellationToken.None)).Value;
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var peers = 0;
 
         var enumerateTask = Task.Run(async () =>
         {
             await foreach (var _ in session.DiscoverPeersAsync(cts.Token))
             {
-                peers++;
+                // Peer-ы, полученные до Stop, допустимы; важно, что поток завершается.
             }
         });
 
         await session.StopAsync(CancellationToken.None);
         await enumerateTask.WaitAsync(TimeSpan.FromSeconds(10));
+    }
 
-        Assert.Equal(0, peers);
+    [Fact]
+    public async Task StopAsync_с_отменённым_токеном_переводит_сессию_в_Stopped()
+    {
+        var discovery = CreateDiscovery();
+        var session = (await discovery.StartAsync(CancellationToken.None)).Value;
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await session.StopAsync(cts.Token);
+
+        Assert.Equal(PeerDiscoveryState.Stopped, session.State);
+    }
+
+    [Fact]
+    public async Task DiscoverPeersAsync_с_отменой_перечисления_бросает_OperationCanceledException()
+    {
+        var discovery = CreateDiscovery();
+        await using var session = (await discovery.StartAsync(CancellationToken.None)).Value;
+        using var cancellation = new CancellationTokenSource();
+        var enumerateTask = Task.Run(async () =>
+        {
+            await foreach (var _ in session.DiscoverPeersAsync(cancellation.Token))
+            {
+            }
+        });
+
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await enumerateTask.WaitAsync(TimeSpan.FromSeconds(10)));
     }
 
     [Fact]

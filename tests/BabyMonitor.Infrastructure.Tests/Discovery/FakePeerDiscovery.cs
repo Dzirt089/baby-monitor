@@ -73,6 +73,16 @@ internal sealed class FakePeerDiscoverySession : IPeerDiscoverySession
         StateChanged?.Invoke(this, new PeerDiscoveryStateChangedEventArgs(PeerDiscoveryState.Discovering));
     }
 
+    /// <summary>Перевести сессию в Failed с типизированной ошибкой (для error-path contract tests).</summary>
+    public void Fail(Error error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        LastError = error;
+        Volatile.Write(ref _state, (int)PeerDiscoveryState.Failed);
+        _peers.Writer.TryComplete();
+        StateChanged?.Invoke(this, new PeerDiscoveryStateChangedEventArgs(PeerDiscoveryState.Failed, error));
+    }
+
     public async IAsyncEnumerable<DiscoveredPeer> DiscoverPeersAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
         await foreach (var peer in _peers.Reader.ReadAllAsync(cancellationToken))
@@ -156,6 +166,15 @@ internal sealed class FakePeerAdvertiserSession : IPeerAdvertiserSession
     {
         Volatile.Write(ref _state, (int)PeerAdvertisementState.Advertising);
         StateChanged?.Invoke(this, new PeerAdvertisementStateChangedEventArgs(PeerAdvertisementState.Advertising));
+    }
+
+    /// <summary>Перевести сессию в Failed с типизированной ошибкой (для error-path contract tests).</summary>
+    public void Fail(Error error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        LastError = error;
+        Volatile.Write(ref _state, (int)PeerAdvertisementState.Failed);
+        StateChanged?.Invoke(this, new PeerAdvertisementStateChangedEventArgs(PeerAdvertisementState.Failed, error));
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

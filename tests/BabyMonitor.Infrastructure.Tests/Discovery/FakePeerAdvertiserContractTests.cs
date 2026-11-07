@@ -1,4 +1,5 @@
 using BabyMonitor.Application.Abstractions.Discovery;
+using BabyMonitor.Application.Results;
 using BabyMonitor.Domain.Devices;
 
 namespace BabyMonitor.Infrastructure.Tests.Discovery;
@@ -11,7 +12,7 @@ public sealed class FakePeerAdvertiserContractTests : PeerAdvertisementContractT
     protected override IPeerAdvertiser CreateFailingAdvertiser() => new FakePeerAdvertiser(failStart: true);
 
     [Fact]
-    public async Task StartAsync_сохраняет_advertisement_и_TXT_содержит_только_разрешённые_ключи()
+    public async Task StartAsync_сохраняет_опубликованное_advertisement()
     {
         var advertiser = new FakePeerAdvertiser();
         var advertisement = new PeerAdvertisement(DeviceRole.Child, PeerDiscoveryConstants.CurrentProtocolVersion);
@@ -21,10 +22,19 @@ public sealed class FakePeerAdvertiserContractTests : PeerAdvertisementContractT
         Assert.True(result.IsSuccess);
         await using var session = result.Value;
         Assert.Equal(advertisement, advertiser.LastAdvertisement);
-        var txt = PeerTxtRecords.Create(advertisement);
-        Assert.Equal(2, txt.Count);
-        Assert.True(txt.ContainsKey(PeerDiscoveryConstants.TxtProtocolVersionKey));
-        Assert.True(txt.ContainsKey(PeerDiscoveryConstants.TxtRoleKey));
         await session.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Fail_переводит_advertise_сессию_в_Failed_и_сохраняет_LastError()
+    {
+        var advertiser = new FakePeerAdvertiser();
+        var session = (FakePeerAdvertiserSession)(await advertiser.StartAsync(CreateAdvertisement(), CancellationToken.None)).Value;
+        var failure = new Error(DiscoveryErrorCodes.NsdUnavailable, "NSD завершился ошибкой.");
+
+        session.Fail(failure);
+
+        Assert.Equal(PeerAdvertisementState.Failed, session.State);
+        Assert.Same(failure, session.LastError);
     }
 }

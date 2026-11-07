@@ -2,7 +2,7 @@
 
 **Feature Branch**: 002-device-discovery
 **Created**: 2026-11-07
-**Status**: In Progress (phase 1 — контракт и contract suite — реализована; phase 2 — Android NSD adapter — следующий шаг)
+**Status**: In Progress (phase 1 — контракт и contract suite; phase 2 — Android NSD adapter и permissions — реализованы; emulator smoke неприменим без UI/инструментации, device matrix BLOCKED)
 **Input**: AGENTS.md разделы 8, 10; roadmap 002
 
 ## Контекст
@@ -40,8 +40,9 @@ Platform permission-адаптер запрашивает только необ�
   события состояния, завершение потока peer-ов) в Infrastructure.Tests.
 - **FR-003**: Platform.Android-адаптер NSD/DNS-SD: advertise, discover, resolve, multicast lock,
   освобождение ресурсов; service type и TXT-ключи — из единых констант Application.
-- **FR-004**: mDNS TXT: только `v` (protocol version) и `role`; запрещены имя ребёнка, владелец,
-  постоянный device ID, ключи, pairing token/secret, fingerprint. Display name не персональный.
+- **FR-004**: mDNS TXT: только `v` (protocol version, целое 1..CurrentProtocolVersion) и `role`
+  (wire-формат — исходное имя `Child`; числовые/иные значения отклоняются). Запрещены имя ребёнка,
+  владелец, постоянный device ID, ключи, pairing token/secret, fingerprint. Display name не персональный.
 - **FR-005**: Типизированные ошибки: Wi-Fi отсутствует, сервис не найден, resolve не выполнен,
   permission denied, NSD unavailable, invalid TXT.
 - **FR-006**: Все async-операции принимают CancellationToken; Stop/Dispose освобождают NsdManager,
@@ -59,10 +60,12 @@ Platform permission-адаптер запрашивает только необ�
 
 - [x] AC-001: Порты и типы в Application; сборка без warnings.
 - [x] AC-002: Fake + contract suite зелёный (Application 68, Infrastructure 37 tests) и включён в CI.
-- [ ] AC-003: NSD-адаптер в Platform.Android компилируется; архитектурные тесты подтверждают
-  изоляцию platform-типов.
+- [x] AC-003: NSD-адаптер в Platform.Android компилируется (0 warnings); architecture tests
+  проверяют manifest permissions, отсутствие microphone permissions и изоляцию platform-типов.
 - [x] AC-004: mDNS TXT проходит unit-тест allowed-keys (никаких персональных данных/секретов).
-- [ ] AC-005: Manifest permissions минимальны; permission-адаптер возвращает типизированные отказы.
+- [x] AC-005: Manifest permissions минимальны (INTERNET, ACCESS_NETWORK_STATE,
+  CHANGE_WIFI_MULTICAST_STATE, ACCESS_LOCAL_NETWORK); permission-адаптер возвращает типизированный
+  permission_denied; microphone permissions отсутствуют (проверяется architecture test).
 - [ ] AC-006: Emulator smoke (advertise/discover) выполнен или честно задокументирован как
   неприменимый; **device matrix BLOCKED: нет реальных устройств** (guest Wi-Fi/AP isolation/VLAN,
   смена IP, два разных телефона — только на железе).
