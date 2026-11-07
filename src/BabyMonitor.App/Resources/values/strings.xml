@@ -2,4 +2,12 @@
     <string name="app_name">Радионяня</string>
     <string name="bootstrap_status">Каркас приложения создан. Мониторинг, обнаружение устройств и передача звука ещё не реализованы.</string>
     <string name="bootstrap_note">Приложение не является медицинским изделием и не заменяет наблюдение взрослого.</string>
+
+    <string name="notification_channel_name">Мониторинг</string>
+    <string name="notification_channel_description">Постоянное уведомление о работе радионяни</string>
+    <string name="notification_title_child">Радионяня: ребёнок</string>
+    <string name="notification_title_parent">Радионяня: родитель</string>
+    <string name="notification_text_running">Мониторинг активен</string>
+    <string name="notification_text_stopped">Мониторинг остановлен</string>
+    <string name="notification_action_stop">Остановить</string>
 </resources>

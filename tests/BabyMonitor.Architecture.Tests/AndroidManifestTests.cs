@@ -16,6 +16,10 @@ public sealed class AndroidManifestTests
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.CHANGE_WIFI_MULTICAST_STATE",
         "android.permission.ACCESS_LOCAL_NETWORK",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.POST_NOTIFICATIONS",
     ];
 
     private static readonly string[] ForbiddenPermissions =
@@ -51,6 +55,18 @@ public sealed class AndroidManifestTests
         Assert.True(
             forbidden.Count == 0,
             "Discovery не должен добавлять microphone/audio permissions: " + ArchitectureTestSupport.FormatList(forbidden));
+    }
+
+    [Fact]
+    public void Foreground_service_объявляет_роли_microphone_и_mediaPlayback()
+    {
+        var source = File.ReadAllText(
+            ArchitectureTestSupport.GetPathFromRoot("src/BabyMonitor.Platform.Android/ForegroundServices/MonitoringForegroundService.cs"));
+
+        Assert.Contains("TypeMicrophone", source, StringComparison.Ordinal);
+        Assert.Contains("TypeMediaPlayback", source, StringComparison.Ordinal);
+        Assert.Contains("Exported = false", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("RECORD_AUDIO", source, StringComparison.Ordinal);
     }
 
     [Fact]

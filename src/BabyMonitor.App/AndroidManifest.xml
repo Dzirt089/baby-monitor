@@ -1,14 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <!--
-    Минимальные разрешения discovery (002): локальная сеть/mDNS и multicast.
-    Микрофон/аудио здесь отсутствуют: Parent не получает RECORD_AUDIO из-за discovery.
+    Разрешения 002 (discovery) и 003 (foreground monitoring).
+    Микрофон/аудио здесь отсутствуют: Parent не получает RECORD_AUDIO из-за discovery;
+    media pipeline и microphone permission появятся в 005 вместе с реальным аудио.
     ACCESS_LOCAL_NETWORK — runtime permission (Android 16+ opt-in, Android 17 targetSdk 37+ enforced).
+    POST_NOTIFICATIONS — runtime permission Android 13+; без него foreground notification не виден.
   -->
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
   <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
   <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
   <application
     android:allowBackup="false"
