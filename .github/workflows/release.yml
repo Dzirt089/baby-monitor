@@ -95,16 +95,34 @@ jobs:
       - name: Free disk space (runner image limit)
         run: |
           # На hosted runner образ содержит большие предустановленные NDK/system-images,
-          # старые SDK и кэши; без очистки android workload не помещается (Disk quota exceeded).
+          # старые SDK и кэши; без очистки android workload может упереться в лимит диска.
           sudo rm -rf /usr/local/lib/android/sdk/ndk \
                       /usr/local/lib/android/sdk/system-images \
                       /usr/share/dotnet/sdk/8.0.* /usr/share/dotnet/sdk/9.0.* \
                       /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/node \
                       /usr/share/swift /opt/microsoft/msedge
-          df -h /
+          df -h / /tmp /var/tmp /home || true
 
       - name: Install Android workload
-        run: dotnet workload install android
+        env:
+          TMPDIR: /var/tmp
+        run: |
+          set -euo pipefail
+          # Hosted runner иногда отдаёт "Disk quota exceeded" при установке workload
+          # (даже при свободном месте) — повторяем с очисткой частичного состояния.
+          for attempt in 1 2 3; do
+            echo "Android workload install attempt $attempt"
+            if dotnet workload install android; then
+              echo "Android workload installed"
+              exit 0
+            fi
+            echo "::warning::Android workload install failed (attempt $attempt); repairing"
+            dotnet workload repair || true
+            sleep 15
+          done
+          echo "::error::Android workload install failed after 3 attempts"
+          df -h / /tmp /var/tmp /home || true
+          exit 1
 
       - name: Restore
         run: dotnet restore BabyMonitor.slnx
@@ -271,16 +289,34 @@ jobs:
       - name: Free disk space (runner image limit)
         run: |
           # На hosted runner образ содержит большие предустановленные NDK/system-images,
-          # старые SDK и кэши; без очистки android workload не помещается (Disk quota exceeded).
+          # старые SDK и кэши; без очистки android workload может упереться в лимит диска.
           sudo rm -rf /usr/local/lib/android/sdk/ndk \
                       /usr/local/lib/android/sdk/system-images \
                       /usr/share/dotnet/sdk/8.0.* /usr/share/dotnet/sdk/9.0.* \
                       /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/node \
                       /usr/share/swift /opt/microsoft/msedge
-          df -h /
+          df -h / /tmp /var/tmp /home || true
 
       - name: Install Android workload
-        run: dotnet workload install android
+        env:
+          TMPDIR: /var/tmp
+        run: |
+          set -euo pipefail
+          # Hosted runner иногда отдаёт "Disk quota exceeded" при установке workload
+          # (даже при свободном месте) — повторяем с очисткой частичного состояния.
+          for attempt in 1 2 3; do
+            echo "Android workload install attempt $attempt"
+            if dotnet workload install android; then
+              echo "Android workload installed"
+              exit 0
+            fi
+            echo "::warning::Android workload install failed (attempt $attempt); repairing"
+            dotnet workload repair || true
+            sleep 15
+          done
+          echo "::error::Android workload install failed after 3 attempts"
+          df -h / /tmp /var/tmp /home || true
+          exit 1
 
       - name: Restore
         run: dotnet restore BabyMonitor.slnx
