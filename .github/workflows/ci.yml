@@ -52,6 +52,17 @@ jobs:
           yes | "$SDKMANAGER" --licenses > /dev/null || true
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
+      - name: Free disk space (runner image limit)
+        run: |
+          # На hosted runner образ содержит большие предустановленные NDK/system-images,
+          # старые SDK и кэши; без очистки android workload не помещается (Disk quota exceeded).
+          sudo rm -rf /usr/local/lib/android/sdk/ndk \
+                      /usr/local/lib/android/sdk/system-images \
+                      /usr/share/dotnet/sdk/8.0.* /usr/share/dotnet/sdk/9.0.* \
+                      /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/node \
+                      /usr/share/swift /opt/microsoft/msedge
+          df -h /
+
       - name: Install Android workload
         run: dotnet workload install android
 
