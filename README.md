@@ -135,6 +135,15 @@ Keystore, пароли и signing secrets **запрещено** хранить 
 - `ANDROID_KEY_PASSWORD`
 - `ANDROID_KEYSTORE_PASSWORD`
 
+## Third-party licenses
+
+Проект использует сторонние компоненты; лицензии и уведомления — в
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+Media-библиотека **SIPSorcery** принята владельцем в [ADR-0005](docs/architecture/adr/0005-media-transport-library.md):
+BSD-3-Clause + Additional Use Restriction; версия зафиксирована `>= 10.0.17` в `Directory.Packages.props`.
+Пакет будет подключён к Infrastructure при реализации media-адаптера (feature 003/005).
+
 ## Лицензия
 
 MIT — см. [LICENSE](LICENSE).

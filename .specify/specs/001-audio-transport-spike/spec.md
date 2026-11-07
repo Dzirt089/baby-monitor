@@ -76,11 +76,13 @@ Proposed с Rejected-вариантами; production media-код не пише
 - [x] AC-002: Contract suite зелёный на ручном test double (22 теста: 15 общих contract + 7 fake-specific) и включён в CI.
 - [x] AC-003: Architecture tests обновлены под 9-й проект (37 тестов, включая состав solution и references).
 - [x] AC-004: Оценка SIPSorcery зафиксирована в ADR-0005: TFM net10.0, активный upstream, 3 HIGH DoS
-  (fixed ≥10.0.14, использовать ≥10.0.17), но лицензия BSD-3-Clause + Additional Use Restriction
-  (NOASSERTION) — adoption заблокирован до решения владельца; пакет не добавлен.
+  (fixed ≥10.0.14, использовать ≥10.0.17); лицензия BSD-3-Clause + Additional Use Restriction
+  (NOASSERTION) **принята владельцем 2026-11-07**, пин ≥10.0.17 в Directory.Packages.props,
+  THIRD-PARTY-NOTICES.md; PackageReference появится в 003/005.
 - [ ] AC-005: Spike protocol задокументирован; device matrix выполнен на 2 реальных устройствах
   (сейчас **[BLOCKED]**: реальных устройств нет, emulator не валиден для аудиотракта).
-- [ ] AC-006: ADR-0005 переведён в Accepted/Rejected по данным измерений.
+- [x] AC-006: ADR-0005 переведён в Accepted (2026-11-07) решением владельца (лицензия принята);
+  device matrix (AC-005) остаётся BLOCKED и выполняется на реальных устройствах позже.
 
 ## Out of Scope
 
@@ -91,5 +93,6 @@ NSD, foreground service, UI, автоподключение/reconnect-полит
 ## Dependencies & Assumptions
 
 - 2 реальных Android-устройства в одной Wi-Fi LAN для phase 3 (пока не предоставлены).
-- SIPSorcery — только кандидат; добавление пакета требует проверки и фиксации в ADR/review.
+- SIPSorcery принят (ADR-0005 Accepted 2026-11-07): pin >= 10.0.17 в Directory.Packages.props,
+  THIRD-PARTY-NOTICES.md; PackageReference и адаптер добавляются в 003/005 только в Infrastructure.
 - Emulator (API 35) допускается только для smoke компиляции/упаковки, не для audio-метрик.

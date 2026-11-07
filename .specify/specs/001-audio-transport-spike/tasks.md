@@ -14,8 +14,8 @@
 
 - [x] T006 Оценка SIPSorcery: лицензия/зависимости/advisories/TFM — в ADR-0005 — `docs/architecture/adr/0005-media-transport-library.md`
 - [ ] T006a Размер APK, сборка/trimming/AOT под net10.0-android, SBOM/transitive-license скан — после решения о пакете (phase 2/3)
-- [-] T007 Решение о добавлении пакета/экспериментального адаптера — BLOCKED: лицензия SIPSorcery = BSD-3-Clause + Additional Use Restriction (не OSI/NOASSERTION), нужно решение владельца; пакет не добавлен
-- [-] T008 Spike harness с реальным кандидатом (loopback/эмулятор) — BLOCKED: зависит от T007 (пакет не одобрен)
+- [x] T007 Решение о добавлении пакета — владелец принял лицензию SIPSorcery 2026-11-07; ADR-0005 Accepted, пин в Directory.Packages.props, THIRD-PARTY-NOTICES; PackageReference — в 003/005
+- [-] T008 Spike harness с реальным кандидатом — BLOCKED до реализации media-адаптера (003/005); контракт и fake готовы
 
 ## Phase 3 — Device matrix (BLOCKED)
 
@@ -37,5 +37,5 @@
 
 ## Phase 4 — Решение
 
-- [ ] T011 Перевести ADR-0005 в Accepted/Rejected по данным — `docs/architecture/adr/0005-media-transport-library.md`
+- [x] T011 Перевести ADR-0005 в Accepted — Accepted 2026-11-07 решением владельца (лицензия принята; device matrix остаётся verification BLOCKED) — `docs/architecture/adr/0005-media-transport-library.md`
 - [x] T012 PR #4 (open), CI green (run 39462684630), независимое ревью pass 1+2 — GitHub
