@@ -2,7 +2,7 @@
 
 **Feature Branch**: 005-session-reliability
 **Created**: 2026-11-07
-**Status**: In Progress (phase 1: доменный КА + reconnect/health/alarm; phase 2: SIPSorcery media adapter, Android audio, wiring)
+**Status**: Phase 1 merged; phase 2 **BLOCKED**: ADR-0007 signaling/DTLS-SRTP схема ещё Proposed, реальных устройств нет; media adapter не реализован, SIPSorcery PackageReference не добавлен
 **Input**: AGENTS.md разделы 2, 6, 7, 9, 11, 15; roadmap 005; ADR-0005 (SIPSorcery принят)
 
 ## Контекст
@@ -72,9 +72,9 @@ SessionHealth показывает control/media/capture/playback по отде�
 - [x] AC-001: Domain КА + переходы/инварианты покрыты unit-тестами.
 - [x] AC-002: ReconnectPolicy (рост, cap, jitter, детерминизм) покрыт тестами.
 - [x] AC-003: Health monitor и ParentLossAlarm покрыты тестами с fake TimeProvider.
-- [ ] AC-004: SIPSorcery adapter компилируется в Infrastructure, проходит contract suite; Application
+- [-] AC-004: **BLOCKED** — ADR-0007 signaling/DTLS не принят, реальных устройств нет; SIPSorcery adapter не реализован; Application
   не зависит от SIPSorcery (phase 2).
-- [ ] AC-005: Android audio adapters компилируются; role invariants; device-путь BLOCKED (phase 2).
+- [-] AC-005: **BLOCKED** — Android audio adapters не реализованы (нет signaling/device-проверок).
 - [-] AC-006: 100 connect/disconnect/reconnect, 8h soak, loss of Wi-Fi/calls/OEM — **BLOCKED: нет
   реальных устройств** (007).
 - [-] AC-007: Реальная слышимость аудио/media metrics на устройствах — **BLOCKED**.

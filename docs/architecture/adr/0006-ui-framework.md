@@ -1,8 +1,8 @@
 # ADR-0006: UI-фреймворк — MAUI или чистый .NET for Android
 
-- **Статус**: Proposed (требуется spike/решение в 006)
+- **Статус**: Accepted (2026-11-07: выбран .NET for Android, Activity + XML; MAUI отклонён для MVP)
 - **Дата**: 2026-10-20
-- **Решение принимает**: ведущий архитектор после UI spike
+- **Решение принимает**: ведущий архитектор (bootstrap-каркас уже .NET for Android; spike 006 подтвердил работоспособность в текущем CI)
 - **Связанные документы**: [ADR-0003](0003-target-dotnet-android.md), [AGENTS.md](../../../AGENTS.md) разделы 4, 5
 
 ## Контекст
@@ -15,12 +15,13 @@ View/code-behind. Машина разработки не имеет устано
 AGENTS.md допускает оба варианта: MAUI с единственным Android target либо .NET for Android, если
 MAUI ещё не принят. Решение не должно блокировать bootstrap-фазу.
 
-## Решение (предлагаемое к проверке)
+## Решение (принято)
 
-Bootstrap-каркас: .NET for Android (Activity + XML) как минимальная оболочка, честно показывающая
-статус. UI-фреймворк для MVP выбирается в feature 006 после короткого spike по критериям.
-И в MAUI, и в .NET for Android ViewModel вызывает только Application use cases и наблюдает
-immutable snapshots; composition root — только в App/Composition.
+Для MVP выбран **.NET for Android (Activity + XML)**: bootstrap уже собран на нём, MAUI-workload
+отсутствует на dev-машине и увеличивает CI/APK; для 4–6 простых экранов достаточно Activity+XML.
+Presentation — MVVM: ViewModel вызывает только Application use cases/порты и наблюдает immutable
+snapshots; Activity только связывает View и команды, без бизнес-логики. Composition root — только
+в App/Composition (ручная сборка зависимостей на Activity-scope).
 
 Критерии выбора:
 
@@ -48,5 +49,7 @@ immutable snapshots; composition root — только в App/Composition.
 
 ## Проверка и критерии пересмотра
 
-Spike 006: прототип 2–3 экранов на каждом варианте, замер размера APK/времени сборки, проверка
-UI-тестов на эмуляторе, оценка трудозатрат MVVM. Решение — новый ADR (Accepted) до UI-реализации.
+Spike 006 выполнен как часть feature 006 phase 1: на .NET for Android реализованы экраны выбора роли
+и мониторинга, запуск/остановка foreground service, emulator UI smoke. MAUI не проверялся (нет
+workload), выбран прагматичный вариант с меньшим риском для CI. Пересмотр — если понадобится
+сложная навигация/анимации, недоступные без MAUI.

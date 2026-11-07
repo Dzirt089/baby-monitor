@@ -13,11 +13,11 @@
 
 ## Phase 2 — Media и Android audio
 
-- [ ] T007 SIPSorcery adapter за IRealtimeTransport (>= 10.0.17) + PackageReference в Infrastructure
-- [ ] T008 Contract suite для SIPSorcery adapter (общий набор)
-- [ ] T009 Android AudioCapture/AudioPlayback adapters + role invariants
-- [ ] T010 Use case wiring: reconnect loop + connectivity monitor + telemetry
-- [ ] T011 Architecture tests: SIPSorcery не протекает в Application; роль-инварианты audio
+- [-] T007 **BLOCKED**: ADR-0007 Proposed; PackageReference не добавлялся
+- [-] T008 **BLOCKED**: нет media adapter (T007)
+- [-] T009 **BLOCKED**: нет signaling/media и устройств
+- [-] T010 **BLOCKED**: зависит от media adapter и устройств
+- [-] T011 **BLOCKED**: SIPSorcery не добавлялся
 
 ## Phase 3 — Проверки
 
@@ -25,7 +25,7 @@
 - [x] T013 Emulator smoke: install/launch
 - [-] T014 100 connect/disconnect/reconnect, потеря Wi-Fi, звонки, 8h soak, battery — **BLOCKED: нет реальных устройств**
 - [-] T015 Реальная слышимость аудио и media metrics — **BLOCKED: нет устройств**
-- [x] T016 PR → CI → независимое ревью → merge
+- [x] T016 PR #12 merged
 
 ## Verification Log
 
