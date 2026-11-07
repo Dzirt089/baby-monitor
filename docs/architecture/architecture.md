@@ -113,8 +113,9 @@ channel и media flow проверяются независимо.
 
 ## 8. Текущее состояние (честно)
 
-- Реализовано: solution и references, domain/application контракты-минимумы, Android activity-shell
-  без permissions, docs/ADR/spec, тесты каркаса, CI/release-конфигурация.
+- Реализовано: solution и references, domain/application контракты-минимумы, порт
+  `IRealtimeTransport` + contract suite (22 теста на fake), Android activity-shell без permissions,
+  docs/ADR/spec, тесты каркаса, CI/release-конфигурация.
 - Не реализовано: WebRTC/Opus, AudioRecord/AudioTrack, NSD, pairing, foreground service,
   уведомления, ViewModels, reconnect/alarm, Keystore-идентичности.
 - Решения, требующие spike, остаются Proposed: media library (ADR-0005), UI framework (ADR-0006),

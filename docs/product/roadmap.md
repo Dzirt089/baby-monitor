@@ -1,7 +1,7 @@
 # Roadmap: Радионяня (Baby Monitor)
 
-**Обновлено**: 2026-10-20
-**Текущая фаза**: 001-audio-transport-spike (In Progress; phase 1 done, device matrix BLOCKED — нет реальных устройств)
+**Обновлено**: 2026-11-07
+**Текущая фаза**: 001-audio-transport-spike (In Progress; phase 1+2 merged, решение по лицензии SIPSorcery принято владельцем; device matrix BLOCKED — нет реальных устройств)
 
 Допустимые статусы milestone: Proposed, Ready, In Progress, Blocked, Done.
 Источники истины: этот файл (milestone status), спецификации в .specify/specs, задачи в tasks.md,
@@ -9,8 +9,8 @@ GitHub Issues/PR и CI. Отдельные PROGRESS/STATUS файлы не ве�
 
 | Milestone | Status | Goal | Exit criteria | Feature spec | GitHub issue/PR |
 |---|---|---|---|---|---|
-| 000-bootstrap | Done | Создать воспроизводимый фундамент репозитория и CI/CD | Solution, каркас, docs/ADR, CI (run success), release-by-tag с secrets gate, private repo + PR #1 merged (7095f75); environment release + signing secrets + keystore подготовлены | [spec](../../.specify/specs/000-bootstrap/spec.md) | PR #1 merged |
-| 001-audio-transport-spike | In Progress | Проверить media-транспорт (SIPSorcery vs thin libwebrtc) на device matrix | Phase 1: IRealtimeTransport + contract suite (22 теста: 15 общих contract + 7 fake-specific) в CI; Phase 2: оценка SIPSorcery выполнена — adoption BLOCKED лицензией (NOASSERTION + use restriction); Phase 3 device matrix BLOCKED (нет реальных устройств); ADR-0005 ожидает решения владельца | [spec](../../.specify/specs/001-audio-transport-spike/spec.md) | PR #4 (open) |
+| 000-bootstrap | Done | Создать воспроизводимый фундамент репозитория и CI/CD | Solution, каркас, docs/ADR, CI (run success), release-by-tag с secrets gate, private repo; environment release + signing secrets + keystore подготовлены | [spec](../../.specify/specs/000-bootstrap/spec.md) | PR #1–#4 merged (7095f75, 5eff3a5, 7afd134, d9b09ad) |
+| 001-audio-transport-spike | In Progress | Проверить media-транспорт (SIPSorcery vs thin libwebrtc) на device matrix | Phase 1: IRealtimeTransport + contract suite (22 теста) в CI, merged; Phase 2: SIPSorcery оценён, владелец принял лицензию (ADR-0005 Accepted в docs-PR), pin ≥10.0.17; Phase 3 device matrix BLOCKED (нет реальных устройств); media-адаптер — в 003/005 | [spec](../../.specify/specs/001-audio-transport-spike/spec.md) | PR #4 merged (d9b09ad) |
 | 002-device-discovery | Proposed | NSD/DNS-SD advertise/discover/resolve в LAN + понятные ошибки | Два устройства находят друг друга в одной сети; учитываются guest/AP isolation/VLAN; TXT без приватных данных | planned | — |
 | 003-foreground-monitoring | Proposed | Foreground service для Child (microphone) и Parent (mediaPlayback) с постоянным уведомлением | Service запускается явным действием, переживает уничтожение Activity, Stop в уведомлении, минимальные permissions, Android 13+/14+ проверены | planned | — |
 | 004-secure-pairing | Proposed | Pairing token/QR, подтверждение ключей, verification code, trusted store в Keystore | Threat model + replay/expiration тесты; повторные подключения только от доверенного peer; нет cleartext signaling | planned | — |
@@ -29,8 +29,8 @@ GitHub Issues/PR и CI. Отдельные PROGRESS/STATUS файлы не ве�
 
 ## Ближайший шаг
 
-**001-audio-transport-spike** — phase 1 (контракт + contract suite) выполнена в PR #2; phase 2
-(оценка SIPSorcery) выполнена: пакет технически совместим, но лицензия BSD-3-Clause + Additional
-Use Restriction (NOASSERTION) блокирует adoption до решения владельца. Phase 3 (device matrix на
-2 реальных телефонах) заблокирована отсутствием устройств; emulator не валиден для audio-метрик.
-Phase 4 (ADR-0005 Accepted) — после решения владельца и/или device matrix.
+**002-device-discovery** — следующий milestone (Proposed → Ready/In Progress в этом цикле).
+**001** остаётся In Progress: лицензия SIPSorcery принята владельцем (ADR-0005 переводится в Accepted
+отдельным docs-PR, версия пакета pin ≥10.0.17, THIRD-PARTY-NOTICES), а device matrix (phase 3)
+остаётся **BLOCKED: нет реальных устройств**; emulator не валиден для audio-метрик. Реализация
+media-адаптера выполняется в 003/005, не раньше.
