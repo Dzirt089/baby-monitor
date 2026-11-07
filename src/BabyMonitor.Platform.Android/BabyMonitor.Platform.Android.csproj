@@ -6,6 +6,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- QR pairing UI (006 phase 2): рендеринг/декодирование QR на устройстве, без сети и
+         без сохранения изображений; решение/лицензия — ADR-0011 и THIRD-PARTY-NOTICES. -->
+    <PackageReference Include="ZXing.Net" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\BabyMonitor.Application\BabyMonitor.Application.csproj" />
     <ProjectReference Include="..\BabyMonitor.Infrastructure\BabyMonitor.Infrastructure.csproj" />
   </ItemGroup>

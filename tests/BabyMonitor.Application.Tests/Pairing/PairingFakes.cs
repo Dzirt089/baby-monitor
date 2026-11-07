@@ -5,13 +5,21 @@ using BabyMonitor.Application.Results;
 
 namespace BabyMonitor.Application.Tests.Pairing;
 
-/// <summary>Test double IPairingKeyStore: ECDSA P-256 в памяти; private key доступен только тесту.</summary>
+/// <summary>
+/// Test double IPairingKeyStore: ECDSA P-256 в памяти; private key доступен только тесту.
+/// derSignatures=true эмулирует Android Keystore (SHA256withECDSA возвращает DER SEQUENCE),
+/// по умолчанию BCL-формат IEEE P1363: оба формата обязаны приниматься протоколом.
+/// </summary>
 internal sealed class FakePairingKeyStore : IPairingKeyStore, IDisposable
 {
     private readonly ECDsa _key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+    private readonly DSASignatureFormat _signatureFormat;
 
-    public FakePairingKeyStore()
+    public FakePairingKeyStore(bool derSignatures = false)
     {
+        _signatureFormat = derSignatures
+            ? DSASignatureFormat.Rfc3279DerSequence
+            : DSASignatureFormat.IeeeP1363FixedFieldConcatenation;
         Identity = DeviceIdentityPublicKey.FromSubjectPublicKeyInfo(_key.ExportSubjectPublicKeyInfo());
     }
 
@@ -21,7 +29,7 @@ internal sealed class FakePairingKeyStore : IPairingKeyStore, IDisposable
         Task.FromResult(Result<DeviceIdentityPublicKey>.Success(Identity));
 
     public Task<Result<byte[]>> SignAsync(byte[] data, CancellationToken cancellationToken) =>
-        Task.FromResult(Result<byte[]>.Success(_key.SignData(data, HashAlgorithmName.SHA256)));
+        Task.FromResult(Result<byte[]>.Success(_key.SignData(data, HashAlgorithmName.SHA256, _signatureFormat)));
 
     public byte[] ExportPrivateKeyForAssertions() => _key.ExportPkcs8PrivateKey();
 

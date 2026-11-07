@@ -33,6 +33,7 @@ public sealed class MonitoringActivity : PermissionActivity
     private ProgressBar? _progress;
     private Button? _start;
     private Button? _stop;
+    private DeviceRole _role;
 
     /// <summary>Создаёт Activity.</summary>
     public MonitoringActivity()
@@ -46,37 +47,38 @@ public sealed class MonitoringActivity : PermissionActivity
         base.OnCreate(savedInstanceState);
 
         var roleText = Intent?.GetStringExtra(ExtraRole);
-        var role = roleText switch
+        _role = roleText switch
         {
             nameof(DeviceRole.Child) => DeviceRole.Child,
             nameof(DeviceRole.Parent) => DeviceRole.Parent,
             _ => DeviceRole.Unknown
         };
-        if (role is DeviceRole.Unknown)
+        if (_role is DeviceRole.Unknown)
         {
             Finish();
             return;
         }
 
         SetContentView(Resource.Layout.activity_monitoring);
-        Title = GetString(role is DeviceRole.Child
+        Title = GetString(_role is DeviceRole.Child
             ? Resource.String.monitoring_title_child
             : Resource.String.monitoring_title_parent);
 
         _status = FindViewById<TextView>(Resource.Id.monitoring_status);
-        _diagnostics = FindViewById<TextView>(Resource.Id.monitoring_diagnostics);
+        _diagnostics = FindViewById<TextView>(Resource.Id.monitoring_diagnostics_text);
         _error = FindViewById<TextView>(Resource.Id.monitoring_error);
         _progress = FindViewById<ProgressBar>(Resource.Id.monitoring_progress);
         _start = FindViewById<Button>(Resource.Id.monitoring_start);
         _stop = FindViewById<Button>(Resource.Id.monitoring_stop);
 
-        var composition = MonitoringComposition.Create(this, role);
+        var composition = MonitoringComposition.Create(this, _role);
         _host = composition.Host;
         _model = composition.Model;
         _model.Changed += _modelChangedHandler;
 
         _start!.Click += async (_, _) => await ExecuteAsync(model => model.StartAsync(_lifetime.Token));
         _stop!.Click += async (_, _) => await ExecuteAsync(model => model.StopAsync(_lifetime.Token));
+        FindViewById<Button>(Resource.Id.monitoring_diagnostics)!.Click += (_, _) => OpenDiagnostics();
         FindViewById<Button>(Resource.Id.monitoring_back)!.Click += (_, _) => Finish();
 
         Render();
@@ -137,6 +139,13 @@ public sealed class MonitoringActivity : PermissionActivity
         {
             RunOnUiThread(Render);
         }
+    }
+
+    private void OpenDiagnostics()
+    {
+        var intent = new Intent(this, typeof(DiagnosticsActivity));
+        intent.PutExtra(DiagnosticsActivity.ExtraRole, _role.ToString());
+        StartActivity(intent);
     }
 
     private void Render()

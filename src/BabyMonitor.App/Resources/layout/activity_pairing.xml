@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:id="@+id/pairing_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/pairing_state_idle"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/pairing_note"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textSize="15sp" />
+
+        <ProgressBar
+            android:id="@+id/pairing_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:indeterminate="true"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/pairing_error"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="@color/monitoring_error_color"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
+        <!-- Камера: показывается только по явному действию и скрывается после распознавания. -->
+        <FrameLayout
+            android:id="@+id/pairing_camera_container"
+            android:layout_width="match_parent"
+            android:layout_height="320dp"
+            android:layout_marginTop="16dp"
+            android:background="@android:color/black"
+            android:visibility="gone">
+
+            <TextureView
+                android:id="@+id/pairing_camera_preview"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <TextView
+                android:id="@+id/pairing_camera_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top"
+                android:gravity="center"
+                android:padding="8dp"
+                android:text="@string/pairing_camera_hint"
+                android:textColor="@android:color/white"
+                android:textSize="14sp" />
+        </FrameLayout>
+
+        <Button
+            android:id="@+id/pairing_camera_cancel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:contentDescription="@string/pairing_camera_cancel"
+            android:minHeight="56dp"
+            android:text="@string/pairing_camera_cancel"
+            android:visibility="gone" />
+
+        <!-- Child: QR приглашения и оставшееся время. -->
+        <LinearLayout
+            android:id="@+id/pairing_child_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/pairing_qr"
+                android:layout_width="256dp"
+                android:layout_height="256dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp"
+                android:background="@android:color/white"
+                android:contentDescription="@string/pairing_child_qr_cd"
+                android:padding="8dp"
+                android:scaleType="fitCenter" />
+
+            <TextView
+                android:id="@+id/pairing_expiry"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- Parent: QR ответа для Child. -->
+        <LinearLayout
+            android:id="@+id/pairing_parent_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/pairing_response_note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/pairing_parent_response_note"
+                android:textSize="15sp"
+                android:visibility="gone" />
+
+            <ImageView
+                android:id="@+id/pairing_response_qr"
+                android:layout_width="256dp"
+                android:layout_height="256dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp"
+                android:background="@android:color/white"
+                android:contentDescription="@string/pairing_parent_response_cd"
+                android:padding="8dp"
+                android:scaleType="fitCenter"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Управление сканированием (общие для Child/Parent): кнопка камеры + paste fallback. -->
+        <LinearLayout
+            android:id="@+id/pairing_scan_controls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/pairing_scan"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:minHeight="56dp"
+                android:text="@string/pairing_scan_parent_invitation" />
+
+            <TextView
+                android:id="@+id/pairing_paste_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/pairing_paste_hint"
+                android:textSize="13sp" />
+
+            <EditText
+                android:id="@+id/pairing_paste"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:autofillHints=""
+                android:hint="@string/pairing_paste_apply"
+                android:importantForAutofill="no"
+                android:inputType="textPassword"
+                android:maxLines="2"
+                android:minLines="1"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/pairing_paste_apply"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:contentDescription="@string/pairing_paste_apply"
+                android:minHeight="56dp"
+                android:text="@string/pairing_paste_apply" />
+        </LinearLayout>
+
+        <!-- Verification code: показывается после получения ответа/приглашения. -->
+        <LinearLayout
+            android:id="@+id/pairing_verification_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="16dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/pairing_code_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/pairing_code_label"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/pairing_verification_code"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center"
+                android:letterSpacing="0.25"
+                android:textSize="40sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/pairing_code_note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/pairing_code_note"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/pairing_confirm"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:contentDescription="@string/pairing_confirm"
+                android:minHeight="56dp"
+                android:text="@string/pairing_confirm" />
+
+            <Button
+                android:id="@+id/pairing_reject"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:contentDescription="@string/pairing_reject"
+                android:minHeight="56dp"
+                android:text="@string/pairing_reject" />
+        </LinearLayout>
+
+        <!-- Уже сопряжённое устройство. -->
+        <LinearLayout
+            android:id="@+id/pairing_trusted_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="16dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/pairing_trusted_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/pairing_trusted_title"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/pairing_trusted_info"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/pairing_continue_monitoring"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:contentDescription="@string/pairing_continue_monitoring"
+                android:minHeight="56dp"
+                android:text="@string/pairing_continue_monitoring" />
+
+            <Button
+                android:id="@+id/pairing_repair"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:contentDescription="@string/pairing_repair"
+                android:minHeight="56dp"
+                android:text="@string/pairing_repair" />
+
+            <Button
+                android:id="@+id/pairing_forget"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:contentDescription="@string/pairing_forget"
+                android:minHeight="56dp"
+                android:text="@string/pairing_forget" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/pairing_skip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:contentDescription="@string/pairing_skip"
+            android:minHeight="56dp"
+            android:text="@string/pairing_skip" />
+
+        <TextView
+            android:id="@+id/pairing_media_note"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:text="@string/pairing_media_note"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/pairing_back"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:contentDescription="@string/pairing_back"
+            android:minHeight="56dp"
+            android:text="@string/pairing_back" />
+    </LinearLayout>
+</ScrollView>

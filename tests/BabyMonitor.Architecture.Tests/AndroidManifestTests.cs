@@ -3,8 +3,9 @@ using System.Xml.Linq;
 namespace BabyMonitor.Architecture.Tests;
 
 /// <summary>
-/// Гигиена AndroidManifest: минимальные разрешения для discovery (002) и отсутствие microphone
-/// permissions (Parent не должен получать RECORD_AUDIO «на всякий случай»).
+/// Гигиена AndroidManifest: минимальные разрешения для discovery (002), foreground monitoring (003)
+/// и pairing-камеры (006 phase 2); отсутствие microphone permissions сверх явно необходимого
+/// (Parent не должен получать RECORD_AUDIO «на всякий случай»).
 /// </summary>
 public sealed class AndroidManifestTests
 {
@@ -21,6 +22,7 @@ public sealed class AndroidManifestTests
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
     ];
 
     private static readonly string[] ForbiddenPermissions =
@@ -119,6 +121,27 @@ public sealed class AndroidManifestTests
             Assert.DoesNotContain("AudioRecord", code, StringComparison.Ordinal);
             Assert.DoesNotContain("AudioTrack", code, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void Manifest_объявляет_камеру_необязательной_для_pairing_UI()
+    {
+        var manifest = LoadManifest();
+
+        var cameraFeature = manifest.Descendants()
+            .Where(element => element.Name.LocalName == "uses-feature")
+            .SingleOrDefault(element =>
+                string.Equals(
+                    (string?)element.Attribute(AndroidNamespace + "name"),
+                    "android.hardware.camera.any",
+                    StringComparison.Ordinal));
+
+        Assert.NotNull(cameraFeature);
+        Assert.Equal("false", (string?)cameraFeature!.Attribute(AndroidNamespace + "required"));
+
+        // CAMERA — единственное camera-related разрешение: никакие audio/capture permissions не нужны.
+        var permissions = ReadPermissions(manifest);
+        Assert.Contains("android.permission.CAMERA", permissions, StringComparer.Ordinal);
     }
 
     [Fact]

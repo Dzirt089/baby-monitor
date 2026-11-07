@@ -50,3 +50,47 @@
 
 - End-to-end на реальных устройствах (QR scan, Keystore OEM variations, screen capture/OS-level
   malware) не проверены: **BLOCKED: нет реальных устройств**.
+
+## 006 phase 2: офлайн-обмен QR через экраны
+
+Сетевой signaling-канал (005 phase 2) BLOCKED, поэтому первичное сопряжение по 004-протоколу
+завершается out-of-band: Child показывает QR приглашения, Parent сканирует его и показывает QR
+ответа, Child сканирует ответ. Оба устройства независимо выводят verification code, пользователи
+сравнивают и подтверждают.
+
+### Активы и границы
+
+- QR приглашения содержит одноразовый token (секрет), TTL 5 минут. QR ответа — только публичные
+  данные (identity Parent, эфемерный ECDH-ключ, подпись).
+- Камера — локальный датчик; кадры обрабатываются только в памяти и не сохраняются.
+- Paste-fallback (вставка текста QR) — диагностический путь для устройств без камеры/эмулятора;
+  доверие всё равно требует verification code и подтверждения.
+
+### Угрозы и митигации (phase 2)
+
+| Угроза | Митигация | Тест |
+|---|---|---|
+| Подмена QR-ответа (MITM/скриншот) | подпись Parent, привязка response transcript к hash приглашения; чужой/повторный ответ отклоняется | unit: подмена подписи, ответ другого Parent |
+| Replay приглашения/ответа | token one-time + TTL 5 мин; Child-сессия допускает один ответ; повторный QR не даёт нового доверия | unit: повторное использование, expiry |
+| Подбор verification code | code выводится из ECDH shared secret + транскрипта, не из QR; сравнение пользователями обязательно | unit: code mismatch/user reject |
+| Секреты в логах/UI | QR payload не логируется и не показывается текстом; paste-поле маскируется и очищается; code не логируется | architecture: secret-in-log test; review strings |
+| Камера/кадры | кадры не пишутся на диск, не отправляются, не логируются; сканер останавливается после распознавания/OnPause/Dispose | emulator smoke; device matrix BLOCKED |
+| Скриншот QR invitation | token одноразовый и короткоживущий; подтверждение требует физического доступа к обоим устройствам | residual risk (BLOCKED: device) |
+| Забытое устройство | trusted store: просмотр и forget; после forget повторное подключение требует нового pairing | unit/integration trusted store |
+| Подмена trusted store (локальный malware) | out of scope 006; integrity/rollback binding — 005/008 | residual |
+
+### Failure modes
+
+- Камера недоступна/отказ разрешения → typed error + paste-fallback, без падения.
+- Отсканирован не тот QR (ответ вместо приглашения и наоборот) → invalid_qr, состояние не меняется.
+- Истёкший/повторный QR → expired/token_reused, доверие не сохраняется.
+- Несовпадение/отказ code → user_rejected/code_mismatch, no trust.
+- Ошибка trusted store → pairing не считается завершённым; retry возможен.
+- Сеть при сопряжении не используется — LAN MITM к pairing не применим; signaling для runtime-
+  сессии по-прежнему обязан быть аутентифицирован (005, ADR-0007).
+
+### Residual risks (BLOCKED)
+
+- Реальный QR-обмен камера↔камера на двух устройствах, различные OEM/камеры, яркость/размер экрана
+  и TalkBack не проверены: **BLOCKED: нет реальных устройств**.
+- Скриншоты/OS-level malware и компрометация процесса — вне scope 006 (007/008 hardening).

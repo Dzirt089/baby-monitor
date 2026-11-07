@@ -35,4 +35,7 @@ public static class PairingErrorCodes
 
     /// <summary>Порядок операций протокола нарушен.</summary>
     public const string InvalidState = "pairing.invalid_state";
+
+    /// <summary>Сопряжение отменено пользователем или UI.</summary>
+    public const string Cancelled = "pairing.cancelled";
 }

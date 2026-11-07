@@ -84,6 +84,16 @@ media должны аутентифицироваться по этой identity
   **BLOCKED: нет реальных устройств**; emulator/unit — частичная проверка.
 - [-] AC-006: Проверка на разных OEM/API для Keystore — **BLOCKED: нет устройств** (007).
 
+## Delta 006 phase 2 (2026-11-07)
+
+Emulator smoke pairing UI выявил интероп-дефект, не видимый на BCL fakes: Android Keystore
+`SHA256withECDSA` возвращает подпись в DER SEQUENCE (~70–72 байта), а BCL `ECDsa.VerifyData`
+по умолчанию ожидает IEEE P1363 (r||s, 64 байта для P-256) → реальное сопряжение отклонялось
+`pairing.invalid_signature` при валидных ключах. Исправление: `PairingCrypto.TryVerifySignature`
+принимает обе стандартные кодировки (BCL overloads `DSASignatureFormat`), семантика протокола не
+меняется; добавлены regression tests `PairingSignatureInteropTests` (DER Child, DER Parent,
+обе стороны DER, tampered DER). Device E2E по-прежнему BLOCKED (нет реальных устройств).
+
 ## Out of Scope
 
 Signaling transport (005), DTLS-SRTP media (005), UI QR-рендеринг/сканирование (006),
