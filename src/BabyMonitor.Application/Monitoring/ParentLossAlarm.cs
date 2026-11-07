@@ -6,6 +6,7 @@ namespace BabyMonitor.Application.Monitoring;
 /// </summary>
 public sealed class ParentLossAlarm
 {
+    private readonly object _sync = new();
     private readonly TimeProvider _timeProvider;
     private readonly TimeSpan _threshold;
     private DateTimeOffset? _lastAlive;
@@ -32,7 +33,13 @@ public sealed class ParentLossAlarm
     public event EventHandler<bool>? AlarmChanged;
 
     /// <summary>Отмечает подтверждённую жизнь peer (heartbeat/media).</summary>
-    public void ReportPeerAlive() => _lastAlive = _timeProvider.GetUtcNow();
+    public void ReportPeerAlive()
+    {
+        lock (_sync)
+        {
+            _lastAlive = _timeProvider.GetUtcNow();
+        }
+    }
 
     /// <summary>
     /// Оценивает тревогу по локальному времени. Если жизнь peer ещё ни разу не подтверждалась,
@@ -41,16 +48,19 @@ public sealed class ParentLossAlarm
     /// <returns>true, если тревога активна.</returns>
     public bool Evaluate()
     {
-        var now = _timeProvider.GetUtcNow();
-        var shouldRaise = _lastAlive is not null && now - _lastAlive.Value >= _threshold;
-        if (shouldRaise == IsRaised)
+        lock (_sync)
         {
+            var now = _timeProvider.GetUtcNow();
+            var shouldRaise = _lastAlive is not null && now - _lastAlive.Value >= _threshold;
+            if (shouldRaise == IsRaised)
+            {
+                return IsRaised;
+            }
+
+            IsRaised = shouldRaise;
+            AlarmChanged?.Invoke(this, IsRaised);
             return IsRaised;
         }
-
-        IsRaised = shouldRaise;
-        AlarmChanged?.Invoke(this, IsRaised);
-        return IsRaised;
     }
 
     /// <summary>Сбрасывает тревогу и историю жизни peer.</summary>

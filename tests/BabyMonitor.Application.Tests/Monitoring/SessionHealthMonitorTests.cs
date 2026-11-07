@@ -122,3 +122,39 @@ public sealed class SessionHealthMonitorTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new SessionHealthMonitor(time, mediaTimeout: TimeSpan.Zero));
     }
 }
+
+/// <summary>Независимость control и media в комбинированных состояниях.</summary>
+public sealed class SessionHealthIndependenceTests
+{
+    [Fact]
+    public void Control_Lost_при_media_Flowing_не_даёт_слышимость()
+    {
+        var time = new FakeTimeProvider();
+        var monitor = new SessionHealthMonitor(time, heartbeatTimeout: TimeSpan.FromSeconds(2), mediaTimeout: TimeSpan.FromSeconds(10));
+        monitor.MarkHeartbeat();
+        time.Advance(TimeSpan.FromSeconds(3));
+        monitor.MarkMediaFrame();
+
+        var health = monitor.Evaluate(DeviceRole.Parent);
+
+        Assert.Equal(SessionChannelState.Lost, health.Control);
+        Assert.Equal(AudioFlowState.Flowing, health.Media);
+        Assert.False(health.IsUserHearingAudio);
+    }
+
+    [Fact]
+    public void Control_Connected_при_media_Stalled_не_даёт_слышимость()
+    {
+        var time = new FakeTimeProvider();
+        var monitor = new SessionHealthMonitor(time, heartbeatTimeout: TimeSpan.FromSeconds(30), mediaTimeout: TimeSpan.FromSeconds(2));
+        monitor.MarkHeartbeat();
+        monitor.MarkMediaFrame();
+        time.Advance(TimeSpan.FromSeconds(3));
+
+        var health = monitor.Evaluate(DeviceRole.Child);
+
+        Assert.Equal(SessionChannelState.Connected, health.Control);
+        Assert.Equal(AudioFlowState.Stalled, health.Media);
+        Assert.False(health.IsUserHearingAudio);
+    }
+}

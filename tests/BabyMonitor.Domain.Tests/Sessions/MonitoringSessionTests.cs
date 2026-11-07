@@ -128,11 +128,11 @@ public sealed class MonitoringSessionTests
     {
         var heartbeat = ChildMediaFlowing();
         heartbeat.MarkDegraded(DisconnectReason.HeartbeatTimeout);
-        Assert.Equal(DisconnectReason.HeartbeatTimeout, heartbeat.LastDisconnectReason);
+        Assert.Equal(DisconnectReason.HeartbeatTimeout, heartbeat.CurrentDisconnectReason);
 
         var media = ChildMediaFlowing();
         media.MarkDegraded(DisconnectReason.MediaFlowLost);
-        Assert.Equal(DisconnectReason.MediaFlowLost, media.LastDisconnectReason);
+        Assert.Equal(DisconnectReason.MediaFlowLost, media.CurrentDisconnectReason);
         Assert.Equal(AudioFlowState.Stalled, media.Health.Media);
         Assert.Equal(SessionChannelState.Degraded, media.Health.Control);
     }
@@ -151,8 +151,8 @@ public sealed class MonitoringSessionTests
         session.MarkMediaFlowing();
 
         Assert.Equal(MonitoringState.MediaFlowing, session.State);
-        Assert.Null(session.LastDisconnectReason);
-        Assert.Equal(1, session.ReconnectAttempts);
+        Assert.Null(session.CurrentDisconnectReason);
+        Assert.Equal(0, session.ReconnectAttempts);
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public sealed class MonitoringSessionTests
         session.MarkFailed(DisconnectReason.ConnectFailed);
 
         Assert.Equal(MonitoringState.Failed, session.State);
-        Assert.Equal(DisconnectReason.ConnectFailed, session.LastDisconnectReason);
+        Assert.Equal(DisconnectReason.ConnectFailed, session.CurrentDisconnectReason);
     }
 
     [Fact]
@@ -200,7 +200,7 @@ public sealed class MonitoringSessionTests
 
         session.BeginStopping();
         Assert.Equal(MonitoringState.Stopping, session.State);
-        Assert.Equal(DisconnectReason.ManualStop, session.LastDisconnectReason);
+        Assert.Equal(DisconnectReason.ManualStop, session.CurrentDisconnectReason);
 
         session.MarkStopped();
         Assert.Equal(MonitoringState.Idle, session.State);
@@ -237,5 +237,131 @@ public sealed class MonitoringSessionTests
     {
         Assert.Throws<InvalidSessionTransitionException>(
             () => Child().ApplyHealth(new SessionHealth(SessionChannelState.Connected, AudioFlowState.Flowing, true, false)));
+    }
+}
+
+/// <summary>Дополнительная таблица запрещённых переходов и ручной Stop во время reconnect.</summary>
+public sealed class MonitoringSessionTransitionTableTests
+{
+    private sealed class StubTimeProvider : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(2026, 11, 7, 12, 0, 0, TimeSpan.Zero);
+    }
+
+    private static MonitoringSession Child() => MonitoringSession.Create("s", DeviceRole.Child, new StubTimeProvider());
+
+    private static MonitoringSession ChildReconnecting()
+    {
+        var session = Child();
+        session.BeginAdvertising();
+        session.EnterPairing();
+        session.BeginConnecting();
+        session.MarkConnected();
+        session.MarkMediaFlowing();
+        session.MarkDegraded(DisconnectReason.HeartbeatTimeout);
+        session.BeginReconnecting();
+        return session;
+    }
+
+    [Fact]
+    public void Ручной_stop_во_время_reconnect_отменяет_цикл()
+    {
+        var session = ChildReconnecting();
+
+        session.BeginStopping();
+        session.MarkStopped();
+
+        Assert.Equal(MonitoringState.Idle, session.State);
+        Assert.True(session.IsTerminal);
+        Assert.Throws<InvalidSessionTransitionException>(() => session.BeginConnecting());
+    }
+
+    [Fact]
+    public void BeginStopping_из_Idle_запрещён()
+    {
+        Assert.Throws<InvalidSessionTransitionException>(() => Child().BeginStopping());
+    }
+
+    [Fact]
+    public void MarkStopped_вне_Stopping_запрещён()
+    {
+        Assert.Throws<InvalidSessionTransitionException>(() => Child().MarkStopped());
+    }
+
+    [Fact]
+    public void EnterPairing_из_Idle_запрещён()
+    {
+        Assert.Throws<InvalidSessionTransitionException>(() => Child().EnterPairing());
+    }
+
+    [Fact]
+    public void BeginReconnecting_из_MediaFlowing_запрещён()
+    {
+        var session = Child();
+        session.BeginAdvertising();
+        session.EnterPairing();
+        session.BeginConnecting();
+        session.MarkConnected();
+        session.MarkMediaFlowing();
+
+        Assert.Throws<InvalidSessionTransitionException>(() => session.BeginReconnecting());
+    }
+
+    [Fact]
+    public void MarkDegraded_из_Connecting_запрещён()
+    {
+        var session = Child();
+        session.BeginAdvertising();
+        session.EnterPairing();
+        session.BeginConnecting();
+
+        Assert.Throws<InvalidSessionTransitionException>(() => session.MarkDegraded(DisconnectReason.TransportError));
+    }
+
+    [Fact]
+    public void MarkDegraded_отклоняет_причину_не_деградации()
+    {
+        var session = Child();
+        session.BeginAdvertising();
+        session.EnterPairing();
+        session.BeginConnecting();
+        session.MarkConnected();
+
+        Assert.Throws<ArgumentException>(() => session.MarkDegraded(DisconnectReason.ConnectFailed));
+        Assert.Throws<ArgumentException>(() => session.MarkDegraded(DisconnectReason.ReconnectExhausted));
+    }
+
+    [Fact]
+    public void MarkReconnectFailed_отклоняет_некорректную_причину()
+    {
+        var session = ChildReconnecting();
+
+        Assert.Throws<ArgumentException>(() => session.MarkReconnectFailed(DisconnectReason.HeartbeatTimeout));
+        Assert.Throws<ArgumentException>(() => session.MarkReconnectFailed(DisconnectReason.ManualStop));
+    }
+
+    [Fact]
+    public void Failed_терминален_и_не_принимает_MarkFailed_повторно()
+    {
+        var session = Child();
+        session.MarkFailed(DisconnectReason.TransportError);
+
+        Assert.Throws<InvalidSessionTransitionException>(() => session.MarkFailed(DisconnectReason.TransportError));
+        Assert.Throws<InvalidSessionTransitionException>(() => session.MarkStopped());
+    }
+
+    [Fact]
+    public void Reconnect_после_восстановления_снова_считает_попытки_с_единицы()
+    {
+        var session = ChildReconnecting();
+        session.BeginConnecting();
+        session.MarkConnected();
+        session.MarkMediaFlowing();
+        Assert.Equal(0, session.ReconnectAttempts);
+
+        session.MarkDegraded(DisconnectReason.MediaFlowLost);
+        session.BeginReconnecting();
+
+        Assert.Equal(1, session.ReconnectAttempts);
     }
 }

@@ -9,6 +9,7 @@ namespace BabyMonitor.Application.Monitoring;
 /// </summary>
 public sealed class SessionHealthMonitor
 {
+    private readonly object _sync = new();
     private readonly TimeProvider _timeProvider;
     private readonly TimeSpan _heartbeatTimeout;
     private readonly TimeSpan _mediaTimeout;
@@ -38,16 +39,31 @@ public sealed class SessionHealthMonitor
     }
 
     /// <summary>Отмечает полученный control heartbeat.</summary>
-    public void MarkHeartbeat() => _lastHeartbeat = _timeProvider.GetUtcNow();
+    public void MarkHeartbeat()
+    {
+        lock (_sync)
+        {
+            _lastHeartbeat = _timeProvider.GetUtcNow();
+        }
+    }
 
     /// <summary>Отмечает полученный media frame.</summary>
-    public void MarkMediaFrame() => _lastMediaFrame = _timeProvider.GetUtcNow();
+    public void MarkMediaFrame()
+    {
+        lock (_sync)
+        {
+            _lastMediaFrame = _timeProvider.GetUtcNow();
+        }
+    }
 
     /// <summary>Сбрасывает измерения (например, перед reconnect).</summary>
     public void Reset()
     {
-        _lastHeartbeat = null;
-        _lastMediaFrame = null;
+        lock (_sync)
+        {
+            _lastHeartbeat = null;
+            _lastMediaFrame = null;
+        }
     }
 
     /// <summary>Вычисляет health-снимок для роли.</summary>
@@ -60,14 +76,17 @@ public sealed class SessionHealthMonitor
             throw new ArgumentException("Health требует роль Child или Parent.", nameof(localRole));
         }
 
-        var now = _timeProvider.GetUtcNow();
-        var control = EvaluateControl(now);
-        var media = EvaluateMedia(now);
-        return new SessionHealth(
-            control,
-            media,
-            captureActive: localRole is DeviceRole.Child && media is AudioFlowState.Flowing,
-            playbackActive: localRole is DeviceRole.Parent && media is AudioFlowState.Flowing);
+        lock (_sync)
+        {
+            var now = _timeProvider.GetUtcNow();
+            var control = EvaluateControl(now);
+            var media = EvaluateMedia(now);
+            return new SessionHealth(
+                control,
+                media,
+                captureActive: localRole is DeviceRole.Child && media is AudioFlowState.Flowing,
+                playbackActive: localRole is DeviceRole.Parent && media is AudioFlowState.Flowing);
+        }
     }
 
     private SessionChannelState EvaluateControl(DateTimeOffset now)

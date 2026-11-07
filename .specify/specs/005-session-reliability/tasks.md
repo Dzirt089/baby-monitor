@@ -21,14 +21,14 @@
 
 ## Phase 3 — Проверки
 
-- [ ] T012 Local gates: build Debug/Release, tests, format
-- [ ] T013 Emulator smoke: install/launch
+- [x] T012 Local gates: build Debug/Release, tests, format
+- [x] T013 Emulator smoke: install/launch
 - [-] T014 100 connect/disconnect/reconnect, потеря Wi-Fi, звонки, 8h soak, battery — **BLOCKED: нет реальных устройств**
 - [-] T015 Реальная слышимость аудио и media metrics — **BLOCKED: нет устройств**
-- [ ] T016 PR → CI → независимое ревью → merge
+- [x] T016 PR → CI → независимое ревью → merge
 
 ## Verification Log
 
 | Дата | Проверка | Результат |
 |---|---|---|
-| 2026-11-07 | Phase 1 build/tests | Domain 28/28, Application 140/140; build 0 warnings; format OK |
+| 2026-11-07 | Phase 1 build/tests | Domain 38/38, Application 147/147, Architecture 45/45, Infrastructure 63/63 = 293/293; build 0 warnings; format OK |

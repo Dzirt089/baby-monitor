@@ -83,3 +83,24 @@ public sealed class ParentLossAlarmTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new ParentLossAlarm(time, TimeSpan.Zero));
     }
 }
+
+/// <summary>Повторная оценка без изменения состояния не должна дублировать события.</summary>
+public sealed class ParentLossAlarmEventTests
+{
+    [Fact]
+    public void Повторный_Evaluate_не_дублирует_события()
+    {
+        var time = new FakeTimeProvider();
+        var alarm = new ParentLossAlarm(time, TimeSpan.FromSeconds(5));
+        var events = new List<bool>();
+        alarm.AlarmChanged += (_, raised) => events.Add(raised);
+        alarm.ReportPeerAlive();
+        time.Advance(TimeSpan.FromSeconds(6));
+
+        alarm.Evaluate();
+        alarm.Evaluate();
+        alarm.Evaluate();
+
+        Assert.Equal([true], events);
+    }
+}

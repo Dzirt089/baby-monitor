@@ -8,7 +8,7 @@ namespace BabyMonitor.Domain.Sessions;
 /// </summary>
 public sealed class MonitoringSession
 {
-    private static readonly MonitoringState[] TerminalStates = [MonitoringState.Failed];
+
 
     private bool _stopped;
 
@@ -58,8 +58,8 @@ public sealed class MonitoringSession
     /// <summary>Текущий health-снимок.</summary>
     public SessionHealth Health { get; private set; }
 
-    /// <summary>Последняя причина деградации/завершения; null, пока причина не задана.</summary>
-    public DisconnectReason? LastDisconnectReason { get; private set; }
+    /// <summary>Текущая причина деградации/завершения; null после успешного восстановления.</summary>
+    public DisconnectReason? CurrentDisconnectReason { get; private set; }
 
     /// <summary>Сколько автоматических переподключений уже начато.</summary>
     public int ReconnectAttempts { get; private set; }
@@ -106,7 +106,8 @@ public sealed class MonitoringSession
     public void MarkMediaFlowing()
     {
         TransitionFrom([MonitoringState.Connected, MonitoringState.Degraded], MonitoringState.MediaFlowing, nameof(MarkMediaFlowing));
-        LastDisconnectReason = null;
+        CurrentDisconnectReason = null;
+        ReconnectAttempts = 0;
         Health = new SessionHealth(
             SessionChannelState.Connected,
             AudioFlowState.Flowing,
@@ -125,8 +126,14 @@ public sealed class MonitoringSession
             throw new ArgumentException("Деградация требует конкретной причины.", nameof(reason));
         }
 
+        if (reason is not (DisconnectReason.HeartbeatTimeout or DisconnectReason.MediaFlowLost
+            or DisconnectReason.TransportError or DisconnectReason.NetworkChanged or DisconnectReason.PeerClosed))
+        {
+            throw new ArgumentException("Причина не является причиной деградации.", nameof(reason));
+        }
+
         TransitionFrom([MonitoringState.Connected, MonitoringState.MediaFlowing], MonitoringState.Degraded, nameof(MarkDegraded));
-        LastDisconnectReason = reason;
+        CurrentDisconnectReason = reason;
         Health = new SessionHealth(
             SessionChannelState.Degraded,
             AudioFlowState.Stalled,
@@ -145,8 +152,16 @@ public sealed class MonitoringSession
     /// <summary>Попытка переподключения не удалась; сеанс завершается ошибкой.</summary>
     /// <param name="reason">Причина, например ReconnectExhausted/ConnectFailed.</param>
     /// <exception cref="InvalidSessionTransitionException">Недопустимый переход.</exception>
-    public void MarkReconnectFailed(DisconnectReason reason) =>
+    public void MarkReconnectFailed(DisconnectReason reason)
+    {
+        if (reason is not (DisconnectReason.ConnectFailed or DisconnectReason.TransportError
+            or DisconnectReason.NetworkChanged or DisconnectReason.PeerClosed or DisconnectReason.ReconnectExhausted))
+        {
+            throw new ArgumentException("Некорректная причина отказа переподключения.", nameof(reason));
+        }
+
         MarkFailedFrom([MonitoringState.Reconnecting], reason, nameof(MarkReconnectFailed));
+    }
 
     /// <summary>Завершает сеанс ошибкой из любого не-терминального состояния.</summary>
     /// <param name="reason">Типизированная причина.</param>
@@ -175,7 +190,7 @@ public sealed class MonitoringSession
             throw new InvalidSessionTransitionException($"Недопустимый переход {State} → Stopping (BeginStopping).");
         }
 
-        LastDisconnectReason = DisconnectReason.ManualStop;
+        CurrentDisconnectReason = DisconnectReason.ManualStop;
         State = MonitoringState.Stopping;
     }
 
@@ -185,7 +200,7 @@ public sealed class MonitoringSession
     {
         TransitionFrom([MonitoringState.Stopping], MonitoringState.Idle, nameof(MarkStopped));
         _stopped = true;
-        LastDisconnectReason = DisconnectReason.ManualStop;
+        CurrentDisconnectReason = DisconnectReason.ManualStop;
         Health = SessionHealth.Initial;
     }
 
@@ -228,7 +243,7 @@ public sealed class MonitoringSession
         }
 
         TransitionFrom(allowed, MonitoringState.Failed, operation);
-        LastDisconnectReason = reason;
+        CurrentDisconnectReason = reason;
         Health = new SessionHealth(SessionChannelState.Lost, AudioFlowState.Inactive, false, false);
     }
 
@@ -248,12 +263,7 @@ public sealed class MonitoringSession
             throw new InvalidSessionTransitionException("Сеанс уже терминален.");
         }
 
-        if (!TerminalStates.Contains(target) && !allowed.Contains(State))
-        {
-            throw new InvalidSessionTransitionException($"Недопустимый переход {State} → {target} ({operation}).");
-        }
-
-        if (TerminalStates.Contains(target) && !allowed.Contains(State))
+        if (!allowed.Contains(State))
         {
             throw new InvalidSessionTransitionException($"Недопустимый переход {State} → {target} ({operation}).");
         }

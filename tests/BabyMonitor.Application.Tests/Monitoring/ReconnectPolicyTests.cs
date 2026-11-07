@@ -36,10 +36,34 @@ public sealed class ReconnectPolicyTests
 
         for (var attempt = 1; attempt <= 20; attempt++)
         {
-            Assert.True(policy.GetDelay(attempt) <= TimeSpan.FromSeconds(60));
+            Assert.True(policy.GetDelay(attempt) <= TimeSpan.FromSeconds(30));
         }
+    }
 
-        Assert.True(policy.GetDelay(20) <= TimeSpan.FromSeconds(60));
+    [Fact]
+    public void Попытка_сверх_MaxAttempts_запрещена()
+    {
+        var policy = new ReconnectPolicy(maxAttempts: 3);
+
+        Assert.True(policy.CanAttempt(1));
+        Assert.True(policy.CanAttempt(3));
+        Assert.False(policy.CanAttempt(0));
+        Assert.False(policy.CanAttempt(4));
+        Assert.Throws<ArgumentOutOfRangeException>(() => policy.GetDelay(4));
+    }
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void NaN_и_бесконечность_в_factor_запрещены(double factor)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ReconnectPolicy(factor: factor));
+    }
+
+    [Fact]
+    public void NaN_в_jitter_запрещён()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ReconnectPolicy(jitterRatio: double.NaN));
     }
 
     [Fact]
