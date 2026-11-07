@@ -39,6 +39,12 @@ public sealed class NsdPeerAdvertiser : IPeerAdvertiser
             return Result<IPeerAdvertiserSession>.Failure(permission.Error!);
         }
 
+        var connectivityError = ConnectivityPrecondition.CheckLocalNetworkAvailable(_context);
+        if (connectivityError is not null)
+        {
+            return Result<IPeerAdvertiserSession>.Failure(connectivityError);
+        }
+
         var nsd = _context.ApplicationContext?.GetSystemService(Context.NsdService) as NsdManager;
         if (nsd is null)
         {
@@ -78,7 +84,8 @@ internal sealed class NsdPeerAdvertiserSession : IPeerAdvertiserSession
     private readonly MulticastLockScope _multicastLock;
     private int _state = (int)PeerAdvertisementState.Starting;
     private RegistrationListener? _listener;
-    private bool _registered;
+    private volatile bool _registrationRequested;
+    private int _stopped;
 
     public NsdPeerAdvertiserSession(Context context, NsdManager nsd, PeerAdvertisement advertisement)
     {
@@ -102,6 +109,7 @@ internal sealed class NsdPeerAdvertiserSession : IPeerAdvertiserSession
         _listener = new RegistrationListener(this);
         var serviceInfo = CreateServiceInfo();
 
+        _registrationRequested = true;
         try
         {
             _nsd.RegisterService(serviceInfo, NsdProtocol.DnsSd, _listener);
@@ -124,26 +132,35 @@ internal sealed class NsdPeerAdvertiserSession : IPeerAdvertiserSession
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        if (State is PeerAdvertisementState.Stopped)
+        if (Interlocked.Exchange(ref _stopped, 1) == 1)
         {
             return Task.CompletedTask;
         }
 
-        if (_listener is not null && _registered)
+        try
         {
-            try
+            // UnregisterService вызывается всегда, если регистрация была запрошена: NSD может
+            // подтвердить её позже, уже после отмены/таймаута StartAsync.
+            if (_listener is not null && _registrationRequested)
             {
-                _nsd.UnregisterService(_listener);
-            }
-            catch (Exception exception)
-            {
-                Log.Warn(LogTag, "NSD UnregisterService failed: " + exception.GetType().Name);
+                try
+                {
+                    _nsd.UnregisterService(_listener);
+                }
+                catch (Exception exception)
+                {
+                    Log.Warn(LogTag, "NSD UnregisterService failed: " + exception.GetType().Name);
+                }
             }
         }
+        finally
+        {
+            _multicastLock.Dispose();
+            _registration.TrySetResult(null);
+            Volatile.Write(ref _state, (int)PeerAdvertisementState.Stopped);
+            StateChanged?.Invoke(this, new PeerAdvertisementStateChangedEventArgs(PeerAdvertisementState.Stopped));
+        }
 
-        _multicastLock.Dispose();
-        Volatile.Write(ref _state, (int)PeerAdvertisementState.Stopped);
-        StateChanged?.Invoke(this, new PeerAdvertisementStateChangedEventArgs(PeerAdvertisementState.Stopped));
         return Task.CompletedTask;
     }
 
@@ -171,7 +188,12 @@ internal sealed class NsdPeerAdvertiserSession : IPeerAdvertiserSession
 
     private void OnRegistered()
     {
-        _registered = true;
+        if (Volatile.Read(ref _stopped) == 1)
+        {
+            // Поздний callback после Stop: сервис уже снят/снимается, состояние не меняем.
+            return;
+        }
+
         _registration.TrySetResult(null);
         Volatile.Write(ref _state, (int)PeerAdvertisementState.Advertising);
         StateChanged?.Invoke(this, new PeerAdvertisementStateChangedEventArgs(PeerAdvertisementState.Advertising));
@@ -179,6 +201,11 @@ internal sealed class NsdPeerAdvertiserSession : IPeerAdvertiserSession
 
     private void OnRegistrationFailed(NsdFailure errorCode)
     {
+        if (Volatile.Read(ref _stopped) == 1)
+        {
+            return;
+        }
+
         var error = new Error(DiscoveryErrorCodes.NsdUnavailable, "NSD registration failed: " + errorCode + ".");
         LastError = error;
         Volatile.Write(ref _state, (int)PeerAdvertisementState.Failed);

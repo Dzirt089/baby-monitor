@@ -7,10 +7,14 @@
 1. **Phase 1 (выполнена)**: порты IPeerDiscovery/IPeerAdvertiser/ILocalNetworkPermission, типы
    сессий, состояний и ошибок в Application; PeerTxtRecords (allowed keys); fake + contract tests
    в Infrastructure.Tests; unit-тесты Application (TXT/privacy/валидация).
-2. **Phase 2 (следующий шаг)**: NSD discover/advertise/resolve adapter в Platform.Android,
-   multicast lock, permission adapter (ACCESS_LOCAL_NETWORK, API 36/37), manifest permissions.
-3. **Phase 3**: local gates + emulator smoke advertise/discover (или честная пометка),
-   device matrix BLOCKED (нет устройств), PR → CI → независимое ревью → merge.
+2. **Phase 2 (выполнена)**: NSD discover/advertise/resolve adapter в Platform.Android,
+   multicast lock, permission adapter (ACCESS_LOCAL_NETWORK, API 36/37), manifest permissions,
+   connectivity precondition (Wi-Fi/Ethernet), API-34+ ServiceInfoCallback.
+3. **Phase 3**: local gates + emulator smoke (install/launch; discovery без UI/инструментации
+   неприменим), device matrix BLOCKED (нет устройств), PR → CI → независимое ревью → merge.
+
+Адаптеры пока не включены в composition root (App): подключение и permission host появятся в
+003/006 вместе с UI/сервисом. До этого экспорт типов из Platform.Android не используется приложением.
 
 ## Technical Notes
 
@@ -30,6 +34,8 @@
 | NSD callbacks приходят после Stop | generation/cts guard, отмена listeners, тесты на Stop |
 | Privacy leak через TXT | unit-тест allowed-keys + review |
 | Permission differences между API levels | permission adapter + architecture tests |
+| API 34+ Host deprecation | HostAddresses на 34+, legacy Host под pragma CA1422 |
+| Adapter не в composition до 003/006 | зафиксировано в plan/tasks; integration в 003/006 |
 
 ## Стратегия проверки реального NSD-адаптера
 

@@ -12,6 +12,7 @@ internal sealed class MulticastLockScope : IDisposable
     private const string LockTag = "babymonitor-nsd";
 
     private readonly WifiManager.MulticastLock? _lock;
+    private int _disposed;
 
     public MulticastLockScope(Context context)
     {
@@ -26,16 +27,21 @@ internal sealed class MulticastLockScope : IDisposable
 
     public void Dispose()
     {
-        if (_lock is null)
+        if (Interlocked.Exchange(ref _disposed, 1) == 1 || _lock is null)
         {
             return;
         }
 
-        if (_lock.IsHeld)
+        try
         {
-            _lock.Release();
+            if (_lock.IsHeld)
+            {
+                _lock.Release();
+            }
         }
-
-        _lock.Dispose();
+        finally
+        {
+            _lock.Dispose();
+        }
     }
 }

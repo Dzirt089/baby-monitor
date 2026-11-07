@@ -43,8 +43,10 @@ Platform permission-адаптер запрашивает только необ�
 - **FR-004**: mDNS TXT: только `v` (protocol version, целое 1..CurrentProtocolVersion) и `role`
   (wire-формат — исходное имя `Child`; числовые/иные значения отклоняются). Запрещены имя ребёнка,
   владелец, постоянный device ID, ключи, pairing token/secret, fingerprint. Display name не персональный.
-- **FR-005**: Типизированные ошибки: Wi-Fi отсутствует, сервис не найден, resolve не выполнен,
-  permission denied, NSD unavailable, invalid TXT.
+- **FR-005**: Типизированные ошибки: Wi-Fi/локальная сеть отсутствует (connectivity precondition),
+  permission denied, NSD unavailable, resolve не выполнен, invalid TXT. Oтсутствие сервиса
+  («никого не нашли») — нормальное состояние discovery, а не ошибка адаптера: UI/use-case
+  (005/006) решает, когда показать service_not_found после таймаута.
 - **FR-006**: Все async-операции принимают CancellationToken; Stop/Dispose освобождают NsdManager,
   listeners и multicast lock; fire-and-forget запрещён.
 - **FR-007**: Минимальные manifest permissions; runtime permission запрашивается только при
@@ -59,7 +61,8 @@ Platform permission-адаптер запрашивает только необ�
 ## Acceptance Criteria
 
 - [x] AC-001: Порты и типы в Application; сборка без warnings.
-- [x] AC-002: Fake + contract suite зелёный (Application 68, Infrastructure 37 tests) и включён в CI.
+- [x] AC-002: Fake + contract suite зелёный (Domain 6, Application 74, Architecture 40,
+  Infrastructure 42 = 162/162) и включён в CI.
 - [x] AC-003: NSD-адаптер в Platform.Android компилируется (0 warnings); architecture tests
   проверяют manifest permissions, отсутствие microphone permissions и изоляцию platform-типов.
 - [x] AC-004: mDNS TXT проходит unit-тест allowed-keys (никаких персональных данных/секретов).

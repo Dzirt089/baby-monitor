@@ -56,7 +56,7 @@ public abstract class PeerDiscoveryContractTests
     public async Task StopAsync_переводит_сессию_в_Stopped_и_идемпотентен()
     {
         var discovery = CreateDiscovery();
-        var session = (await discovery.StartAsync(CancellationToken.None)).Value;
+        await using var session = (await discovery.StartAsync(CancellationToken.None)).Value;
 
         await session.StopAsync(CancellationToken.None);
         await session.StopAsync(CancellationToken.None);
@@ -87,7 +87,7 @@ public abstract class PeerDiscoveryContractTests
     public async Task StopAsync_с_отменённым_токеном_переводит_сессию_в_Stopped()
     {
         var discovery = CreateDiscovery();
-        var session = (await discovery.StartAsync(CancellationToken.None)).Value;
+        await using var session = (await discovery.StartAsync(CancellationToken.None)).Value;
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
@@ -119,7 +119,7 @@ public abstract class PeerDiscoveryContractTests
     public async Task StateChanged_уведомляет_о_Stopped_ровно_один_раз()
     {
         var discovery = CreateDiscovery();
-        var session = (await discovery.StartAsync(CancellationToken.None)).Value;
+        await using var session = (await discovery.StartAsync(CancellationToken.None)).Value;
         var stoppedEvents = 0;
         session.StateChanged += (_, args) =>
         {
@@ -139,7 +139,7 @@ public abstract class PeerDiscoveryContractTests
     public async Task DisposeAsync_останавливает_сессию()
     {
         var discovery = CreateDiscovery();
-        var session = (await discovery.StartAsync(CancellationToken.None)).Value;
+        await using var session = (await discovery.StartAsync(CancellationToken.None)).Value;
 
         await session.DisposeAsync();
 

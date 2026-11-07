@@ -53,7 +53,7 @@ public abstract class PeerAdvertisementContractTests
     public async Task StopAsync_переводит_сессию_в_Stopped_и_идемпотентен()
     {
         var advertiser = CreateAdvertiser();
-        var session = (await advertiser.StartAsync(CreateAdvertisement(), CancellationToken.None)).Value;
+        await using var session = (await advertiser.StartAsync(CreateAdvertisement(), CancellationToken.None)).Value;
 
         await session.StopAsync(CancellationToken.None);
         await session.StopAsync(CancellationToken.None);
@@ -65,7 +65,7 @@ public abstract class PeerAdvertisementContractTests
     public async Task StateChanged_уведомляет_о_Stopped_ровно_один_раз()
     {
         var advertiser = CreateAdvertiser();
-        var session = (await advertiser.StartAsync(CreateAdvertisement(), CancellationToken.None)).Value;
+        await using var session = (await advertiser.StartAsync(CreateAdvertisement(), CancellationToken.None)).Value;
         var stoppedEvents = 0;
         session.StateChanged += (_, args) =>
         {
@@ -85,7 +85,7 @@ public abstract class PeerAdvertisementContractTests
     public async Task StopAsync_с_отменённым_токеном_переводит_сессию_в_Stopped()
     {
         var advertiser = CreateAdvertiser();
-        var session = (await advertiser.StartAsync(CreateAdvertisement(), CancellationToken.None)).Value;
+        await using var session = (await advertiser.StartAsync(CreateAdvertisement(), CancellationToken.None)).Value;
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
@@ -98,7 +98,7 @@ public abstract class PeerAdvertisementContractTests
     public async Task DisposeAsync_останавливает_сессию()
     {
         var advertiser = CreateAdvertiser();
-        var session = (await advertiser.StartAsync(CreateAdvertisement(), CancellationToken.None)).Value;
+        await using var session = (await advertiser.StartAsync(CreateAdvertisement(), CancellationToken.None)).Value;
 
         await session.DisposeAsync();
 

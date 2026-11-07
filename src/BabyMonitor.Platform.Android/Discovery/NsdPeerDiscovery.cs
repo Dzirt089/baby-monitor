@@ -40,6 +40,12 @@ public sealed class NsdPeerDiscovery : IPeerDiscovery
             return Result<IPeerDiscoverySession>.Failure(permission.Error!);
         }
 
+        var connectivityError = ConnectivityPrecondition.CheckLocalNetworkAvailable(_context);
+        if (connectivityError is not null)
+        {
+            return Result<IPeerDiscoverySession>.Failure(connectivityError);
+        }
+
         var nsd = _context.ApplicationContext?.GetSystemService(Context.NsdService) as NsdManager;
         if (nsd is null)
         {
@@ -47,9 +53,10 @@ public sealed class NsdPeerDiscovery : IPeerDiscovery
                 new Error(DiscoveryErrorCodes.NsdUnavailable, "NSD недоступен на устройстве."));
         }
 
-        var session = new NsdPeerDiscoverySession(_context, nsd);
+        NsdPeerDiscoverySession? session = null;
         try
         {
+            session = new NsdPeerDiscoverySession(_context, nsd);
             var error = await session.StartAsync(cancellationToken);
             if (error is not null)
             {
@@ -59,10 +66,25 @@ public sealed class NsdPeerDiscovery : IPeerDiscovery
 
             return Result<IPeerDiscoverySession>.Success(session);
         }
-        catch
+        catch (OperationCanceledException)
         {
-            await session.DisposeAsync();
+            if (session is not null)
+            {
+                await session.DisposeAsync();
+            }
+
             throw;
+        }
+        catch (Exception exception)
+        {
+            Log.Warn("BabyMonitor.Nsd", "Discovery start failed: " + exception.GetType().Name);
+            if (session is not null)
+            {
+                await session.DisposeAsync();
+            }
+
+            return Result<IPeerDiscoverySession>.Failure(
+                new Error(DiscoveryErrorCodes.NsdUnavailable, "Не удалось запустить NSD discovery."));
         }
     }
 }
@@ -72,6 +94,7 @@ internal sealed class NsdPeerDiscoverySession : IPeerDiscoverySession
     private const string LogTag = "BabyMonitor.Nsd";
     private const int PeerQueueCapacity = 16;
     private const int PendingResolveCapacity = 8;
+    private const int MaxSeenServices = 128;
 
     private static readonly TimeSpan DiscoveryStartTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan ResolveTimeout = TimeSpan.FromSeconds(5);
@@ -85,10 +108,12 @@ internal sealed class NsdPeerDiscoverySession : IPeerDiscoverySession
     private readonly object _seenLock = new();
     private readonly CancellationTokenSource _stopCts = new();
     private readonly TaskCompletionSource<Error?> _discoveryStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly SemaphoreSlim _stopLock = new(1, 1);
     private int _state = (int)PeerDiscoveryState.Starting;
     private DiscoveryListener? _listener;
     private Task? _resolveLoop;
     private bool _discoveryActive;
+    private int _stopped;
 
     public NsdPeerDiscoverySession(Context context, NsdManager nsd)
     {
@@ -164,46 +189,59 @@ internal sealed class NsdPeerDiscoverySession : IPeerDiscoverySession
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (State is PeerDiscoveryState.Stopped)
+        await _stopLock.WaitAsync(CancellationToken.None);
+        try
         {
-            return;
-        }
+            if (Interlocked.Exchange(ref _stopped, 1) == 1)
+            {
+                return;
+            }
 
-        await _stopCts.CancelAsync();
-        if (_listener is not null && _discoveryActive)
-        {
             try
             {
-                _nsd.StopServiceDiscovery(_listener);
+                await _stopCts.CancelAsync();
+                if (_listener is not null && _discoveryActive)
+                {
+                    try
+                    {
+                        _nsd.StopServiceDiscovery(_listener);
+                    }
+                    catch (Exception exception)
+                    {
+                        Log.Warn(LogTag, "NSD StopServiceDiscovery failed: " + exception.GetType().Name);
+                    }
+                }
+
+                _pendingResolves.Writer.TryComplete();
+                _peers.Writer.TryComplete();
+
+                if (_resolveLoop is not null)
+                {
+                    try
+                    {
+                        await _resolveLoop.WaitAsync(StopTimeout, cancellationToken);
+                    }
+                    catch (TimeoutException)
+                    {
+                        Log.Warn(LogTag, "NSD resolve loop did not stop in time.");
+                    }
+                    catch (OperationCanceledException)
+                    {
+                    }
+                }
             }
-            catch (Exception exception)
+            finally
             {
-                Log.Warn(LogTag, "NSD StopServiceDiscovery failed: " + exception.GetType().Name);
+                _multicastLock.Dispose();
+                _stopCts.Dispose();
+                Volatile.Write(ref _state, (int)PeerDiscoveryState.Stopped);
+                StateChanged?.Invoke(this, new PeerDiscoveryStateChangedEventArgs(PeerDiscoveryState.Stopped));
             }
         }
-
-        _pendingResolves.Writer.TryComplete();
-        _peers.Writer.TryComplete();
-
-        if (_resolveLoop is not null)
+        finally
         {
-            try
-            {
-                await _resolveLoop.WaitAsync(StopTimeout, cancellationToken);
-            }
-            catch (TimeoutException)
-            {
-                Log.Warn(LogTag, "NSD resolve loop did not stop in time.");
-            }
-            catch (OperationCanceledException)
-            {
-            }
+            _stopLock.Release();
         }
-
-        _multicastLock.Dispose();
-        _stopCts.Dispose();
-        Volatile.Write(ref _state, (int)PeerDiscoveryState.Stopped);
-        StateChanged?.Invoke(this, new PeerDiscoveryStateChangedEventArgs(PeerDiscoveryState.Stopped));
     }
 
     public async ValueTask DisposeAsync()
@@ -221,6 +259,11 @@ internal sealed class NsdPeerDiscoverySession : IPeerDiscoverySession
                 if (peer is not null)
                 {
                     _peers.Writer.TryWrite(peer);
+                }
+                else
+                {
+                    // Resolve не удался: позволяем повторное обнаружение этого сервиса.
+                    ForgetService(serviceInfo.ServiceName);
                 }
             }
         }
@@ -309,6 +352,10 @@ internal sealed class NsdPeerDiscoverySession : IPeerDiscoverySession
         {
             throw;
         }
+        finally
+        {
+            resolver.Dispose();
+        }
 
         return CreatePeer(resolved);
     }
@@ -320,9 +367,18 @@ internal sealed class NsdPeerDiscoverySession : IPeerDiscoverySession
             return null;
         }
 
-#pragma warning disable CA1422 // Host устарел на API 34+, но остаётся рабочим; HostAddresses добавим при device-проверках.
-        var host = resolved.Host?.HostAddress;
+        string? host;
+        if (OperatingSystem.IsAndroidVersionAtLeast(34))
+        {
+            var addresses = resolved.HostAddresses;
+            host = addresses is { Count: > 0 } ? addresses[0]?.HostAddress : null;
+        }
+        else
+        {
+#pragma warning disable CA1422 // Host устарел на API 34+; выше читаются HostAddresses.
+            host = resolved.Host?.HostAddress;
 #pragma warning restore CA1422
+        }
         if (string.IsNullOrWhiteSpace(host) || resolved.Port is < 1 or > 65535)
         {
             return null;
@@ -363,10 +419,23 @@ internal sealed class NsdPeerDiscoverySession : IPeerDiscoverySession
         }
     }
 
-    private void OnDiscoveryStarted() => _discoveryStarted.TrySetResult(null);
+    private void OnDiscoveryStarted()
+    {
+        if (Volatile.Read(ref _stopped) == 1)
+        {
+            return;
+        }
+
+        _discoveryStarted.TrySetResult(null);
+    }
 
     private void OnDiscoveryStartFailed(NsdFailure errorCode)
     {
+        if (Volatile.Read(ref _stopped) == 1)
+        {
+            return;
+        }
+
         LastError = new Error(DiscoveryErrorCodes.NsdUnavailable, "NSD discovery start failed: " + errorCode + ".");
         Volatile.Write(ref _state, (int)PeerDiscoveryState.Failed);
         _discoveryStarted.TrySetResult(LastError);
@@ -375,6 +444,11 @@ internal sealed class NsdPeerDiscoverySession : IPeerDiscoverySession
 
     private void OnServiceFound(NsdServiceInfo serviceInfo)
     {
+        if (Volatile.Read(ref _stopped) == 1)
+        {
+            return;
+        }
+
         var name = serviceInfo.ServiceName;
         if (string.IsNullOrEmpty(name))
         {
@@ -387,9 +461,29 @@ internal sealed class NsdPeerDiscoverySession : IPeerDiscoverySession
             {
                 return;
             }
+
+            // Ограничение на случай name-spam в LAN: набор не должен расти безгранично.
+            if (_seenServices.Count > MaxSeenServices)
+            {
+                _seenServices.Clear();
+                _seenServices.Add(name);
+            }
         }
 
         _pendingResolves.Writer.TryWrite(serviceInfo);
+    }
+
+    private void ForgetService(string? name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return;
+        }
+
+        lock (_seenLock)
+        {
+            _seenServices.Remove(name);
+        }
     }
 
     private void OnServiceLost(NsdServiceInfo serviceInfo)
