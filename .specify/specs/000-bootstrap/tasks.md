@@ -54,7 +54,7 @@
 - [x] T031a Создать initial commit в main — `.git/` (29a5624)
 - [x] T032 Создать feature branch bootstrap/initial-foundation и commit каркаса — `.git/` (ee8c7e1)
 - [x] T033 Создать private GitHub repository baby-monitor без auto-init — GitHub (Dzirt089/baby-monitor, private)
-- [x] T034 Push main и feature branch, открыть PR (не merge) — GitHub (PR #1 merged в main, merge-commit 7095f75)
+- [x] T034 Push main и feature branch, открыть PR — GitHub (PR #1–#4 merged: 7095f75, 5eff3a5, 7afd134, d9b09ad; main=d9b09ad)
 - [x] T035 Прочитать статус CI run на PR и зафиксировать факт — GitHub Actions (run 39456208203: success)
 - [x] T036 Зафиксировать manual checklist настроек GitHub (branch protection/env/secrets/labels) — отчёт (T036 checklist в финальном отчёте)
 
@@ -76,7 +76,10 @@
 | 2026-10-20 | Git hygiene | git init + git ls-files --others --exclude-standard + check-ignore | 84 кандидата, bin/obj/artifacts/APK игнорируются, неожиданных нет |
 | 2026-10-20 | Workflow bash syntax | PyYAML + bash -n по всем run-блокам | 7 YAML OK, bash syntax OK |
 | 2026-10-20 | GitHub repository | MCP: create private repo | Dzirt089/baby-monitor, private, default main, auto-init=false |
-| 2026-10-20 | Push + PR | push main/bootstrap/initial-foundation | PR #1 открыт, не merged |
+| 2026-10-20 | Push + PR | push main/bootstrap/initial-foundation | PR #1 открыт, не merged (позже merged 7095f75) |
+| 2026-10-20 | PRs merged | PR #1–#4 | #1 7095f75, #2 5eff3a5, #3 7afd134, #4 d9b09ad |
+| 2026-10-20 | Post-Dependabot main CI | GitHub Actions run 39464848587 (push main, d9b09ad) | success |
+| 2026-10-20 | Локальная проверка main | build Debug/Release + 4 test-проекта после Dependabot bumps | 0 warnings, 107/107 pass |
 | 2026-10-20 | Remote CI | GitHub Actions run 39456208203 (pull_request) | success; job build/test/debug-APK success |
 | 2026-10-20 | Post-merge CI | GitHub Actions run 39458177656 (push main, 7095f75) | success |
 | 2026-10-20 | Admin GitHub | API: labels 9, milestone MVP, environment release, 4 env secrets | выполнено (см. release-runbook) |

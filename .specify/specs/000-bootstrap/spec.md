@@ -97,8 +97,10 @@ bootstrap-спеку и понимает, что можно делать в boot
 - [x] AC-003: Architecture tests подтверждают dependency direction и гигиену (32 теста, включая negative-кейсы).
 - [x] AC-004: git status показывает только ожидаемые source/config/docs; bin/obj/artifacts игнорируются (проверено git check-ignore).
 - [x] AC-005: Независимый reviewer подтвердил соответствие AGENTS.md и bootstrap-scope (pass 1+2: PASS WITH COMMENTS, 0 blocker/major, checklist 10/10).
-- [x] AC-006: Private GitHub repo создан (Dzirt089/baby-monitor); PR #1 merged в main (merge-commit 7095f75).
-- [x] AC-007: CI run на PR выполнен успешно: run 39456208203, job build/test/debug-APK — success.
+- [x] AC-006: Private GitHub repo создан (Dzirt089/baby-monitor); PR #1–#4 merged в main
+  (merge-commit-ы 7095f75, 5eff3a5, 7afd134, d9b09ad); main = d9b09ad.
+- [x] AC-007: CI runs выполнены успешно: PR #1 39456208203, PR #4 39463221686, post-merge main
+  39458177656 и финальный main после Dependabot 39464848587 — job build/test/debug-APK success.
 - [x] AC-008: Административные настройки: milestone и labels созданы; environment `release` и
   4 signing secrets настроены; branch protection/rulesets и environment reviewers недоступны
   на GitHub Free для private-репозитория (зафиксировано в [release-runbook](../../../docs/operations/release-runbook.md)).
