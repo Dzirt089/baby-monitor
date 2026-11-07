@@ -3,6 +3,36 @@
     <string name="bootstrap_status">Каркас приложения создан. Мониторинг, обнаружение устройств и передача звука ещё не реализованы.</string>
     <string name="bootstrap_note">Приложение не является медицинским изделием и не заменяет наблюдение взрослого.</string>
 
+    <string name="role_note">Выберите роль этого устройства. Ребёнок передаёт звук, родитель слушает. Роль можно сменить только остановив мониторинг.</string>
+    <string name="role_child_button">Я ребёнок</string>
+    <string name="role_parent_button">Я родитель</string>
+    <string name="role_media_note">Передача звука ещё не реализована (media — следующий этап). Приложение пока не является рабочей радионяней.</string>
+
+    <string name="monitoring_label">Мониторинг</string>
+    <string name="monitoring_title_child">Режим ребёнка</string>
+    <string name="monitoring_title_parent">Режим родителя</string>
+    <string name="monitoring_status_initial">Не запущено</string>
+    <string name="monitoring_start">Запустить мониторинг</string>
+    <string name="monitoring_stop">Остановить</string>
+    <string name="monitoring_back">Назад</string>
+    <string name="monitoring_media_note">Передача звука ещё не реализована (005 phase 2 BLOCKED).</string>
+    <string name="monitoring_unexpected_error">Не удалось выполнить операцию. Повторите позже.</string>
+    <string name="monitoring_state_initial">Не запущено</string>
+    <string name="monitoring_state_starting">Запуск…</string>
+    <string name="monitoring_state_running">Мониторинг активен</string>
+    <string name="monitoring_state_stopping">Остановка…</string>
+    <string name="monitoring_state_stopped">Остановлен</string>
+    <string name="monitoring_state_failed">Ошибка</string>
+    <string name="monitoring_role_child">Ребёнок</string>
+    <string name="monitoring_role_parent">Родитель</string>
+    <string name="monitoring_diagnostics_format">Роль: %1$s · Состояние: %2$s · Media недоступна (005 BLOCKED)</string>
+    <string name="monitoring_error_format">%1$s: %2$s</string>
+    <string name="cd_role_child">Выбрать роль ребёнка</string>
+    <string name="cd_role_parent">Выбрать роль родителя</string>
+    <string name="cd_monitoring_start">Запустить мониторинг</string>
+    <string name="cd_monitoring_stop">Остановить мониторинг</string>
+    <string name="cd_monitoring_back">Вернуться к выбору роли</string>
+
     <string name="notification_channel_name">Мониторинг</string>
     <string name="notification_channel_description">Постоянное уведомление о работе радионяни</string>
     <string name="notification_title_child">Радионяня: ребёнок</string>

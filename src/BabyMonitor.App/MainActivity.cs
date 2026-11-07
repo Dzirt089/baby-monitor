@@ -1,37 +1,32 @@
-using BabyMonitor.Platform.Android.ForegroundServices;
+using Android.App;
+using Android.Content;
+using Android.OS;
+using Android.Widget;
+using BabyMonitor.App.Presentation;
+using BabyMonitor.Domain.Devices;
 
 namespace BabyMonitor.App;
 
 /// <summary>
-/// Единственная Activity приложения. Bootstrap-фаза: экран только сообщает, что
-/// мониторинг ещё не реализован. Activity также сообщает видимость для запуска
-/// foreground service только по явному действию пользователя.
+/// Экран выбора роли. Роль выбирается явно и передаётся в MonitoringActivity; скрытого default нет.
 /// </summary>
 [Activity(Label = "@string/app_name", MainLauncher = true, Exported = true)]
-public sealed class MainActivity : Activity, IActivityVisibility
+public sealed class MainActivity : PermissionActivity
 {
-    /// <inheritdoc />
-    public bool IsVisible { get; private set; }
-
     /// <inheritdoc />
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
-
         SetContentView(Resource.Layout.activity_main);
+
+        FindViewById<Button>(Resource.Id.role_child)!.Click += (_, _) => OpenMonitoring(DeviceRole.Child);
+        FindViewById<Button>(Resource.Id.role_parent)!.Click += (_, _) => OpenMonitoring(DeviceRole.Parent);
     }
 
-    /// <inheritdoc />
-    protected override void OnResume()
+    private void OpenMonitoring(DeviceRole role)
     {
-        base.OnResume();
-        IsVisible = true;
-    }
-
-    /// <inheritdoc />
-    protected override void OnPause()
-    {
-        IsVisible = false;
-        base.OnPause();
+        var intent = new Intent(this, typeof(MonitoringActivity));
+        intent.PutExtra(MonitoringActivity.ExtraRole, role.ToString());
+        StartActivity(intent);
     }
 }
