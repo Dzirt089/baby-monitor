@@ -25,7 +25,7 @@
 - [x] T016 Local gates: build Debug/Release, все тесты, dotnet format
 - [x] T017 Emulator smoke: QR render Child (screenshot), Parent camera open/close, paste fallback валидирует QR, pairing UI states, diagnostics, monitoring start/stop, crash buffer пуст
 - [x] T018 Независимое ревью (fresh reviewer, APPROVE WITH FIXES → findings закрыты)
-- [ ] T019 PR → CI green → merge в main; roadmap/CHANGELOG обновлены
+- [x] T019 PR #14 → CI → merge в main; roadmap/CHANGELOG/README обновлены (см. GitHub PR #14)
 
 ## BLOCKED (внешние условия)
 

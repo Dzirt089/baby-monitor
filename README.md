@@ -4,10 +4,13 @@ Android-приложение, которое соединяет два теле�
 от детского устройства к родительскому без обязательного облачного backend.
 
 > **Статус: not functional yet.**
-> Bootstrap-фаза и 001-audio-transport-spike (phase 1: контракт + contract tests) merged в `main`;
-> документация, CI и release-процесс готовы. Мониторинг, обнаружение устройств, сопряжение,
-> передача аудио и foreground service ещё не реализованы — приложение пока не выполняет функции
-> радионяни. Device-проверки BLOCKED: нет реальных устройств (emulator не заменяет device-тесты).
+> Bootstrap, 001–006 merged в `main`: audio-transport контракт, NSD discovery, foreground service,
+> pairing-протокол (Android Keystore identity + trusted store), session-reliability политики и UI
+> pairing (офлайн QR-обмен, verification code, trusted devices, camera scan, diagnostics).
+> Передача аудио/media, сетевой signaling и автоматическое переподключение runtime-сессии не
+> реализованы (005 phase 2 BLOCKED: ADR-0007 Proposed + нет устройств) — приложение пока не
+> выполняет функции радионяни. Device-проверки BLOCKED: нет реальных устройств (emulator не
+> заменяет device-тесты).
 
 ## Зачем
 
