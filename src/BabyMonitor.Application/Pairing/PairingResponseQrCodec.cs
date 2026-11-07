@@ -13,7 +13,11 @@ namespace BabyMonitor.Application.Pairing;
 public static class PairingResponseQrCodec
 {
     private const string VersionPrefix = "v1.";
-    private const int MaxPayloadBytes = 8 * 1024;
+    /// <summary>
+    /// Максимум payload согласован с ёмкостью QR (ECC M, версия 40 — около 2331 байт):
+    /// иначе Encode вернул бы payload, который невозможно отобразить QR-кодом.
+    /// </summary>
+    private const int MaxPayloadBytes = 2000;
     private const int MaxFieldBytes = 4 * 1024;
 
     /// <summary>Кодирует ответ Parent в QR-payload.</summary>

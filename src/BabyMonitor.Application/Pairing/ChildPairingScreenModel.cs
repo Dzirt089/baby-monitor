@@ -325,7 +325,12 @@ public sealed class ChildPairingScreenModel : IDisposable
     public void PollExpiry()
     {
         var shouldNotify = false;
-        _gate.Wait();
+        // Не блокируем UI-поток: если операция в полёте, таймер повторит попытку через секунду.
+        if (!_gate.Wait(TimeSpan.Zero))
+        {
+            return;
+        }
+
         try
         {
             if (Volatile.Read(ref _disposed) == 1
@@ -358,7 +363,12 @@ public sealed class ChildPairingScreenModel : IDisposable
     public void Cancel()
     {
         var shouldNotify = false;
-        _gate.Wait();
+        // Не блокируем UI-поток: во время активной операции отмена не применяется (кнопки disabled).
+        if (!_gate.Wait(TimeSpan.Zero))
+        {
+            return;
+        }
+
         try
         {
             if (Volatile.Read(ref _disposed) == 1 || _state is PairingFlowState.Completed)
@@ -386,25 +396,21 @@ public sealed class ChildPairingScreenModel : IDisposable
     /// асинхронные методы не бросают, а переводят модель в Failed с invalid_state.
     /// </summary>
     /// <remarks>
-    /// Семафор не освобождается: без WaitHandle он не держит неуправляемых ресурсов, а его
-    /// освобождение сделало бы вызовы после Dispose бросающими ObjectDisposedException.
+    /// Dispose не блокирует UI-поток и не берёт семафор: он выставляет disposed-флаг первым, поэтому
+    /// конкурентные публичные операции завершаются invalid_state. Семафор не освобождается: без
+    /// WaitHandle он не держит неуправляемых ресурсов, а его освобождение сделало бы вызовы после
+    /// Dispose бросающими ObjectDisposedException.
     /// </remarks>
     public void Dispose()
     {
-        _gate.Wait();
-        try
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
         {
-            if (Interlocked.Exchange(ref _disposed, 1) == 1)
-            {
-                return;
-            }
+            return;
+        }
 
-            ReleaseSession();
-        }
-        finally
-        {
-            _gate.Release();
-        }
+        var session = Interlocked.Exchange(ref _session, null);
+        session?.Dispose();
+        _verification = null;
     }
 
     private void ReleaseSession()

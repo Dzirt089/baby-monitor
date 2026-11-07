@@ -50,7 +50,6 @@
     <string name="pairing_state_confirm">Проверьте код на обоих устройствах</string>
     <string name="pairing_state_completed">Сопряжение завершено</string>
     <string name="pairing_state_failed">Сопряжение не завершено</string>
-    <string name="pairing_state_busy">Выполняется…</string>
     <string name="pairing_child_note">Покажите этот QR-код родительскому устройству. Затем отсканируйте QR-ответ, который покажет родитель.</string>
     <string name="pairing_expiry_format">Приглашение действует: {0}</string>
     <string name="pairing_child_qr_cd">QR-код приглашения для родительского устройства</string>
@@ -85,7 +84,6 @@
     <string name="pairing_skip">Продолжить без сопряжения</string>
     <string name="pairing_media_note">Передача звука ещё не реализована (005 phase 2 BLOCKED). Сопряжение выполняется офлайн через QR и не означает сетевого подключения.</string>
     <string name="pairing_back">Назад</string>
-    <string name="pairing_progress_cd">Выполняется операция сопряжения</string>
     <string name="pairing_error_format">{0}: {1}</string>
     <string name="pairing_unexpected_error">Не удалось выполнить операцию сопряжения. Повторите позже.</string>
     <string name="pairing_no_camera_permission">Нет разрешения на камеру: используйте вставку QR-текста.</string>
@@ -107,5 +105,6 @@
     <string name="diagnostics_progress_cd">Обновление диагностики</string>
     <string name="diagnostics_media_note">Media/аудио не реализованы (005 phase 2 BLOCKED). Диагностика не содержит аудиоданных, секретов и приватных данных.</string>
     <string name="diagnostics_error_format">{0}: {1}</string>
+    <string name="diagnostics_unexpected_error">Не удалось обновить диагностику. Повторите позже.</string>
     <string name="monitoring_diagnostics_button">Диагностика</string>
 </resources>

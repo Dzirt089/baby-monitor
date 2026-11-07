@@ -105,7 +105,11 @@ public sealed class DiagnosticsActivity : PermissionActivity
         {
             await RefreshScreenAsync();
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (OperationCanceledException)
+        {
+            // Уход с экрана во время первичного bind/refresh — штатная отмена, не ошибка.
+        }
+        catch (Exception exception)
         {
             // InitializeAsync — UI entry point: ошибка уже отображена через RefreshScreenAsync.
             _errorText!.Visibility = ViewStates.Visible;
@@ -113,7 +117,7 @@ public sealed class DiagnosticsActivity : PermissionActivity
                 CultureInfo.CurrentCulture,
                 GetString(Resource.String.diagnostics_error_format),
                 "diagnostics.failed." + exception.GetType().Name,
-                GetString(Resource.String.pairing_unexpected_error));
+                GetString(Resource.String.diagnostics_unexpected_error));
         }
     }
 
@@ -146,7 +150,11 @@ public sealed class DiagnosticsActivity : PermissionActivity
         {
             await _model.RefreshAsync(_lifetime.Token);
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (OperationCanceledException)
+        {
+            // Уход с экрана/отмена обслуживания — штатная отмена, не ошибка.
+        }
+        catch (Exception exception)
         {
             // Экран диагностики не должен падать: ошибка уже отображается через модель.
             _errorText!.Visibility = ViewStates.Visible;
@@ -154,7 +162,7 @@ public sealed class DiagnosticsActivity : PermissionActivity
                 CultureInfo.CurrentCulture,
                 GetString(Resource.String.diagnostics_error_format),
                 "diagnostics.failed." + exception.GetType().Name,
-                GetString(Resource.String.pairing_unexpected_error));
+                GetString(Resource.String.diagnostics_unexpected_error));
         }
         finally
         {

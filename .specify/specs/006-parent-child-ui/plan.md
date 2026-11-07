@@ -2,7 +2,7 @@
 
 **Spec**: [spec.md](./spec.md) | **ADR**: [ADR-0006](../../../docs/architecture/adr/0006-ui-framework.md) Accepted,
 [ADR-0011](../../../docs/architecture/adr/0011-qr-encoding-decoding-library.md) Accepted (ZXing.Net)
-**Status**: Phase 2 implemented in PR (pairing UI/QR офлайн-обмен, diagnostics, ViewModels, a11y; device matrix BLOCKED) | **Created**: 2026-11-07
+**Status**: Phase 2 реализована в PR #14 (independent review APPROVE WITH FIXES → findings закрыты; device matrix и real 2-device QR BLOCKED) | **Created**: 2026-11-07
 
 ## Phases
 
@@ -79,6 +79,8 @@
 | Офлайн-обмен не заменяет signaling | явно в spec/UI: pairing завершён, передача звука/переподключение — 005 |
 | Activity recreate во время pairing | сессия в screen model; при recreate старый flow пересоздаётся (QR/код regenerated) — документировано |
 | CAMERA permission в одном APK для обеих ролей | camera только на pairing-экране по действию; manifest uses-feature required=false |
+| Camera preview orientation/aspect на OEM | preview может быть повёрнут/растянут (transform не делается); QR decode от этого не зависит; device matrix BLOCKED (007) |
+| MVP: один доверенный peer | при наличии trust UI скрывает scan/paste/skip и работает с первым peer; несколько записей store возможны только через явное «Сопрячь заново» — единый peer-полиси для 007/008 |
 
 ## Gate
 

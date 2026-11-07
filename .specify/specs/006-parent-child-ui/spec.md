@@ -2,7 +2,7 @@
 
 **Feature Branch**: 006-pairing-ui (phase 2; phase 1 merged в main PR #13)
 **Created**: 2026-11-07
-**Status**: In Progress — phase 1 merged (role selection + MonitoringActivity start/stop/status + permissions + ViewModel/tests); phase 2 (pairing UI/QR, diagnostics screen, ViewModels, a11y) реализуется
+**Status**: Phase 2 реализована в PR (pairing UI/QR офлайн-обмен, verification code, trusted devices, diagnostics screen, ViewModels, a11y); device matrix и real 2-device QR BLOCKED (нет устройств); media/audio BLOCKED (005 phase 2)
 **Input**: AGENTS.md разделы 3, 5, 6, 9, 10, 13, 15; roadmap 006; ADR-0006 Accepted; ADR-0011 Accepted (ZXing.Net); 004 secure pairing protocol; 005 phase 2 BLOCKED
 
 ## Контекст
@@ -54,9 +54,10 @@ Parent сканирует QR камерой (или вставляет payload �
 ### US-6: Пользователи подтверждают code и завершают сопряжение (P1, phase 2)
 
 Child сканирует QR-ответ Parent; оба устройства независимо выводят одинаковый 6-значный code.
-Пользователи визуально сравнивают код и подтверждают. Только после подтверждения на обоих
-устройствах PairedDevice сохраняется в trusted store; при отказе/несовпадении доверие не
-сохраняется. Повторный запуск показывает уже сопряжённое устройство и позволяет перейти к
+Пользователи визуально сравнивают код и подтверждают. PairedDevice сохраняется в trusted store
+после подтверждения на этом устройстве; офлайн QR-обмен не даёт канала подтверждения peer, поэтому
+доверие локальное и односторонне возможное (residual risk, взаимность проверяется на
+signaling-этапе 005); при отказе/несовпадении доверие не сохраняется. Повторный запуск показывает уже сопряжённое устройство и позволяет перейти к
 мониторингу, забыть устройство или сопрячь заново.
 
 ### US-7: Диагностика и управление доверием (P2, phase 2)
@@ -142,11 +143,12 @@ Child сканирует QR-ответ Parent; оба устройства не�
 - [x] AC-002: Parent не запрашивает RECORD_AUDIO; Child запрашивает только по действию Start.
 - [x] AC-003: Typed-ошибки показываются безопасно; состояние читается после recreate (snapshot).
 - [x] AC-004: Emulator UI smoke: выбор роли → Start → service Running/notification → Stop → Stopped.
-- [ ] AC-005: Pairing UI/QR: Child invite QR → Parent scan/paste → Parent response QR → Child
+- [x] AC-005: Pairing UI/QR: Child invite QR → Parent scan/paste → Parent response QR → Child
   scan/paste → одинаковый code → оба confirm → PairedDevice в trusted store; покрыто Application
-  unit-тестами полного офлайн-цикла и emulator smoke (QR render + camera open); реальный обмен
-  между двумя устройствами — **BLOCKED: нет реальных устройств**.
-- [ ] AC-006: Diagnostics screen + TrustedDevices (просмотр/forget) + ViewModels в отдельных
+  unit-тестами полного офлайн-цикла и emulator smoke (QR render + host verify + camera open);
+  реальный обмен между двумя устройствами — **BLOCKED: нет реальных устройств** (отражено в
+  AC-007/AC-008).
+- [x] AC-006: Diagnostics screen + TrustedDevices (просмотр/forget/re-pair) + ViewModels в отдельных
   классах + a11y/локализация; проверено build/tests/emulator smoke.
 - [-] AC-007: Проверка на реальных устройствах (12+/13+/14+ permission flows, OEM, camera
   matrix, TalkBack) — **BLOCKED**.

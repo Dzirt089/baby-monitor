@@ -28,6 +28,7 @@ public sealed class PairingActivity : PermissionActivity
 
     private const long ExpiryTickMilliseconds = 1000;
     private const int QrSizePixels = 720;
+    private const string QrRenderFailedErrorCode = "pairing.qr_render_failed";
 
     private readonly EventHandler _modelChangedHandler;
     private readonly CancellationTokenSource _lifetime = new();
@@ -407,13 +408,31 @@ public sealed class PairingActivity : PermissionActivity
         }
 
         _repairRequested = true;
+        await ResetFlowModelAsync(createChildInvitation: true);
+    }
+
+    /// <summary>
+    /// Пересоздаёт flow-модель (после «Сопрячь заново» и после успешного «Забыть устройство»):
+    /// старые screen models освобождаются, чтобы экран вышел из терминального Completed/Failed
+    /// и снова мог начать сценарий. Child сразу получает новое приглашение; Parent показывает scan.
+    /// </summary>
+    private async Task ResetFlowModelAsync(bool createChildInvitation)
+    {
+        if (_composition is null)
+        {
+            return;
+        }
+
         if (_role is DeviceRole.Child)
         {
             _childModel?.Changed -= _modelChangedHandler;
             _childModel?.Dispose();
             _childModel = _composition.CreateChildModel();
             _childModel.Changed += _modelChangedHandler;
-            await _childModel.CreateInvitationAsync(_lifetime.Token);
+            if (createChildInvitation)
+            {
+                await _childModel.CreateInvitationAsync(_lifetime.Token);
+            }
         }
         else
         {
@@ -474,10 +493,7 @@ public sealed class PairingActivity : PermissionActivity
             if (_composition.TrustedModel.ErrorCode is null)
             {
                 _repairRequested = false;
-                if (_role is DeviceRole.Child && _childModel is not null)
-                {
-                    await _childModel.CreateInvitationAsync(_lifetime.Token);
-                }
+                await ResetFlowModelAsync(createChildInvitation: true);
             }
         });
     }
@@ -505,7 +521,11 @@ public sealed class PairingActivity : PermissionActivity
             StopCamera(render: false);
             await RoutePayloadAsync(payload);
         }
-        catch (Exception exception) when (exception is not System.OperationCanceledException)
+        catch (OperationCanceledException)
+        {
+            // Уход с экрана/отмена запуска не является ошибкой пользователя.
+        }
+        catch (Exception exception)
         {
             SetLocalError(GetString(Resource.String.pairing_unexpected_error), "pairing.failed." + exception.GetType().Name);
         }
@@ -524,7 +544,7 @@ public sealed class PairingActivity : PermissionActivity
             }
 
             _cameraActive = false;
-            SetLocalError(args.Message, args.ErrorCode);
+            SetLocalError(LocalizeScannerError(args.ErrorCode, args.Message), args.ErrorCode);
             Render();
         });
 
@@ -601,7 +621,11 @@ public sealed class PairingActivity : PermissionActivity
         _childSection!.Visibility = showChildSection ? ViewStates.Visible : ViewStates.Gone;
         if (showChildSection)
         {
-            SetQrImage(_qrImage!, _childModel!.QrPayload, ref _renderedQrPayload, ref _qrBitmap);
+            if (!SetQrImage(_qrImage!, _childModel!.QrPayload, ref _renderedQrPayload, ref _qrBitmap))
+            {
+                SetLocalError(GetString(Resource.String.pairing_unexpected_error), QrRenderFailedErrorCode);
+            }
+
             RenderExpiry();
         }
         else
@@ -615,15 +639,22 @@ public sealed class PairingActivity : PermissionActivity
         _parentSection!.Visibility = _role is DeviceRole.Parent ? ViewStates.Visible : ViewStates.Gone;
         _responseNote!.Visibility = showParentResponse ? ViewStates.Visible : ViewStates.Gone;
         _responseQrImage!.Visibility = showParentResponse ? ViewStates.Visible : ViewStates.Gone;
-        SetQrImage(
-            _responseQrImage!,
-            showParentResponse ? _parentModel!.ResponseQrPayload : null,
-            ref _renderedResponsePayload,
-            ref _responseQrBitmap);
+        if (!SetQrImage(
+                _responseQrImage!,
+                showParentResponse ? _parentModel!.ResponseQrPayload : null,
+                ref _renderedResponsePayload,
+                ref _responseQrBitmap)
+            && showParentResponse)
+        {
+            SetLocalError(GetString(Resource.String.pairing_unexpected_error), QrRenderFailedErrorCode);
+        }
 
-        var showScanControls = !_cameraActive && (state is PairingFlowState.Failed
-            || (state is PairingFlowState.WaitingForPeerResponse && _role is DeviceRole.Child)
-            || (state is PairingFlowState.Idle && _role is DeviceRole.Parent));
+        var hasTrustedPeer = trusted.HasTrustedPeer && !_repairRequested;
+        var showScanControls = !_cameraActive
+            && !(hasTrustedPeer && state is PairingFlowState.Idle or PairingFlowState.Failed)
+            && (state is PairingFlowState.Failed
+                || (state is PairingFlowState.WaitingForPeerResponse && _role is DeviceRole.Child)
+                || (state is PairingFlowState.Idle && _role is DeviceRole.Parent));
         _scanControls!.Visibility = showScanControls ? ViewStates.Visible : ViewStates.Gone;
         if (showScanControls)
         {
@@ -655,7 +686,9 @@ public sealed class PairingActivity : PermissionActivity
         _cameraContainer!.Visibility = _cameraActive ? ViewStates.Visible : ViewStates.Gone;
         _cameraCancel!.Visibility = _cameraActive ? ViewStates.Visible : ViewStates.Gone;
 
-        _skip!.Visibility = state is PairingFlowState.Completed ? ViewStates.Gone : ViewStates.Visible;
+        _skip!.Visibility = state is PairingFlowState.Completed || hasTrustedPeer
+            ? ViewStates.Gone
+            : ViewStates.Visible;
         _back!.Enabled = !busy;
     }
 
@@ -726,7 +759,7 @@ public sealed class PairingActivity : PermissionActivity
         _localErrorMessage = null;
     }
 
-    private static void SetQrImage(
+    private static bool SetQrImage(
         ImageView imageView,
         string? payload,
         ref string? renderedPayload,
@@ -734,7 +767,7 @@ public sealed class PairingActivity : PermissionActivity
     {
         if (string.Equals(renderedPayload, payload, StringComparison.Ordinal))
         {
-            return;
+            return bitmap is not null;
         }
 
         renderedPayload = payload;
@@ -743,18 +776,24 @@ public sealed class PairingActivity : PermissionActivity
         if (string.IsNullOrWhiteSpace(payload))
         {
             imageView.SetImageDrawable(null);
-            return;
+            return true;
         }
 
         bitmap = QrCodeBitmapRenderer.TryCreate(payload, QrSizePixels);
         if (bitmap is null)
         {
             imageView.SetImageDrawable(null);
-            return;
+            return false;
         }
 
         imageView.SetImageBitmap(bitmap);
+        return true;
     }
+
+    private string LocalizeScannerError(string errorCode, string fallbackMessage) =>
+        string.Equals(errorCode, QrScannerErrorCodes.CameraPermissionDenied, StringComparison.Ordinal)
+            ? GetString(Resource.String.pairing_no_camera_permission)
+            : fallbackMessage;
 
     private static int MapStatusString(PairingFlowState state) => state switch
     {

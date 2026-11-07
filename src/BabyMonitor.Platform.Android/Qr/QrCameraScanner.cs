@@ -46,6 +46,7 @@ public sealed class QrCameraScanner : IDisposable
     private static readonly TimeSpan SessionConfigureTimeout = TimeSpan.FromSeconds(5);
 
     private readonly Context _context;
+    private readonly int _creationThreadId;
     private readonly object _sync = new();
     private readonly SemaphoreSlim _startGate = new(1, 1);
     private readonly BarcodeReaderGeneric _decoder;
@@ -75,6 +76,9 @@ public sealed class QrCameraScanner : IDisposable
     {
         ArgumentNullException.ThrowIfNull(activity);
         _context = activity.ApplicationContext ?? activity;
+        // Сканер создаётся на UI-потоке (composition root Activity): запоминаем его, чтобы не
+        // делать блокирующий Join HandlerThread на main thread (CA1422 для Thread.Id).
+        _creationThreadId = Environment.CurrentManagedThreadId;
         _decoder = new BarcodeReaderGeneric
         {
             Options =
@@ -939,6 +943,8 @@ public sealed class QrCameraScanner : IDisposable
         {
             var handlerThreadId = Volatile.Read(ref _handlerManagedThreadId);
             var onOwnThread = handlerThreadId != 0 && Environment.CurrentManagedThreadId == handlerThreadId;
+            // Join на main thread блокировал бы UI; для UI-потока ограничиваемся QuitSafely.
+            var onMainThread = Environment.CurrentManagedThreadId == _creationThreadId;
             try
             {
                 handlerThread.QuitSafely();
@@ -948,7 +954,7 @@ public sealed class QrCameraScanner : IDisposable
                 Log.Warn(LogTag, "HandlerThread quit failed: " + exception.GetType().Name);
             }
 
-            if (!onOwnThread)
+            if (!onOwnThread && !onMainThread)
             {
                 try
                 {
@@ -958,15 +964,15 @@ public sealed class QrCameraScanner : IDisposable
                 {
                     Log.Warn(LogTag, "HandlerThread join failed: " + exception.GetType().Name);
                 }
+            }
 
-                try
-                {
-                    handlerThread.Dispose();
-                }
-                catch (Exception exception)
-                {
-                    Log.Warn(LogTag, "HandlerThread dispose failed: " + exception.GetType().Name);
-                }
+            try
+            {
+                handlerThread.Dispose();
+            }
+            catch (Exception exception)
+            {
+                Log.Warn(LogTag, "HandlerThread dispose failed: " + exception.GetType().Name);
             }
         }
 
@@ -1158,6 +1164,7 @@ public sealed class QrCameraScanner : IDisposable
         private readonly object _gate = new();
         private readonly TaskCompletionSource<T?> _result = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly Action<T> _release;
+        private T? _resolved;
         private bool _abandoned;
 
         public ResourceWaiter(Action<T> release) => _release = release;
@@ -1170,6 +1177,10 @@ public sealed class QrCameraScanner : IDisposable
             lock (_gate)
             {
                 release = _abandoned || !_result.TrySetResult(resource);
+                if (!release)
+                {
+                    _resolved = resource;
+                }
             }
 
             if (release)
@@ -1195,7 +1206,8 @@ public sealed class QrCameraScanner : IDisposable
             lock (_gate)
             {
                 _abandoned = true;
-                late = _result.Task.IsCompletedSuccessfully ? _result.Task.Result : null;
+                late = _resolved;
+                _resolved = null;
                 _result.TrySetResult(null);
             }
 
