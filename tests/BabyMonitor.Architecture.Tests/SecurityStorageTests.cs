@@ -10,13 +10,20 @@ public sealed class SecurityStorageTests
         ArchitectureTestSupport.GetPathFromRoot("src/BabyMonitor.Platform.Android/Security");
 
     [Fact]
-    public void Android_security_адаптеры_не_логируют_данные()
+    public void Android_security_адаптеры_логируют_без_секретов()
     {
+        string[] sensitiveMarkers = ["SPKI", "Token", "PrivateKey", "KeyBytes", "identityBytes", "signatureBytes"];
+
         foreach (var file in Directory.GetFiles(SecurityDirectory, "*.cs", SearchOption.AllDirectories))
         {
-            var code = ReadCodeLines(file);
-            Assert.DoesNotContain("Log.", code, StringComparison.Ordinal);
-            Assert.DoesNotContain("Console.", code, StringComparison.Ordinal);
+            var lines = File.ReadAllLines(file);
+            Assert.DoesNotContain(lines, line => line.Contains("Console.", StringComparison.Ordinal));
+            foreach (var logLine in lines.Where(line => line.Contains("Log.", StringComparison.Ordinal)))
+            {
+                Assert.DoesNotContain(
+                    sensitiveMarkers,
+                    marker => logLine.Contains(marker, StringComparison.OrdinalIgnoreCase));
+            }
         }
     }
 

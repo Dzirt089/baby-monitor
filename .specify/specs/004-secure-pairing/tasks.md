@@ -18,7 +18,7 @@
 
 ## Phase 3 — Проверки
 
-- [ ] T009 Local gates: build Debug/Release, tests, format
+- [x] T009 Local gates: build Debug/Release, tests, format
 - [x] T010 Emulator smoke: install/launch (pairing UI отсутствует до 006)
 - [-] T011 End-to-end pairing двух устройств (QR/код/переподключение) — **BLOCKED: нет реальных устройств**
 - [-] T012 Keystore на OEM/API матрице — **BLOCKED: нет устройств** (007)
@@ -28,4 +28,4 @@
 
 | Дата | Проверка | Результат |
 |---|---|---|
-| 2026-11-07 | Phase 1 build/tests | Application 101/101 (20 pairing tests), build 0 warnings |
+| 2026-11-07 | Phase 1 build/tests | Domain 6 + Application 115 + Architecture 45 + Infrastructure 63 = 229/229 pass; build 0 warnings; format OK |

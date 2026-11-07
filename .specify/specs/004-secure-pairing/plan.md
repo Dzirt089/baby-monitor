@@ -40,6 +40,14 @@
 | Логи/ошибки с секретами | никаких секретов в Error/log; тесты на отсутствие private material |
 | Downgrade/старые версии | protocol version pinned, unsupported_version |
 
+## Residual risks (phase 2)
+
+- Потеря Keystore identity (reinstall/clear data/повреждённый ключ) → typed keystore_unavailable,
+  требуется повторное сопряжение; auto-recreate не делается осознанно.
+- llowBackup=false: trusted store не восстанавливается из backup; миграция/ротация alias — 007/008.
+- Trusted store без integrity/HMAC: публичные данные, но tamper/rollback binding — 005.
+- Синглтон-регистрация адаптеров и AndroidSecureEntropy — composition root 006.
+
 ## Gate
 
 End-to-end pairing и Keystore на реальных прошивках не заявляются проверенными без устройств.

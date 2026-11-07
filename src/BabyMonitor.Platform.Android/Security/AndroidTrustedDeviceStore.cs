@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Android.Content;
+using Android.Util;
 using BabyMonitor.Application.Abstractions.Security;
 using BabyMonitor.Application.Pairing;
 using BabyMonitor.Application.Results;
@@ -16,6 +17,7 @@ public sealed class AndroidTrustedDeviceStore : ITrustedDeviceStore
 {
     private const string PreferencesName = "babymonitor_security";
     private const string DevicesKey = "trusted_devices_v1";
+    private const string LogTag = "BabyMonitor.Security";
 
     private readonly object _sync = new();
     private readonly ISharedPreferences _preferences;
@@ -120,7 +122,17 @@ public sealed class AndroidTrustedDeviceStore : ITrustedDeviceStore
 
     private Result<List<PairedDevice>> Load()
     {
-        var json = _preferences.GetString(DevicesKey, null);
+        string? json;
+        try
+        {
+            json = _preferences.GetString(DevicesKey, null);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            Log.Warn(LogTag, "Trusted store read failed: " + exception.GetType().Name);
+            return Result<List<PairedDevice>>.Failure(StoreFailure());
+        }
+
         if (string.IsNullOrWhiteSpace(json))
         {
             return Result<List<PairedDevice>>.Success([]);
@@ -140,8 +152,9 @@ public sealed class AndroidTrustedDeviceStore : ITrustedDeviceStore
 
             return Result<List<PairedDevice>>.Success(devices);
         }
-        catch (JsonException)
+        catch (JsonException exception)
         {
+            Log.Warn(LogTag, "Trusted store JSON is corrupted: " + exception.GetType().Name);
             return Result<List<PairedDevice>>.Failure(StoreFailure());
         }
     }
@@ -163,8 +176,9 @@ public sealed class AndroidTrustedDeviceStore : ITrustedDeviceStore
                 ? AppResult.Success()
                 : AppResult.Failure(StoreFailure());
         }
-        catch (Exception)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            Log.Warn(LogTag, "Trusted store write failed: " + exception.GetType().Name);
             return AppResult.Failure(StoreFailure());
         }
     }
@@ -184,11 +198,15 @@ public sealed class AndroidTrustedDeviceStore : ITrustedDeviceStore
             || string.IsNullOrWhiteSpace(dto.FingerprintSha256)
             || string.IsNullOrWhiteSpace(dto.SubjectPublicKeyInfo)
             || string.IsNullOrWhiteSpace(dto.LocalRole)
-            || !Enum.TryParse<DeviceRole>(dto.LocalRole, ignoreCase: false, out var role)
-            || role is not (DeviceRole.Child or DeviceRole.Parent))
+            || (!string.Equals(dto.LocalRole, nameof(DeviceRole.Child), StringComparison.Ordinal)
+                && !string.Equals(dto.LocalRole, nameof(DeviceRole.Parent), StringComparison.Ordinal)))
         {
             return false;
         }
+
+        var role = string.Equals(dto.LocalRole, nameof(DeviceRole.Child), StringComparison.Ordinal)
+            ? DeviceRole.Child
+            : DeviceRole.Parent;
 
         try
         {

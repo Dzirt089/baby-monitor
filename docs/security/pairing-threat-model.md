@@ -43,5 +43,10 @@
 
 ## Residual risks (BLOCKED)
 
+- Потеря Keystore identity (reinstall/clear data, OEM keystore failure) → повторное сопряжение;
+  auto-recreate не выполняется.
+- Trusted store не восстанавливается через backup (llowBackup=false); integrity/rollback binding — 005.
+- Ротация/миграция identity alias — 007/008.
+
 - End-to-end на реальных устройствах (QR scan, Keystore OEM variations, screen capture/OS-level
   malware) не проверены: **BLOCKED: нет реальных устройств**.

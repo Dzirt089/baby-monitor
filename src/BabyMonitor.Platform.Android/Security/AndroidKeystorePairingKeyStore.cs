@@ -1,4 +1,5 @@
 using Android.Security.Keystore;
+using Android.Util;
 using BabyMonitor.Application.Abstractions.Security;
 using BabyMonitor.Application.Pairing;
 using BabyMonitor.Application.Results;
@@ -17,6 +18,7 @@ public sealed class AndroidKeystorePairingKeyStore : IPairingKeyStore
     private const string KeyAlias = "babymonitor_identity_v1";
     private const string SignatureAlgorithm = "SHA256withECDSA";
     private const string CurveName = "secp256r1";
+    private const string LogTag = "BabyMonitor.Security";
 
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -33,18 +35,25 @@ public sealed class AndroidKeystorePairingKeyStore : IPairingKeyStore
                 return KeystoreFailure();
             }
 
+            if (!keyStore.ContainsAlias(KeyAlias))
+            {
+                GenerateIdentity();
+                keyStore.Dispose();
+                keyStore = LoadKeyStore();
+                if (keyStore is null)
+                {
+                    return KeystoreFailure();
+                }
+            }
+
             using (keyStore)
             {
-                if (!keyStore.ContainsAlias(KeyAlias))
-                {
-                    GenerateIdentity();
-                }
-
                 return ReadIdentity(keyStore);
             }
         }
-        catch (Exception)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            Log.Warn(LogTag, "Keystore identity operation failed: " + exception.GetType().Name);
             return KeystoreFailure();
         }
         finally
@@ -93,8 +102,9 @@ public sealed class AndroidKeystorePairingKeyStore : IPairingKeyStore
                 }
             }
         }
-        catch (Exception)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            Log.Warn(LogTag, "Keystore sign operation failed: " + exception.GetType().Name);
             return Result<byte[]>.Failure(KeystoreError());
         }
         finally
