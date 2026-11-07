@@ -1,8 +1,8 @@
 # ADR-0005: Media-транспорт — SIPSorcery или thin binding к Android libwebrtc
 
-- **Статус**: Proposed (phase 1 завершена; phase 2: SIPSorcery оценён, но adoption BLOCKED юридическим решением по лицензии; device matrix — BLOCKED: нет реальных устройств)
-- **Дата**: 2026-10-20
-- **Решение принимает**: ведущий архитектор по результатам device spike
+- **Статус**: Accepted (2026-11-07; решение владельца репозитория)
+- **Дата**: 2026-10-20 (создан), 2026-11-07 (Accepted)
+- **Решение принимает**: владелец репозитория Dzirt089 (принятие лицензии и выбор библиотеки подтверждены 2026-11-07)
 - **Связанные документы**: [AGENTS.md](../../../AGENTS.md) разделы 4, 7; [roadmap](../../product/roadmap.md)
 
 ## Контекст
@@ -18,11 +18,28 @@
 Решение нельзя принимать по предположению: нужны измерения на device matrix (Pixel, Samsung,
 Huawei/Honor, Xiaomi/Redmi, разные API) и одинаковые contract tests за портом IRealtimeTransport.
 
-## Решение (предлагаемое к проверке)
+## Решение (Accepted, 2026-11-07)
 
-До spike: не писать custom UDP/encryption/jitter buffer. Реализация скрывается за портом
-IRealtimeTransport (Application), конкретная библиотека — деталь Infrastructure. Spike 001 обязан
-сравнить кандидатов по критериям и оформить новый ADR (Accepted/Superseded) до production-кода.
+Выбрана **SIPSorcery** как media-транспорт MVP. Лицензия BSD-3-Clause + Additional Use Restriction
+принята владельцем репозитория 2026-11-07; текст лицензии и upstream-ссылка зафиксированы в
+[THIRD-PARTY-NOTICES.md](../../../THIRD-PARTY-NOTICES.md), краткая ссылка — в README.
+
+Условия принятого решения:
+
+- Версия пакета строго `>= 10.0.17` (в 10.0.14 исправлены три HIGH DoS-уязвимости; 10.0.17 —
+  проверенная актуальная версия). Версия зафиксирована в `Directory.Packages.props`;
+  `PackageReference` добавляется только вместе с реализацией media-адаптера (feature 003/005),
+  не раньше.
+- SIPSorcery-адаптер реализуется только в Infrastructure за портом `IRealtimeTransport`;
+  типы SIPSorcery не протекают в Application/Domain. Адаптер обязан пройти общий набор
+  `RealtimeTransportContractTests` (те же contract-тесты, что и fake).
+- CI выполняет `dotnet list package --vulnerable --include-transitive`; при новых advisories —
+  отдельная задача на обновление версии.
+- License/SBOM-скан транзитивных зависимостей и измерение размера APK выполняются при добавлении
+  пакета (phase 003/005).
+
+До принятия решения: не писать custom UDP/encryption/jitter buffer. Реализация скрывается за портом
+IRealtimeTransport (Application), конкретная библиотека — деталь Infrastructure.
 
 Критерии выбора:
 
@@ -69,9 +86,10 @@ Phase 2 (оценка пакета SIPSorcery, версия 10.0.17 от 2026-10
 | Сопровождение | активный upstream: ~1.9k stars, 34 open issues, push 2026-10-20, не archived |
 | Размер APK/AAB | не измерялся; требует эксперимента с адаптером |
 
-**Вывод phase 2**: технически SIPSorcery — жизнеспособный кандидат (C#, net10.0, Opus/DTLS-SRTP),
-но adoption заблокирован нестандартной лицензией. Без решения владельца пакет не добавляется;
-альтернатива — thin binding к Android libwebrtc (Apache-2.0, сложнее interop/сборка).
+**Вывод phase 2**: технически SIPSorcery — жизнеспособный кандидат (C#, net10.0, Opus/DTLS-SRTP).
+Лицензия нестандартная (BSD-3 + Additional Use Restriction, NOASSERTION); владелец принял её
+2026-11-07 — см. раздел Accepted выше. Альтернатива (thin binding к libwebrtc, Apache-2.0) остаётся
+fallback, если device matrix покажет неприемлемые метрики.
 
 Phase 3 (device matrix) — **BLOCKED**: в окружении нет реальных Android-устройств. Emulator
 (API 35) не воспроизводит акустический тракт, end-to-end latency, CPU/battery слабого устройства
@@ -90,5 +108,7 @@ Phase 3 (device matrix) — **BLOCKED**: в окружении нет реаль
 
 ## Проверка и критерии пересмотра
 
-Spike 001: протокол измерений (устройства, API, сеть, длительность), результаты в ADR, решение
-Accepted или Rejected. Пересмотр — при провале device matrix или критической уязвимости библиотеки.
+Решение Accepted; device matrix (phase 3) остаётся **BLOCKED** из-за отсутствия реальных устройств —
+это проверка, а не условие принятия решения. При появлении устройств: протокол измерений (устройства,
+API, сеть, длительность), результаты в ADR; при провале device matrix или критической уязвимости
+библиотеки решение пересматривается новым ADR (fallback — thin binding libwebrtc).

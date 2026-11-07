@@ -5,7 +5,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Только тестовые зависимости. В Domain/Application/Infrastructure на bootstrap-фазе нет runtime-пакетов. -->
+    <!-- Тестовые зависимости. -->
+    <!-- SIPSorcery принят владельцем (ADR-0005); PackageReference появится в Infrastructure
+         при реализации media-адаптера (003/005). Версия строго >= 10.0.17: ниже 10.0.14 —
+         3 HIGH DoS-уязвимости, 10.0.17 — проверенная актуальная. -->
+    <PackageVersion Include="SIPSorcery" Version="10.0.17" />
     <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />

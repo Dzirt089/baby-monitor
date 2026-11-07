@@ -112,6 +112,16 @@ jobs:
       - name: Build (warnings as errors)
         run: dotnet build BabyMonitor.slnx --no-restore -c Release
 
+      - name: Dependency vulnerability scan
+        run: |
+          set -euo pipefail
+          output="$(dotnet list BabyMonitor.slnx package --vulnerable --include-transitive)"
+          echo "$output"
+          if echo "$output" | grep -qiE "has the following vulnerable packages"; then
+            echo "::error::Vulnerable NuGet packages detected"
+            exit 1
+          fi
+
       - name: Test Domain
         run: |
           dotnet test tests/BabyMonitor.Domain.Tests/BabyMonitor.Domain.Tests.csproj \
@@ -277,6 +287,16 @@ jobs:
 
       - name: Build (warnings as errors)
         run: dotnet build BabyMonitor.slnx --no-restore -c Release
+
+      - name: Dependency vulnerability scan
+        run: |
+          set -euo pipefail
+          output="$(dotnet list BabyMonitor.slnx package --vulnerable --include-transitive)"
+          echo "$output"
+          if echo "$output" | grep -qiE "has the following vulnerable packages"; then
+            echo "::error::Vulnerable NuGet packages detected"
+            exit 1
+          fi
 
       - name: Test Domain
         run: |
