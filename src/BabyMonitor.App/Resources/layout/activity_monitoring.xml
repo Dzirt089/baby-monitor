@@ -32,7 +32,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:textColor="#B00020"
+            android:textColor="@color/monitoring_error_color"
             android:textSize="14sp"
             android:visibility="gone" />
 
@@ -49,6 +49,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
             android:minHeight="56dp"
+            android:contentDescription="@string/cd_monitoring_start"
             android:text="@string/monitoring_start" />
 
         <Button
@@ -57,6 +58,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:minHeight="56dp"
+            android:contentDescription="@string/cd_monitoring_stop"
             android:text="@string/monitoring_stop" />
 
         <Button
@@ -64,6 +66,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
+            android:contentDescription="@string/cd_monitoring_back"
             android:text="@string/monitoring_back" />
 
         <TextView

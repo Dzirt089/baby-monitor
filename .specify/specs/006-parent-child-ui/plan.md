@@ -33,6 +33,12 @@
 | Ложное ощущение работающего аудио | явный статус «media не реализована» (005 phase 2 BLOCKED) |
 | OEM permission flows | device BLOCKED, 007 |
 
+## Backlog 007/008 (device-dependent)
+
+- permanently denied permission + переход в настройки, process death при живом service, Back во время Start.
+- Android 12+/13+/14+ permission/FGS flows, TalkBack/a11y, OEM battery.
+- Реальная передача звука/media metrics — после Accepted ADR-0007 (BLOCKED).
+
 ## Gate
 
 Реальные устройства и media/audio (005 phase 2) отсутствуют; UI не заявляет работающую передачу звука.

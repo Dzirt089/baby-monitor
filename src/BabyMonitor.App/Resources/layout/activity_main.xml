@@ -34,6 +34,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
             android:minHeight="56dp"
+            android:contentDescription="@string/cd_role_child"
             android:text="@string/role_child_button" />
 
         <Button
@@ -42,6 +43,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:minHeight="56dp"
+            android:contentDescription="@string/cd_role_parent"
             android:text="@string/role_parent_button" />
 
         <TextView

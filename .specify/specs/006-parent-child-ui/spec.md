@@ -2,7 +2,7 @@
 
 **Feature Branch**: 006-parent-child-ui
 **Created**: 2026-11-07
-**Status**: In Progress (phase 1: role selection + monitoring/start/stop + permissions; phase 2: pairing UI/QR and diagnostics)
+**Status**: In Progress (phase 1 реализована: role selection + monitoring start/stop + permissions + ViewModel/tests; phase 2: pairing UI/QR)
 **Input**: AGENTS.md разделы 3, 5, 9, 13; roadmap 006; ADR-0006 Accepted (.NET for Android)
 
 ## Контекст
@@ -52,11 +52,11 @@ session id, доступность сервиса; при Failed — безоп�
 
 ## Acceptance Criteria
 
-- [ ] AC-001: Role selection + MonitoringActivity компилируются; start/stop foreground service
+- [x] AC-001: Role selection + MonitoringActivity компилируются; start/stop foreground service
   работают на эмуляторе (runtime smoke через permission grant).
-- [ ] AC-002: Parent не запрашивает RECORD_AUDIO; Child запрашивает только по действию Start.
-- [ ] AC-003: Typed-ошибки показываются безопасно; состояние читается после recreate.
-- [ ] AC-004: Emulator UI smoke: выбор роли → Start → service Running/notification → Stop → Stopped.
+- [x] AC-002: Parent не запрашивает RECORD_AUDIO; Child запрашивает только по действию Start.
+- [x] AC-003: Typed-ошибки показываются безопасно; состояние читается после recreate (snapshot).
+- [x] AC-004: Emulator UI smoke: выбор роли → Start → service Running/notification → Stop → Stopped.
 - [ ] AC-005: Pairing UI/QR — phase 2.
 - [-] AC-006: Проверка на реальных устройствах (12+/13+/14+ permission flows, OEM) — **BLOCKED**.
 - [-] AC-007: Проверка a11y на реальных TalkBack/OEM — **BLOCKED**.

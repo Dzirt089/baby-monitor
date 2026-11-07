@@ -3,16 +3,18 @@ using Android.Content;
 using Android.OS;
 using Android.Views;
 using Android.Widget;
+using BabyMonitor.App.Composition;
 using BabyMonitor.App.Presentation;
+using BabyMonitor.Application.Abstractions.Monitoring;
+using BabyMonitor.Application.Monitoring;
 using BabyMonitor.Domain.Devices;
 using BabyMonitor.Platform.Android.ForegroundServices;
-using BabyMonitor.Platform.Android.Permissions;
 
 namespace BabyMonitor.App;
 
 /// <summary>
-/// Экран мониторинга: start/stop foreground-сессии через IForegroundSessionHost, состояние и
-/// диагностика. Activity только связывает View и ViewModel; бизнес-логики здесь нет.
+/// Экран мониторинга: start/stop foreground-сессии через Application-модель, состояние и typed
+/// ошибки. Activity только связывает View и команды; строки — в resources.
 /// </summary>
 [Activity(Label = "@string/monitoring_label", Exported = false)]
 public sealed class MonitoringActivity : PermissionActivity
@@ -20,9 +22,11 @@ public sealed class MonitoringActivity : PermissionActivity
     /// <summary>Intent extra с ролью (Child/Parent).</summary>
     public const string ExtraRole = "babymonitor.role";
 
-    private readonly EventHandler _viewModelChangedHandler;
+    private readonly EventHandler _modelChangedHandler;
+    private readonly CancellationTokenSource _lifetime = new();
     private AndroidForegroundSessionHost? _host;
-    private MonitoringViewModel? _viewModel;
+    private MonitoringScreenModel? _model;
+    private Task? _initialization;
     private TextView? _status;
     private TextView? _diagnostics;
     private TextView? _error;
@@ -33,7 +37,7 @@ public sealed class MonitoringActivity : PermissionActivity
     /// <summary>Создаёт Activity.</summary>
     public MonitoringActivity()
     {
-        _viewModelChangedHandler = (_, _) => RunOnUiThread(Render);
+        _modelChangedHandler = (_, _) => RunOnUiThread(Render);
     }
 
     /// <inheritdoc />
@@ -42,8 +46,13 @@ public sealed class MonitoringActivity : PermissionActivity
         base.OnCreate(savedInstanceState);
 
         var roleText = Intent?.GetStringExtra(ExtraRole);
-        if (!Enum.TryParse<DeviceRole>(roleText, ignoreCase: false, out var role)
-            || role is not (DeviceRole.Child or DeviceRole.Parent))
+        var role = roleText switch
+        {
+            nameof(DeviceRole.Child) => DeviceRole.Child,
+            nameof(DeviceRole.Parent) => DeviceRole.Parent,
+            _ => DeviceRole.Unknown
+        };
+        if (role is DeviceRole.Unknown)
         {
             Finish();
             return;
@@ -61,32 +70,32 @@ public sealed class MonitoringActivity : PermissionActivity
         _start = FindViewById<Button>(Resource.Id.monitoring_start);
         _stop = FindViewById<Button>(Resource.Id.monitoring_stop);
 
-        _host = new AndroidForegroundSessionHost(
-            this,
-            new AndroidNotificationPermission(this, this),
-            new AndroidMicrophonePermission(this, this),
-            this);
-        _viewModel = new MonitoringViewModel(_host, role);
-        _viewModel.Changed += _viewModelChangedHandler;
+        var composition = MonitoringComposition.Create(this, role);
+        _host = composition.Host;
+        _model = composition.Model;
+        _model.Changed += _modelChangedHandler;
 
-        _start!.Click += async (_, _) => await ExecuteAsync(vm => vm.StartAsync(CancellationToken.None));
-        _stop!.Click += async (_, _) => await ExecuteAsync(vm => vm.StopAsync(CancellationToken.None));
+        _start!.Click += async (_, _) => await ExecuteAsync(model => model.StartAsync(_lifetime.Token));
+        _stop!.Click += async (_, _) => await ExecuteAsync(model => model.StopAsync(_lifetime.Token));
         FindViewById<Button>(Resource.Id.monitoring_back)!.Click += (_, _) => Finish();
 
         Render();
-        _ = InitializeAsync();
+        _initialization = InitializeAsync();
     }
 
     /// <inheritdoc />
     protected override void OnDestroy()
     {
-        if (_viewModel is not null)
+        _lifetime.Cancel();
+        if (_model is not null)
         {
-            _viewModel.Changed -= _viewModelChangedHandler;
+            _model.Changed -= _modelChangedHandler;
+            _model.Dispose();
         }
 
         _host?.Dispose();
         _host = null;
+        _lifetime.Dispose();
         base.OnDestroy();
     }
 
@@ -94,23 +103,35 @@ public sealed class MonitoringActivity : PermissionActivity
     {
         try
         {
-            await _viewModel!.InitializeAsync(CancellationToken.None);
+            if (_model is not null)
+            {
+                await _model.InitializeAsync(_lifetime.Token);
+            }
         }
         catch (Exception exception) when (exception is not System.OperationCanceledException)
         {
-            RunOnUiThread(() => ShowError(exception.GetType().Name));
+            RunOnUiThread(Render);
+        }
+        finally
+        {
+            RunOnUiThread(Render);
         }
     }
 
-    private async Task ExecuteAsync(Func<MonitoringViewModel, Task> action)
+    private async Task ExecuteAsync(Func<MonitoringScreenModel, Task> action)
     {
+        if (_model is null || !_model.IsInitialized || _initialization is { IsCompleted: false })
+        {
+            return;
+        }
+
         try
         {
-            await action(_viewModel!);
+            await action(_model);
         }
         catch (Exception exception) when (exception is not System.OperationCanceledException)
         {
-            RunOnUiThread(() => ShowError(exception.GetType().Name));
+            RunOnUiThread(Render);
         }
         finally
         {
@@ -120,53 +141,67 @@ public sealed class MonitoringActivity : PermissionActivity
 
     private void Render()
     {
-        if (_viewModel is null)
+        if (_model is null)
         {
             return;
         }
 
+        var state = _model.Snapshot?.State;
         if (_status is not null)
         {
-            _status.Text = _viewModel.StatusText;
+            _status.Text = GetString(state switch
+            {
+                MonitoringForegroundState.Starting => Resource.String.monitoring_state_starting,
+                MonitoringForegroundState.Running => Resource.String.monitoring_state_running,
+                MonitoringForegroundState.Stopping => Resource.String.monitoring_state_stopping,
+                MonitoringForegroundState.Stopped => Resource.String.monitoring_state_stopped,
+                MonitoringForegroundState.Failed => Resource.String.monitoring_state_failed,
+                _ => Resource.String.monitoring_state_initial
+            });
         }
 
         if (_diagnostics is not null)
         {
-            _diagnostics.Text = _viewModel.DiagnosticsText;
+            var roleText = GetString(_model.Role is DeviceRole.Child
+                ? Resource.String.monitoring_role_child
+                : Resource.String.monitoring_role_parent);
+            var stateText = state?.ToString() ?? GetString(Resource.String.monitoring_state_initial);
+            _diagnostics.Text = string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                GetString(Resource.String.monitoring_diagnostics_format),
+                roleText,
+                stateText);
         }
 
         if (_error is not null)
         {
-            var hasError = !string.IsNullOrWhiteSpace(_viewModel.ErrorText);
+            var hasError = !string.IsNullOrWhiteSpace(_model.ErrorCode);
             _error.Visibility = hasError ? ViewStates.Visible : ViewStates.Gone;
-            _error.Text = _viewModel.ErrorText;
+            if (hasError)
+            {
+                _error.Text = string.Format(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    GetString(Resource.String.monitoring_error_format),
+                    _model.ErrorCode,
+                    _model.ErrorMessage);
+            }
         }
 
         if (_progress is not null)
         {
-            _progress.Visibility = _viewModel.IsBusy ? ViewStates.Visible : ViewStates.Gone;
+            _progress.Visibility = _model.IsBusy ? ViewStates.Visible : ViewStates.Gone;
         }
 
-        var snapshot = _viewModel.Snapshot;
+        var snapshot = _model.Snapshot;
         if (_start is not null)
         {
-            _start.Enabled = !_viewModel.IsBusy && (snapshot is null || snapshot.IsTerminal);
+            _start.Enabled = _model.IsInitialized && !_model.IsBusy && !_model.IsRoleMismatch
+                && (snapshot is null || snapshot.IsTerminal);
         }
 
         if (_stop is not null)
         {
-            _stop.Enabled = !_viewModel.IsBusy && snapshot is not null && !snapshot.IsTerminal;
+            _stop.Enabled = _model.IsInitialized && !_model.IsBusy && snapshot is not null && !snapshot.IsTerminal;
         }
-    }
-
-    private void ShowError(string detail)
-    {
-        if (_error is null)
-        {
-            return;
-        }
-
-        _error.Visibility = ViewStates.Visible;
-        _error.Text = GetString(Resource.String.monitoring_unexpected_error);
     }
 }

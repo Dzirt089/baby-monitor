@@ -13,6 +13,7 @@ public abstract class PermissionActivity : Activity, IActivityVisibility, IPermi
     private const int PermissionRequestCode = 7001;
 
     private readonly object _sync = new();
+    private bool _destroyed;
     private TaskCompletionSource<bool>? _pendingPermission;
 
     /// <inheritdoc />
@@ -22,6 +23,16 @@ public abstract class PermissionActivity : Activity, IActivityVisibility, IPermi
     public Task<bool> RequestPermissionsAsync(IReadOnlyList<string> permissions, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(permissions);
+        if (_destroyed)
+        {
+            throw new ObjectDisposedException(nameof(PermissionActivity));
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return Task.FromCanceled<bool>(cancellationToken);
+        }
+
         if (permissions.Count == 0)
         {
             return Task.FromResult(true);
@@ -42,6 +53,19 @@ public abstract class PermissionActivity : Activity, IActivityVisibility, IPermi
     {
         IsVisible = false;
         base.OnPause();
+    }
+
+    /// <inheritdoc />
+    protected override void OnDestroy()
+    {
+        lock (_sync)
+        {
+            _destroyed = true;
+            _pendingPermission?.TrySetCanceled();
+            _pendingPermission = null;
+        }
+
+        base.OnDestroy();
     }
 
     /// <inheritdoc />
@@ -69,6 +93,11 @@ public abstract class PermissionActivity : Activity, IActivityVisibility, IPermi
         IReadOnlyList<string> permissions,
         CancellationToken cancellationToken)
     {
+        if (_destroyed)
+        {
+            throw new ObjectDisposedException(nameof(PermissionActivity));
+        }
+
         var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_sync)
         {
@@ -93,7 +122,23 @@ public abstract class PermissionActivity : Activity, IActivityVisibility, IPermi
             completion.TrySetCanceled(cancellationToken);
         });
 
-        RequestPermissions(permissions.ToArray(), PermissionRequestCode);
+        try
+        {
+            RequestPermissions(permissions.ToArray(), PermissionRequestCode);
+        }
+        catch
+        {
+            lock (_sync)
+            {
+                if (ReferenceEquals(_pendingPermission, completion))
+                {
+                    _pendingPermission = null;
+                }
+            }
+
+            throw;
+        }
+
         return await completion.Task;
     }
 }
