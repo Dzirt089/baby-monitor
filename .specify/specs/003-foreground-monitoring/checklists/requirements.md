@@ -6,7 +6,7 @@
 - [x] CHK-004 Service не хранит Activity/View/ViewModel ссылок.
 - [x] CHK-005 Start только из видимой Activity; typed background_start_denied.
 - [x] CHK-006 POST_NOTIFICATIONS adapter + typed denial; notification содержит Stop.
-- [x] CHK-007 Manifest permissions минимальны; RECORD_AUDIO объявлен только для Child (Android 14+
+- [x] CHK-007 Manifest permissions минимальны; RECORD_AUDIO объявлен app-wide (один APK), но запрашивается только для Child (Android 14+
   FGS microphone), Parent его не запрашивает; AudioRecord/AudioTrack отсутствуют (architecture test).
 - [x] CHK-008 FGS-типы по роли (microphone/mediaPlayback) в merged manifest; architecture test.
 - [x] CHK-009 Cleanup: Stop/OnDestroy снимают уведомление; host unbind/timeout.

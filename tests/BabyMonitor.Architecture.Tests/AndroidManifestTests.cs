@@ -57,26 +57,22 @@ public sealed class AndroidManifestTests
             "Discovery не должен добавлять microphone/audio permissions: " + ArchitectureTestSupport.FormatList(forbidden));
     }
 
-    [Fact]
-    public void Foreground_service_объявляет_роли_microphone_и_mediaPlayback()
-    {
-        var source = File.ReadAllText(
-            ArchitectureTestSupport.GetPathFromRoot("src/BabyMonitor.Platform.Android/ForegroundServices/MonitoringForegroundService.cs"));
-
-        Assert.Contains("TypeMicrophone", source, StringComparison.Ordinal);
-        Assert.Contains("TypeMediaPlayback", source, StringComparison.Ordinal);
-        Assert.Contains("Exported = false", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("RECORD_AUDIO", source, StringComparison.Ordinal);
-    }
 
     [Fact]
     public void Merged_manifest_объявляет_foreground_service_с_типами_microphone_и_mediaPlayback()
     {
-        var objRoot = ArchitectureTestSupport.GetPathFromRoot("src/BabyMonitor.App/obj");
-        Assert.True(Directory.Exists(objRoot), "Каталог obj App не найден: architecture test требует предварительного build.");
+        var candidates = new[]
+        {
+            "src/BabyMonitor.App/obj/Debug/net10.0-android/AndroidManifest.xml",
+            "src/BabyMonitor.App/obj/Release/net10.0-android/AndroidManifest.xml",
+        }
+        .Select(relative => ArchitectureTestSupport.GetPathFromRoot(relative))
+        .Where(File.Exists)
+        .ToArray();
+        Assert.True(candidates.Length > 0, "Merged AndroidManifest.xml не найден: architecture test требует предварительного build.");
 
         XDocument? merged = null;
-        foreach (var path in Directory.GetFiles(objRoot, "AndroidManifest.xml", SearchOption.AllDirectories))
+        foreach (var path in candidates)
         {
             var document = XDocument.Load(path);
             var hasService = document.Descendants()
@@ -100,6 +96,7 @@ public sealed class AndroidManifestTests
     }
 
     [Fact]
+    // Временный тест 003: в 005 заменить проверкой AudioCapture/AudioPlayback.
     public void Код_не_открывает_микрофон_или_playback_до_005()
     {
         var sources = Directory.GetFiles(

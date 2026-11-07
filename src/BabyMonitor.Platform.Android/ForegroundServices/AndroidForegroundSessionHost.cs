@@ -225,14 +225,6 @@ public sealed class AndroidForegroundSessionHost : IForegroundSessionHost, IDisp
         service.SnapshotChanged += OnSnapshot;
         try
         {
-            // Permission-диалог мог поставить Activity на паузу; повторно проверяем видимость.
-            if (!_activityVisibility.IsVisible)
-            {
-                return Result<ForegroundSessionSnapshot>.Failure(new Error(
-                    ForegroundSessionErrorCodes.BackgroundStartDenied,
-                    "Запуск мониторинга возможен только при видимом экране приложения."));
-            }
-
             var intent = new Intent(_context, typeof(MonitoringForegroundService))
                 .SetAction(MonitoringForegroundService.ActionStop);
             _context.StartService(intent);

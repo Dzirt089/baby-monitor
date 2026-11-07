@@ -59,3 +59,40 @@ public sealed class FakeNotificationPermissionTests
             async () => await permission.EnsureGrantedAsync(cts.Token));
     }
 }
+
+/// <summary>Проверки IMicrophonePermission fake (Child-only разрешение).</summary>
+public sealed class FakeMicrophonePermissionTests
+{
+    [Fact]
+    public async Task Разрешённый_микрофон_возвращает_успех()
+    {
+        var permission = new FakeMicrophonePermission();
+
+        var result = await permission.EnsureGrantedAsync(CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value);
+    }
+
+    [Fact]
+    public async Task Отказ_возвращает_microphone_permission_denied()
+    {
+        var permission = new FakeMicrophonePermission(granted: false);
+
+        var result = await permission.EnsureGrantedAsync(CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ForegroundSessionErrorCodes.MicrophonePermissionDenied, result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task Отменённый_токен_бросает_OperationCanceledException()
+    {
+        var permission = new FakeMicrophonePermission();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await permission.EnsureGrantedAsync(cts.Token));
+    }
+}

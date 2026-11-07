@@ -9,7 +9,7 @@ public enum MonitoringForegroundState
     /// <summary>Service работает в foreground с постоянным уведомлением.</summary>
     Running = 1,
 
-    /// <summary>Service останавливается.</summary>
+    /// <summary>Service останавливается (в 003 не производится; зарезервировано для 005/006).</summary>
     Stopping = 2,
 
     /// <summary>Service остановлен; терминальное состояние.</summary>

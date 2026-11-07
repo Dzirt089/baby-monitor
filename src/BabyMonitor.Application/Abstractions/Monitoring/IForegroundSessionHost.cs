@@ -10,6 +10,8 @@ namespace BabyMonitor.Application.Abstractions.Monitoring;
 /// <remarks>
 /// StartAsync разрешён только при видимой Activity (явное действие пользователя); adapter обязан
 /// проверить это и вернуть <see cref="ForegroundSessionErrorCodes.BackgroundStartDenied"/>.
+/// Для роли Child StartAsync также требует RECORD_AUDIO и возвращает
+/// <see cref="ForegroundSessionErrorCodes.MicrophonePermissionDenied"/> при отказе.
 /// После StartAsync service продолжает работу при уничтожении Activity; StopAsync останавливает
 /// service и убирает уведомление. Роль Parent не открывает микрофон, роль Child не открывает playback.
 /// </remarks>

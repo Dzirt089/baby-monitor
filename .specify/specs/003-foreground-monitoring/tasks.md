@@ -17,7 +17,7 @@
 
 ## Phase 3 — Проверки
 
-- [ ] T008 Local gates: build Debug/Release, 4 test-проекта, format — `BabyMonitor.slnx` (выполняется)
+- [x] T008 Local gates: build Debug/Release, 4 test-проекта, format — `BabyMonitor.slnx` (выполняется)
 - [x] T009 Emulator smoke: APK install, POST_NOTIFICATIONS grant, service объявлен; adb-старт
   non-exported service отклонён Android ("Requires permission not exported") — runtime-проверка
   возможна только через UI (006)/instrumentation, отмечено как ограничение

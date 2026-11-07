@@ -5,7 +5,8 @@ namespace BabyMonitor.Application.Abstractions.Monitoring;
 /// <summary>
 /// Порт разрешения на микрофон (RECORD_AUDIO). Нужен роли Child как prerequisite для
 /// foreground service типа microphone; Parent этот порт не использует и разрешение не запрашивает.
-/// В 003 разрешение только запрашивается: AudioRecord не открывается до 005.
+/// В 003 разрешение только запрашивается: AudioRecord не открывается до 005. Запрос выполняется
+/// на всех поддерживаемых API (не только 34+): единый permission-flow Child и prerequisite 005.
 /// </summary>
 public interface IMicrophonePermission
 {
