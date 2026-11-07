@@ -2,7 +2,7 @@
 
 **Feature Branch**: 004-secure-pairing
 **Created**: 2026-11-07
-**Status**: In Progress (phase 1 реализована: контракты/протокол/тесты; phase 2 — Android Keystore/trusted store)
+**Status**: In Progress (phase 1 контракты/протокол/тесты + phase 2 Android Keystore/trusted store; end-to-end на устройствах BLOCKED)
 **Input**: AGENTS.md раздел 10; roadmap 004; docs/security/pairing-threat-model.md
 
 ## Контекст
