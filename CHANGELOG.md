@@ -14,6 +14,34 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 фоновой сессии на экране выбора роли) и 008 (release readiness, owner-gated публикация/лицензия/
 дистрибуция).
 
+## [0.4.1] - 2026-11-08
+
+### Fixed
+
+- **Diagnostics telemetry «замирала»**: снимок с telemetry/uptime/health обновлялся только при смене
+  состояния сеанса. Coordinator теперь публикует live-refresh snapshot каждую секунду во время run
+  (State/Error не меняются); после Stop/Dispose таймер останавливается. Проверено на устройствах:
+  counters/uptime растут без смены state.
+- **Бесконечный Reconnecting при исчезнувшем peer**: повторные попытки discovery/connect ждали peer
+  без таймаута, MaxAttempts не исчерпывался. Добавлен reconnectAttemptTimeout (default 20 s, только
+  для retry-попыток): timeout → typed realtime.signaling_timeout → retry → после MaxAttempts
+  terminal Failed. Первичная попытка не ограничена. На device: Parent уходит в Failed с typed ошибкой
+  и alarm, а не висит в Reconnecting >60 s.
+- **Parent alarm scoping**: terminal Failed Parent поднимает loss-тревогу только для loss-кодов
+  (peer_unavailable/signaling_timeout/heartbeat_missed/media_flow_lost/media_path_absent/
+  network_unavailable/tls_failure); локальные ошибки (unauthorized_peer/unsupported_version/audio.*/
+  media.adapter_failure) больше не показывают «Связь потеряна!».
+
+### Verified on devices (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 12)
+
+- Heartbeat/media alarm при выключении Wi-Fi Child: Parent в течение ≤3 s показал «Связь потеряна!»,
+  high-importance notification «Радионяня: связь потеряна» (отдельный канал), Media Reconnecting.
+- Child после Wi-Fi off/on: typed Failed discovery.wifi_unavailable после reconnect-попыток;
+  telemetry counters (↑11168, reconnect 5, uptime) видны в Diagnostics; crash buffer пуст.
+- Повторная проверка после фиксов (live counters, terminal Failed + standalone alarm) — выполняется;
+  результаты будут в docs/operations/device-test-results-2026-11-08.md. Звук/вибрация/DND alarm-канала
+  и media-only alarm — device-only, 007.
+
 ## [0.4.0] - 2026-11-08
 
 ### Added

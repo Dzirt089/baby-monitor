@@ -91,6 +91,7 @@
 
 | Дата | Проверка | Результат |
 |---|---|---|
+| 2026-11-08 | v0.4.1 device smoke findings (v0.4.0) | Huawei pair: install/start/MediaFlowing PASS; alarm при Wi-Fi off PASS (≤3 s, high-importance notification); найдены дефекты: stale telemetry snapshot, бесконечный Reconnecting при исчезнувшем peer, alarm для локальных ошибок → исправлено в v0.4.1 (live refresh/reconnectAttemptTimeout/alarm scoping); device-retest v0.4.1 — T040 |
 | 2026-11-08 | v0.4.0 reliability code gates | heartbeat/ParentLossAlarm/telemetry реализованы+тесты: 502/502 (Domain 38, Application 262, Infrastructure 145, Architecture 57); Debug/Release 0 warnings; format clean; vuln OK |
 | 2026-11-08 | Автоматизированный 100-цикловый Wi-Fi reconnect на v0.3.1 | 8 циклов PASS (~27-28 s восстановление), затем harness/Wi-Fi OEM деградация → typed Failed после исчерпания policy; тест остановлен, НЕ заявляется пройденным (нужна новая методика/состояние сети) |
 | 2026-11-08 | Device pass v0.3.1 на Huawei nova Y90 + nova 13 Pro (Android 12) | pairing/PASS, audibility owner-confirmed/PASS, MediaFlowing/PASS, reconnect/PASS, screen-off 12s/PASS, Stop/PASS; battery/BT/calls/TalkBack/OEM — NOT RUN/BLOCKED; см. docs/operations/device-test-results-2026-11-08.md |

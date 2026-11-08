@@ -63,3 +63,29 @@
   и telemetry counters — код 007 (см. tasks H1/H2/H5).
 - Приложение по-прежнему не медицинское изделие; выводы ограничены двумя устройствами Huawei с
   Android 12 и одним LAN.
+
+
+## v0.4.0 device smoke (2026-11-08, оба Huawei на adb)
+
+**APK**: GitHub Release v0.4.0, SHA-256 `7cf680d4…287327`, versionName 0.4.0/versionCode 400 (оба).
+Установка поверх v0.3.1 (trusted store сохранён), pairing не потребовался.
+
+| # | Проверка | Результат |
+|---|---|---|
+| 1 | Установка/запуск v0.4.0, старт Child+Parent, MediaFlowing на обоих | PASS |
+| 2 | Diagnostics: строка «Метрики: кадры ↑/↓, reconnect, uptime» присутствует | PASS, но метрики/uptime в открытом экране не обновляются без смены состояния (найден дефект: snapshot с telemetry не переопубликовывается периодически; после Failed State показал ↑11168/uptime 4:04) |
+| 3 | Heartbeat/media alarm: Wi-Fi Child disabled → Parent в течение ≤3 s показал «Связь потеряна!», high-importance notification «Радионяня: связь потеряна» (отдельный канал), Media: Reconnecting | PASS (alarm), но Parent остался в Reconnecting >60 s после возврата Wi-Fi Child (найден дефект: discovery-ожидание повторного подключения без таймаута, MaxAttempts не исчерпывается) |
+| 4 | Child после Wi-Fi off/on: typed Failed `discovery.wifi_unavailable` после reconnect-попыток, counters/reconnect=5/uptime в Diagnostics | PASS (typed error) |
+| 5 | Crash buffer на обоих после сценариев | пуст |
+| 6 | Terminal Failed Parent standalone alarm (после остановки FGS), звук/вибрация/DND alarm-канала | NOT RUN (Parent не дошёл до Failed из-за п.3; будет проверено после фикса) |
+| 7 | Media-only loss alarm (control жив, кадры стоят) | NOT RUN |
+| 8 | 20/100 Wi-Fi reconnect циклов с новой методикой | NOT RUN (тестовая методика дорабатывается) |
+
+**Найденные дефекты (fix → v0.4.1):** (a) telemetry snapshot не обновляется периодически — исправлено
+live-refresh 1 s; (b) reconnect attempt в discovery/connect без таймаута → бесконечный Reconnecting при
+исчезнувшем peer — исправлено reconnectAttemptTimeout 20 s (retry) → terminal Failed; (c) alarm для
+terminal Failed Parent срабатывает для любых ошибок — исправлено scoping loss-кодов. Device-retest v0.4.1
+(install, live counters, terminal Failed standalone alarm) — выполняется, результаты будут добавлены.
+
+**Не заявляется:** звук/вибрация alarm-канала, terminal-Failed standalone alarm, media-only alarm —
+пока не проверены; слышимость v0.3.1 остаётся подтверждённой ранее.
