@@ -42,7 +42,9 @@ public sealed class MonitoringMediaCoordinatorTests
         public MonitoringMediaCoordinator Create(
             DeviceRole role,
             ReconnectPolicy? policy = null,
-            string? peerFingerprintSha256 = null) =>
+            string? peerFingerprintSha256 = null,
+            TimeSpan? heartbeatTimeout = null,
+            TimeSpan? parentAlarmThreshold = null) =>
             new(
                 role,
                 Discovery,
@@ -55,7 +57,9 @@ public sealed class MonitoringMediaCoordinatorTests
                 Connectivity,
                 policy ?? CreatePolicy(),
                 Time,
-                peerFingerprintSha256);
+                peerFingerprintSha256,
+                heartbeatTimeout,
+                parentAlarmThreshold);
 
         public static ReconnectPolicy CreatePolicy(int maxAttempts = 3) => new(
             maxAttempts: maxAttempts,
@@ -873,6 +877,164 @@ public sealed class MonitoringMediaCoordinatorTests
             parentAlarmActive: true);
         Assert.True(parent.ParentAlarmActive);
         Assert.Null(parent.Telemetry);
+    }
+
+    [Fact]
+    public async Task Heartbeat_порог_из_конструктора_используется()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        await using var coordinator = harness.Create(DeviceRole.Child, heartbeatTimeout: TimeSpan.FromSeconds(3));
+        var (_, capture) = await StartFlowingChildAsync(harness, coordinator);
+        var startedAt = harness.Time.GetUtcNow();
+
+        // Media flow поддерживается кадрами, heartbeat отсутствует: до настроенного порога 3 s живём.
+        for (var index = 0; index < 4; index++)
+        {
+            capture.PushPcm(new byte[AudioFormat.Default.Frame20MsBytes]);
+            harness.Time.Advance(TimeSpan.FromMilliseconds(500));
+            await Task.Delay(5);
+        }
+
+        Assert.Equal(MediaSessionState.MediaFlowing, coordinator.Snapshot!.State);
+
+        var deadline = DateTime.UtcNow + TestTimeout;
+        while (coordinator.Snapshot?.State != MediaSessionState.Reconnecting)
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("Не дождались reconnect по настроенному heartbeatTimeout.");
+            }
+
+            capture.PushPcm(new byte[AudioFormat.Default.Frame20MsBytes]);
+            harness.Time.Advance(TimeSpan.FromMilliseconds(250));
+            await Task.Delay(5);
+        }
+
+        var elapsed = harness.Time.GetUtcNow() - startedAt;
+        Assert.InRange(elapsed, TimeSpan.FromSeconds(2.9), TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task Parent_alarm_threshold_из_конструктора_используется()
+    {
+        var harness = new Harness();
+        var transport = new FakeRealtimeTransportSession();
+        harness.Transport.ConnectHandler = _ => Task.FromResult(Result<IRealtimeTransportSession>.Success(transport));
+        var alarmSnapshots = new ConcurrentQueue<(MediaSessionState State, bool Alarm)>();
+        await using var coordinator = harness.Create(
+            DeviceRole.Parent,
+            parentAlarmThreshold: TimeSpan.FromSeconds(1));
+        coordinator.SnapshotChanged += (_, snapshot) => alarmSnapshots.Enqueue((snapshot.State, snapshot.ParentAlarmActive));
+        await StartFlowingParentAsync(harness, coordinator, transport);
+        var aliveAt = harness.Time.GetUtcNow();
+
+        var deadline = DateTime.UtcNow + TestTimeout;
+        while (coordinator.Snapshot?.ParentAlarmActive != true)
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("ParentLossAlarm не поднялась по настроенному порогу 1 s.");
+            }
+
+            harness.Time.Advance(TimeSpan.FromMilliseconds(500));
+            await Task.Delay(5);
+        }
+
+        var elapsed = harness.Time.GetUtcNow() - aliveAt;
+        Assert.InRange(elapsed, TimeSpan.FromSeconds(0.9), TimeSpan.FromSeconds(2));
+        Assert.Contains(
+            alarmSnapshots,
+            entry => entry.Alarm && entry.State is MediaSessionState.MediaFlowing);
+    }
+
+    [Fact]
+    public async Task Parent_media_тревога_поднимается_при_остановке_кадров_и_снимается_восстановлением()
+    {
+        var harness = new Harness();
+        var transports = new List<FakeRealtimeTransportSession>();
+        harness.Transport.ConnectHandler = _ =>
+        {
+            var session = new FakeRealtimeTransportSession();
+            transports.Add(session);
+            return Task.FromResult(Result<IRealtimeTransportSession>.Success(session));
+        };
+        var alarmSnapshots = new ConcurrentQueue<(MediaSessionState State, bool Alarm)>();
+        await using var coordinator = harness.Create(DeviceRole.Parent);
+        coordinator.SnapshotChanged += (_, snapshot) => alarmSnapshots.Enqueue((snapshot.State, snapshot.ParentAlarmActive));
+
+        await coordinator.StartAsync(CancellationToken.None);
+        harness.Discovery.LastSession!.AddPeer(CreatePeer());
+        await WaitForStateAsync(coordinator, MediaSessionState.Connected);
+        await WaitUntilAsync(() => harness.Playback.LastSession is not null, "playback стартовал");
+        var transport = transports[0];
+        transport.RaiseHeartbeat();
+        transport.PushEncodedFrame(new byte[] { 1 });
+        await WaitForStateAsync(coordinator, MediaSessionState.MediaFlowing);
+        Assert.False(coordinator.Snapshot!.ParentAlarmActive);
+
+        // Heartbeat продолжает идти (control жив), кадров нет: watchdog фиксирует media loss и
+        // поднимает media-тревогу Parent независимо от control-канала (FR-002 007).
+        var deadline = DateTime.UtcNow + TestTimeout;
+        while (coordinator.Snapshot?.State is not (MediaSessionState.Degraded or MediaSessionState.Reconnecting))
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("Не дождались media-тревоги Parent.");
+            }
+
+            transport.RaiseHeartbeat();
+            harness.Time.Advance(TimeSpan.FromMilliseconds(500));
+            await Task.Delay(5);
+        }
+
+        Assert.True(coordinator.Snapshot!.ParentAlarmActive);
+        Assert.Contains(
+            alarmSnapshots,
+            entry => entry.Alarm
+                && entry.State is (MediaSessionState.Degraded or MediaSessionState.Reconnecting));
+
+        // Восстановление: reconnect находит peer, кадры снова идут — тревога снимается.
+        await AdvanceUntilAsync(
+            harness.Time,
+            () => harness.Discovery.StartCalls >= 2 && harness.Discovery.LastSession is not null,
+            "повторный discovery");
+        harness.Discovery.LastSession!.AddPeer(CreatePeer());
+        await WaitForStateAsync(coordinator, MediaSessionState.Connected);
+        await WaitUntilAsync(() => harness.Playback.Sessions.Count >= 2, "playback второго attempt");
+        var recovered = transports[^1];
+        recovered.RaiseHeartbeat();
+        recovered.PushEncodedFrame(new byte[] { 2 });
+        await WaitForStateAsync(coordinator, MediaSessionState.MediaFlowing);
+
+        Assert.False(coordinator.Snapshot!.ParentAlarmActive);
+        Assert.Contains(
+            alarmSnapshots,
+            entry => !entry.Alarm && entry.State is MediaSessionState.MediaFlowing);
+    }
+
+    [Fact]
+    public async Task Первый_heartbeat_до_media_loop_не_теряется()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+        var start = await coordinator.StartAsync(CancellationToken.None);
+        Assert.True(start.IsSuccess);
+        var transport = await harness.Listener.WaitForAcceptAsync(1);
+
+        await WaitForStateAsync(coordinator, MediaSessionState.Connected);
+
+        // Pong приходит до старта capture/media loop: подписка уже активна в attempt (L7), а
+        // последующий старт media loop не сбрасывает отметку heartbeat.
+        transport.RaiseHeartbeat();
+
+        await WaitUntilAsync(() => harness.Capture.LastSession is not null, "capture стартовал");
+        var capture = harness.Capture.LastSession!;
+        capture.PushPcm(new byte[AudioFormat.Default.Frame20MsBytes]);
+        await WaitForStateAsync(coordinator, MediaSessionState.MediaFlowing);
+
+        Assert.Equal(SessionChannelState.Connected, coordinator.Snapshot!.Health!.Control);
     }
 
     private static async Task<(FakeRealtimeTransportSession Transport, FakeAudioPlaybackSession Playback)> StartFlowingParentAsync(
