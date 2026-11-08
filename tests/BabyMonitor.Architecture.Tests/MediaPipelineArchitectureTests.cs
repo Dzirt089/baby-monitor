@@ -12,6 +12,19 @@ public sealed class MediaPipelineArchitectureTests
 
     private static readonly string[] FileWriteTokens = ["FileStream", "WriteAllBytes", "WriteAllText", "File."];
 
+    /// <summary>
+    /// Сетевые/TLS-API, допустимые только в Infrastructure/Signaling|Realtime: signaling обязан быть
+    /// TLS-only (ADR-0007), cleartext TCP/HTTP в других слоях запрещён.
+    /// </summary>
+    private static readonly string[] NetworkAndTlsTokens =
+    [
+        "SslStream",
+        "SslClientAuthenticationOptions",
+        "SslServerAuthenticationOptions",
+        "TcpListener",
+        "TcpClient"
+    ];
+
     [Fact]
     public void SIPSorcery_используется_только_в_Infrastructure()
     {
@@ -142,6 +155,43 @@ public sealed class MediaPipelineArchitectureTests
         Assert.True(
             violations.Count == 0,
             "Аудио не должно сохраняться на диск (AGENTS §7/§20): " +
+            ArchitectureTestSupport.FormatList(violations));
+    }
+
+    [Fact]
+    public void Сетевые_и_TLS_API_только_в_Infrastructure_Signaling_Realtime()
+    {
+        var allowedDirectories = new[]
+        {
+            ArchitectureTestSupport.NormalizePath(
+                ArchitectureTestSupport.GetPathFromRoot("src/BabyMonitor.Infrastructure/Signaling")),
+            ArchitectureTestSupport.NormalizePath(
+                ArchitectureTestSupport.GetPathFromRoot("src/BabyMonitor.Infrastructure/Realtime")),
+        };
+        var violations = new List<string>();
+
+        foreach (var filePath in ArchitectureTestSupport.FindCSharpFiles(ArchitectureTestSupport.GetPathFromRoot("src")))
+        {
+            if (allowedDirectories.Any(directory => filePath.StartsWith(directory, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            var relativePath = Path.GetRelativePath(ArchitectureTestSupport.FindRepositoryRoot(), filePath);
+            var code = ReadCodeWithoutComments(filePath);
+            foreach (var token in NetworkAndTlsTokens)
+            {
+                if (code.Contains(token, StringComparison.Ordinal))
+                {
+                    violations.Add($"{relativePath}: {token}");
+                }
+            }
+        }
+
+        Assert.True(
+            violations.Count == 0,
+            "SslStream/TcpClient/TcpListener допускаются только в Infrastructure/Signaling|Realtime; " +
+            "signaling обязан быть TLS-only, cleartext-соединения в других слоях запрещены (ADR-0007): " +
             ArchitectureTestSupport.FormatList(violations));
     }
 

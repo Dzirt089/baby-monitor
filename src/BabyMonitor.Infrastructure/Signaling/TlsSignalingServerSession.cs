@@ -10,6 +10,11 @@ namespace BabyMonitor.Infrastructure.Signaling;
 /// (недоверенная identity, malformed кадр, timeout) возвращается типизированной ошибкой и не
 /// закрывает listener — Application/reconnect-политика решает, продолжать ли ожидание.
 /// </summary>
+/// <remarks>
+/// Ожидание TCP-подключения ограничено только отменой вызывающего токена/Dispose: Child обязан
+/// оставаться в ожидании Parent (Advertising) произвольно долго. <see cref="SignalingOptions.HandshakeTimeout"/>
+/// применяется только к TLS handshake и identity assertion уже подключившегося peer-а.
+/// </remarks>
 public sealed class TlsSignalingServerSession : IAsyncDisposable
 {
     private readonly TcpListener _listener;
@@ -39,8 +44,10 @@ public sealed class TlsSignalingServerSession : IAsyncDisposable
     public int BoundPort { get; }
 
     /// <summary>
-    /// Ожидает одно доверенное подключение и выполняет TLS + identity assertion. После успеха
-    /// listener больше не принимает соединения.
+    /// Ожидает одно доверенное подключение и выполняет TLS + identity assertion. Ожидание TCP peer-а
+    /// не ограничено <see cref="SignalingOptions.HandshakeTimeout"/> (только отмена/Dispose); таймаут
+    /// применяется к TLS+hello после TCP-подключения. После успеха listener больше не принимает
+    /// соединения.
     /// </summary>
     /// <param name="cancellationToken">Отмена ожидания.</param>
     /// <returns>Аутентифицированное signaling-соединение либо типизированная ошибка.</returns>
@@ -71,18 +78,31 @@ public sealed class TlsSignalingServerSession : IAsyncDisposable
                 return Result<TlsSignalingConnection>.Failure(SignalingErrors.InvalidState());
             }
 
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(_options.HandshakeTimeout);
-
             TcpClient? tcpClient = null;
             try
             {
-                tcpClient = await _listener.AcceptTcpClientAsync(timeoutCts.Token).ConfigureAwait(false);
+                // Ожидание TCP-подключения не ограничено HandshakeTimeout: Child ждёт Parent в
+                // Advertising-состоянии, пока вызывающий не отменит ожидание или listener не остановят.
+                tcpClient = await _listener.AcceptTcpClientAsync(cancellationToken).ConfigureAwait(false);
                 tcpClient.NoDelay = true;
 
-                var handshakeResult = await SignalingHandshake
-                    .AcceptAsync(tcpClient, _identity, _options, timeoutCts.Token)
-                    .ConfigureAwait(false);
+                // HandshakeTimeout применяется только к TLS + hello/identity assertion уже
+                // подключившегося peer-а (TCP accepted).
+                using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                handshakeCts.CancelAfter(_options.HandshakeTimeout);
+
+                Result<TlsSignalingConnection> handshakeResult;
+                try
+                {
+                    handshakeResult = await SignalingHandshake
+                        .AcceptAsync(tcpClient, _identity, _options, handshakeCts.Token)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    return Result<TlsSignalingConnection>.Failure(SignalingErrors.SignalingTimeout());
+                }
+
                 if (handshakeResult.IsSuccess)
                 {
                     // Владение сокетом перешло signaling-соединению. Listener «расходуется» либо
@@ -96,9 +116,10 @@ public sealed class TlsSignalingServerSession : IAsyncDisposable
 
                 return handshakeResult;
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
-                return Result<TlsSignalingConnection>.Failure(SignalingErrors.SignalingTimeout());
+                // Отмена вызывающего токена: контракт AcceptAsync — OperationCanceledException.
+                throw;
             }
             catch (ObjectDisposedException)
             {

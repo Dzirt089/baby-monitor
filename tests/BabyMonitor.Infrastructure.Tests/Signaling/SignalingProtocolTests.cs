@@ -109,6 +109,14 @@ public sealed class SignalingProtocolTests
     }
 
     [Fact]
+    public async Task FrameCodec_отклоняет_offer_больше_MaxSdpBytes_без_чтения_payload() =>
+        await AssertOversizedSdpFrameRejectedAsync(SignalingFrameType.Offer);
+
+    [Fact]
+    public async Task FrameCodec_отклоняет_answer_больше_MaxSdpBytes_без_чтения_payload() =>
+        await AssertOversizedSdpFrameRejectedAsync(SignalingFrameType.Answer);
+
+    [Fact]
     public async Task FrameCodec_на_закрытом_потоке_бросает_SignalingConnectionClosedException()
     {
         using var stream = new MemoryStream();
@@ -214,6 +222,20 @@ public sealed class SignalingProtocolTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal(RealtimeTransportErrorCodes.TlsFailure, result.Error!.Code);
+    }
+
+    private static async Task AssertOversizedSdpFrameRejectedAsync(SignalingFrameType frameType)
+    {
+        var header = new byte[SignalingProtocol.FrameHeaderBytes];
+        header[0] = (byte)frameType;
+        BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(1), (uint)(SignalingProtocol.MaxSdpBytes + 1));
+        using var stream = new MemoryStream(header);
+
+        await Assert.ThrowsAsync<SignalingProtocolException>(
+            async () => await SignalingFrameCodec.ReadAsync(stream, CancellationToken.None));
+
+        // Лимит проверен по заголовку до выделения/чтения payload: поток остался на конце заголовка.
+        Assert.Equal(header.Length, stream.Position);
     }
 
     private static byte[] RandomNonce() => RandomNumberGenerator.GetBytes(32);

@@ -14,7 +14,7 @@
   uptime, last media frame) в snapshot; без аудио/SDP/fingerprint/IP. Lost/underruns/silence/buffer
   depth/encode-decode — 007 follow-up.
 - [x] T005 Диагностика: строка метрик в Diagnostics screen; arch-тесты на отсутствие секретов/аудио.
-- [ ] T006 H4: прямые тесты TlsPeerCertificateValidator (CA/expired/EKU/RSA), клиентский
+- [x] T006 H4 (v0.4.2): прямые тесты TlsPeerCertificateValidator (CA/expired/EKU/RSA), клиентский
   unsupported-version ack, SDP 256 KiB лимит; semantic arch-test SslStream/Tcp.
 - [ ] T007 H5/LOW-9: bounded retry Accept/перебор discovered candidates; rate-limit/backoff
   неудачных handshake; bind signaling/ICE к Wi-Fi/Ethernet; tests.
@@ -80,7 +80,7 @@
 - [ ] T039 Проверить, что при выборе другой роли во время активной сессии UI не создаёт вторую
   сессию/не теряет управление; typed error/подсказка.
 
-## Phase 7 — device-проверка v0.4.0
+## Phase 7 — device-проверка v0.4.1 (T040/T043)
 
 - [-] T040 (v0.4.1 retest pending) Проверить на 2 устройствах: heartbeat/pong, срабатывание ParentLossAlarm «Связь потеряна!»
   (heartbeat loss и media-only loss), звук/вибрация/DND alarm-канала, terminal Failed Parent alarm,
@@ -89,16 +89,23 @@
 
 ## Phase 8 — follow-ups после v0.4.1
 
-- [ ] T042 Live-refresh 1/s переопубликовывает SnapshotChanged → FGS Notify и UI Render каждую секунду;
+- [x] T042 (v0.4.2) Live-refresh 1/s переопубликовывает SnapshotChanged → FGS Notify и UI Render каждую секунду;
   оптимизировать (обновлять уведомление только при изменении текста/флага; UI — при изменении
   отображаемых полей), измерить battery/CPU во время 8h soak.
 - [ ] T043 Device-retest v0.4.1 (T040): live counters, terminal Failed standalone alarm, media-only alarm,
   звук/вибрация/DND alarm-канала после восстановления adb.
+- [ ] T044 Setup-timeout tests: Child reconnect Accept timeout, «timeout после успешного setup не срабатывает»,
+  race network-change vs setup-timeout (Stale vs SetupFailure).
+- [x] T046 (v0.4.2) Child listener должен ждать Parent: убрать HandshakeTimeout с TCP-accept, применять только к TLS+hello;
+  тесты pending-accept без клиента/после TCP; device-retest v0.4.2. (найдено single-device smoke v0.4.1)
+- [ ] T045 Product decision: discovery-loss коды дают «Связь потеряна!» и на initial-попытке (ребёнок не
+  найден) — решить, нужен ли отдельный текст/без alarm для initial setup.
 
 ## Verification Log
 
 | Дата | Проверка | Результат |
 |---|---|---|
+| 2026-11-08 | v0.4.2 gates | 536/536 (Domain 38, Application 273, Infrastructure 167, Architecture 58); Debug/Release 0 warnings; format clean; vuln OK; T042/T006/T046 |
 | 2026-11-08 | v0.4.1 gates | 513/513 (Domain 38, Application 273, Infrastructure 145, Architecture 57); Debug/Release 0 warnings; format clean; vuln OK |
 | 2026-11-08 | v0.4.1 device smoke findings (v0.4.0) | Huawei pair: install/start/MediaFlowing PASS; alarm при Wi-Fi off PASS (≤3 s, high-importance notification); найдены дефекты: stale telemetry snapshot, бесконечный Reconnecting при исчезнувшем peer, alarm для локальных ошибок → исправлено в v0.4.1 (live refresh/reconnectAttemptTimeout/alarm scoping); device-retest v0.4.1 — T040 |
 | 2026-11-08 | v0.4.0 reliability code gates | heartbeat/ParentLossAlarm/telemetry реализованы+тесты: 502/502 (Domain 38, Application 262, Infrastructure 145, Architecture 57); Debug/Release 0 warnings; format clean; vuln OK |

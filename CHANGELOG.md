@@ -14,6 +14,40 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 фоновой сессии на экране выбора роли) и 008 (release readiness, owner-gated публикация/лицензия/
 дистрибуция).
 
+## [0.4.2] - 2026-11-08
+
+### Fixed
+
+- **Child не ждал Parent**: при запуске Child-сеанса без доступного Parent listener применял
+  HandshakeTimeout к ожиданию TCP-подключения и через ~10 s завершался terminal
+  realtime.signaling_timeout вместо состояния Advertising. Теперь ожидание TCP-peer не ограничено
+  таймаутом (только Stop/Dispose/cancellation); HandshakeTimeout применяется только после TCP
+  accept — к TLS+hello+identity assertion. Single-device smoke v0.4.1 на nova Y90 выявил дефект.
+- **Churn live-refresh**: coordinator публикует снимок ~1 раз/с; FGS больше не вызывает
+  NotificationManager.Notify, если визуально ничего не изменилось (fingerprint роль/состояние/
+  media-состояние/alarm/код ошибки), MonitoringActivity не делает повторный setText для неизменённых
+  строк. Функциональность уведомлений/статусов сохранена; battery-эффект проверяется в 8h soak (T042).
+
+### Added (tests/hardening, без изменения поведения)
+
+- Прямые тесты TlsPeerCertificateValidator (valid/CA/expired/not-yet-valid/EKU/RSA/P-384/null/
+  malformed/границы срока/FixedTimeProvider); клиент отклоняет hello_ack с unsupported version;
+  SDP-лимит 256 KiB после аутентификации (header-only, payload не читается/не аллоцируется);
+  semantic architecture test: SslStream/TcpListener/TcpClient/Ssl*Options только в
+  Infrastructure/Signaling|Realtime (cleartext TCP в других слоях запрещён).
+
+### Verification
+
+- Debug/Release build 0 warnings; format clean; vuln scan чистый; тесты 536/536
+  (Domain 38, Application 273, Infrastructure 167, Architecture 58); независимое ревью — после PR.
+
+### Device status
+
+- v0.4.2 device-retest pending (оба устройства нужны для двухдевайсовой сессии; остался только
+  Child nova Y90): single-device проверка «Child без Parent остаётся Advertising» — T046;
+  live counters/terminal alarm/media-only/sound-vibration-DND — T040/T043 после возвращения второго
+  телефона. До ретеста устройство-специфичные фичи v0.4.2 не заявляются проверенными.
+
 ## [0.4.1] - 2026-11-08
 
 ### Fixed
@@ -33,6 +67,10 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
   media.adapter_failure) больше не показывают «Связь потеряна!».
 
 ### Device smoke v0.4.0 (pre-fix) и статус v0.4.1
+
+Замечание: loss-коды discovery (wifi_unavailable/resolve_failed/service_not_found) теперь дают
+«Связь потеряна!» и на initial-попытке, когда ребёнок ещё ни разу не был найден — это product decision
+(уточнить текст/поведение в 007 T045).
 
 На v0.4.0 (Huawei nova Y90 + nova 13 Pro, Android 12) было проверено: install/launch, старт
 Child+Parent, MediaFlowing, alarm при Wi-Fi Child off (Parent ≤3 s: «Связь потеряна!», high-importance

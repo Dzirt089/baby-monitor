@@ -61,6 +61,7 @@ public sealed class MonitoringForegroundService : Service
     private const string AlarmText = "Нет связи с детским устройством. Проверьте соединение.";
     private const int AlarmNotificationId = 1004;
     private const int AlarmOpenRequestCode = 1005;
+    private const string NoMediaState = "none";
 
     private readonly object _sync = new();
     private readonly LocalBinder _binder;
@@ -71,6 +72,7 @@ public sealed class MonitoringForegroundService : Service
     private int _mediaGeneration;
     private bool _parentAlarmActive;
     private bool _keepParentAlarmOnStop;
+    private string? _lastNotificationFingerprint;
 
     /// <summary>Создаёт сервис; Android создаёт его без зависимостей приложения.</summary>
     public MonitoringForegroundService()
@@ -141,6 +143,7 @@ public sealed class MonitoringForegroundService : Service
 
         PublishTerminalIfNeeded();
         DismissParentAlarmOnStop();
+        ResetNotificationFingerprint();
         StopMediaSession();
         base.OnDestroy();
     }
@@ -164,6 +167,7 @@ public sealed class MonitoringForegroundService : Service
 
         // Новый запуск не должен сохранять stale standalone alarm предыдущей упавшей сессии.
         DismissParentAlarmOnRestart();
+        ResetNotificationFingerprint();
         if (role is DeviceRole.Parent)
         {
             // Канал тревоги нужен только Parent (L5); для API 24–25 каналов нет — legacy builder.
@@ -366,6 +370,7 @@ public sealed class MonitoringForegroundService : Service
 
         PublishTerminalIfNeeded();
         DismissParentAlarmOnStop();
+        ResetNotificationFingerprint();
         StopMediaSession();
         StopSelf();
     }
@@ -448,15 +453,64 @@ public sealed class MonitoringForegroundService : Service
 
     private void UpdateNotification(ForegroundSessionSnapshot snapshot)
     {
+        var fingerprint = BuildNotificationFingerprint(snapshot);
+        lock (_sync)
+        {
+            if (string.Equals(_lastNotificationFingerprint, fingerprint, StringComparison.Ordinal))
+            {
+                // Live-refresh snapshot (~1 раз/с): визуально ничего не изменилось — не дёргаем Notify.
+                return;
+            }
+        }
+
         try
         {
             var notification = BuildNotification(snapshot.Role, snapshot.State, snapshot.Media);
             var manager = (NotificationManager?)GetSystemService(NotificationService);
-            manager?.Notify(NotificationId, notification);
+            if (manager is null)
+            {
+                return;
+            }
+
+            manager.Notify(NotificationId, notification);
+            lock (_sync)
+            {
+                _lastNotificationFingerprint = fingerprint;
+            }
         }
         catch (Exception exception)
         {
             Log.Warn(LogTag, "Notification update failed: " + exception.GetType().Name);
+        }
+    }
+
+    /// <summary>
+    /// Безопасный fingerprint постоянного уведомления: роль, foreground-состояние, media-состояние,
+    /// флаг alarm Parent и код ошибки media. Не содержит секретов, аудио, сообщений ошибок и PII.
+    /// </summary>
+    private static string BuildNotificationFingerprint(ForegroundSessionSnapshot snapshot)
+    {
+        var mediaState = snapshot.Media?.State.ToString() ?? NoMediaState;
+        var parentAlarm = snapshot.Media?.ParentAlarmActive == true ? "alarm" : "no-alarm";
+        var errorCode = snapshot.Media?.Error?.Code ?? string.Empty;
+        return string.Concat(
+            snapshot.Role.ToString(),
+            "|",
+            snapshot.State.ToString(),
+            "|",
+            mediaState,
+            "|",
+            parentAlarm,
+            "|",
+            errorCode);
+    }
+
+    /// <summary>Сбрасывает fingerprint, чтобы следующий Running snapshot гарантированно обновил уведомление.</summary>
+    private void ResetNotificationFingerprint()
+    {
+        lock (_sync)
+        {
+            _lastNotificationFingerprint = null;
         }
     }
 
