@@ -59,6 +59,33 @@ public sealed class TlsSignalingSecurityTests
     }
 
     [Fact]
+    public async Task Сервер_до_проверки_identity_отклоняет_большой_SDP_кадр()
+    {
+        using var peers = new SignalingTestPeers();
+        using var timeout = SignalingLoopbackHarness.CreateTimeout();
+        var serverSession = await SignalingLoopbackHarness.StartServerAsync(
+            peers.CreateChildIdentity(),
+            new SignalingOptions(SignalingLoopbackHarness.DefaultTimeout),
+            timeout.Token);
+        await using var _ = serverSession;
+        var acceptTask = serverSession.AcceptAsync(timeout.Token);
+        await using var rawClient = await RawSignalingClient.ConnectAsync(serverSession.BoundPort, timeout.Token);
+
+        // До hello/hello_ack допустим только control-размер: даже если тип кадра Offer разрешает
+        // 256 KiB SDP, pre-auth чтение обязано отклонить большой payload по лимиту 8 KiB.
+        var oversizedOfferHeader = new byte[SignalingProtocol.FrameHeaderBytes];
+        oversizedOfferHeader[0] = (byte)SignalingFrameType.Offer;
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(
+            oversizedOfferHeader.AsSpan(1),
+            (uint)(SignalingProtocol.MaxControlBytes + 1));
+        await rawClient.WriteAsync(oversizedOfferHeader, timeout.Token);
+        var result = await acceptTask;
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(RealtimeTransportErrorCodes.TlsFailure, result.Error!.Code);
+    }
+
+    [Fact]
     public async Task Сервер_отклоняет_hello_с_неизвестной_версией_до_проверки_доверия()
     {
         using var peers = new SignalingTestPeers();

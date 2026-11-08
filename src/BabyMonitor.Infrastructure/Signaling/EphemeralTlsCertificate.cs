@@ -48,7 +48,9 @@ internal sealed class EphemeralTlsCertificate : IDisposable
         request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, critical: false));
 
         var now = timeProvider.GetUtcNow();
-        var certificate = request.CreateSelfSigned(now.AddMinutes(-5), now.AddHours(24));
+        // Запас назад 1 час: рассинхронизация часов двух телефонов >5 минут не должна ломать
+        // рукопожатие (сертификат эфемерный, живёт 24 часа, identity доказывается assertion-ом).
+        var certificate = request.CreateSelfSigned(now.AddHours(-1), now.AddHours(24));
         try
         {
             // Windows Schannel (SslStream) не принимает сертификаты с ephemeral CNG-ключами:

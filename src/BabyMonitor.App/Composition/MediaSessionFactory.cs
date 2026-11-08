@@ -97,6 +97,6 @@ internal sealed class MediaSessionFactory : IMonitoringMediaSessionFactory
             _timeProvider,
             peerFingerprint);
 
-        return Result<MonitoringMediaSession>.Success(new MonitoringMediaSession(coordinator, connectivity));
+        return Result<MonitoringMediaSession>.Success(new MonitoringMediaSession(coordinator, codec, connectivity));
     }
 }

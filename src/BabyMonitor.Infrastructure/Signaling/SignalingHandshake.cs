@@ -99,7 +99,10 @@ internal static class SignalingHandshake
                 SignalingHelloCodec.EncodeHello(hello),
                 cancellationToken).ConfigureAwait(false);
 
-            var responseFrame = await SignalingFrameCodec.ReadAsync(sslStream, cancellationToken).ConfigureAwait(false);
+            var responseFrame = await SignalingFrameCodec.ReadAsync(
+                sslStream,
+                cancellationToken,
+                SignalingProtocol.MaxControlBytes).ConfigureAwait(false);
             if (responseFrame.FrameType == SignalingFrameType.Error)
             {
                 return Result<TlsSignalingConnection>.Failure(SignalingErrors.FromWireError(SignalingProtocol.DecodeWireError(responseFrame.Payload)));
@@ -228,7 +231,10 @@ internal static class SignalingHandshake
             SignalingFrame helloFrame;
             try
             {
-                helloFrame = await SignalingFrameCodec.ReadAsync(sslStream, cancellationToken).ConfigureAwait(false);
+                helloFrame = await SignalingFrameCodec.ReadAsync(
+                    sslStream,
+                    cancellationToken,
+                    SignalingProtocol.MaxControlBytes).ConfigureAwait(false);
             }
             catch (SignalingProtocolException)
             {

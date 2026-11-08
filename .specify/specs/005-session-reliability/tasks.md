@@ -44,7 +44,19 @@
 - [ ] T023 Local gates: build Debug/Release, все тесты, format, vuln scan
 - [ ] T024 Независимое ревью (fresh reviewer, security-sensitive) + закрытие findings
 - [ ] T025 PR → зелёный CI (gh) → merge в main
-- [ ] T026 Тег v0.3.0 → GitHub Release (подписанный APK + SHA-256) + чек-лист слышимости/reconnect/battery владельцу
+- [ ] T026 Тег v0.3.0
+
+### Follow-ups 007 (из security review PR #16)
+
+- [ ] H1: control heartbeat: periodic ping/pong + SessionHealthMonitor.MarkHeartbeat + ParentLossAlarm
+      в coordinate/FGS (FR-018/FR-021, AC-009).
+- [ ] H2: telemetry counters (send/recv/lost, underruns, silence, buffer depth, encode/decode duration,
+      reconnect count) через ISessionTelemetry/aggregates; без аудио/секретов (FR-022, T014).
+- [ ] H3: listener rate-limit/backoff неудачных handshake (LAN DoS hardening, LOW-3);
+      bind signaling/ICE кандидатов к Wi-Fi/Ethernet интерфейсу (LOW-9).
+- [ ] H4: прямые тесты ветвей TlsPeerCertificateValidator (CA/expired/EKU/RSA), клиентский
+      unsupported-version ack, SDP 256 KiB лимит (LOW-6); semantic arch-test для SslStream/Tcp
+      (LOW-5). → GitHub Release (подписанный APK + SHA-256) + чек-лист слышимости/reconnect/battery владельцу
 
 ## Phase 3 — Device-проверки владельца (2 устройства)
 

@@ -19,9 +19,11 @@ public static class PeerDiscoveryConstants
     public const int CurrentProtocolVersion = 1;
 
     /// <summary>
-    /// Временный порт transport-сервиса, который Child публикует до реализации media-транспорта
-    /// (003/005). Не является протокольным обещанием; при появлении реального transport port
-    /// берётся из transport-конфигурации.
+    /// Фиксированный порт signaling/media-сервиса Child, который публикуется через NSD и на котором
+    /// listener принимает соединение (005 phase 2). Порт остаётся provisional: в Application-контракте
+    /// <see cref="PeerAdvertisement"/> пока нет поля порта, поэтому advertiser публикует это значение,
+    /// а координатор требует, чтобы listener занял именно его (иначе typed invalid_state). При
+    /// добавлении transport port в advertisement перейти на динамический BoundPort listener-а.
     /// </summary>
     public const int ProvisionalTransportPort = 47800;
 }

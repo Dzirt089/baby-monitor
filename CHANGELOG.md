@@ -45,7 +45,11 @@ route/TalkBack, 8h soak) и 008-release-readiness; device-подтвержден
   и Huawei nova Y90 (v0.3.0 checklist).
 - Автоматическое переподключение после установленной сессии реализовано кодом и unit/loopback
   tests; реальная потеря Wi-Fi/смена IP — device-прогон.
-- ParentLossAlarm в media-интеграцию пока не подключён (health watchdog есть); 007.
+- Media path absent до первого аудиокадра детектируется watchdog-ом (typed media_flow_lost →
+  Degraded/Reconnecting); реальная индикация/переподключение на устройствах — device-прогон.
+- ParentLossAlarm в media-интеграцию пока не подключён; control heartbeat (ping) не отправляется
+  (детект по transport state + media watchdog/first-frame timeout); telemetry counters (FR-022)
+  не выделены — 007.
 - OEM/Doze/8h soak/battery, TalkBack, Bluetooth/headset matrix — 007.
 - Приложение не является медицинским изделием.
 

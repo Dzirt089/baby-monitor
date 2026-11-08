@@ -470,15 +470,21 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                 continue;
             }
 
-            // Сессия установилась и потеряна.
-            if (retryIndex == 0 && !outcome.MediaFlowing)
+            // Первичный отказ самого аудио-устройства (микрофон/динамик/буфер) — это не сетевой
+            // разрыв: сообщаем typed error, не запуская reconnect-цикл. Сетевые потери (включая
+            // first-frame watchdog «звука нет») уходят в reconnect ниже.
+            if (retryIndex == 0
+                && !outcome.MediaFlowing
+                && outcome.Error is { } mediaError
+                && IsDeviceAudioFailure(mediaError))
             {
-                // Первичное подключение дошло до transport, но аудио-pipeline не поднялся:
-                // это ошибка конфигурации/устройства, а не сетевой разрыв — сообщаем typed error.
-                FailStartup(outcome.Error!);
+                FailStartup(mediaError);
                 return;
             }
 
+            // Сессия установилась (transport Connected) и потеряна — включая случай, когда первый
+            // аудиокадр так и не пришёл (first-frame watchdog): это может быть сетевой media path,
+            // поэтому применяем reconnect, а не терминальный Failed на первой же попытке.
             PublishDegraded(outcome.Reason);
             PublishReconnecting();
             retryIndex = outcome.MediaFlowing ? 1 : retryIndex + 1;
@@ -726,7 +732,8 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             // увидел бы последний кадр предыдущей попытки как stall сразу после reconnect.
             _healthMonitor.Reset();
             using var mediaCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            using var watchdog = StartMediaWatchdog(failure);
+            var mediaFlowingFlag = new bool[1];
+            using var watchdog = StartMediaWatchdog(failure, mediaFlowingFlag);
             var pcmFrameBytes = _codec.Format.Frame20MsBytes;
             var pcmBuffer = new byte[pcmFrameBytes];
             var encodedBuffer = new byte[_codec.MaxEncodedBytes];
@@ -858,6 +865,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                         if (!mediaFlowing)
                         {
                             mediaFlowing = true;
+                            Volatile.Write(ref mediaFlowingFlag[0], true);
                             PublishMediaFlowing();
                         }
                     }
@@ -926,7 +934,8 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             // Каждая новая media-попытка начинает измерение media health с нуля (см. Child loop).
             _healthMonitor.Reset();
             using var mediaCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            using var watchdog = StartMediaWatchdog(failure);
+            var mediaFlowingFlag = new bool[1];
+            using var watchdog = StartMediaWatchdog(failure, mediaFlowingFlag);
             var pcmBuffer = new byte[_codec.Format.Frame20MsBytes];
             var received = transport.ReceiveAudioAsync(mediaCts.Token).GetAsyncEnumerator(mediaCts.Token);
             try
@@ -1039,6 +1048,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                         if (!mediaFlowing)
                         {
                             mediaFlowing = true;
+                            Volatile.Write(ref mediaFlowingFlag[0], true);
                             PublishMediaFlowing();
                         }
                     }
@@ -1243,17 +1253,39 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         }
     }
 
-    private ITimer StartMediaWatchdog(TaskCompletionSource<Error> failure) =>
-        _timeProvider.CreateTimer(
-            _ => OnMediaWatchdogTick(failure),
+    private ITimer StartMediaWatchdog(TaskCompletionSource<Error> failure, bool[] mediaFlowing)
+    {
+        var startedAt = _timeProvider.GetUtcNow();
+        return _timeProvider.CreateTimer(
+            _ => OnMediaWatchdogTick(failure, mediaFlowing, startedAt),
             null,
             MediaWatchdogPeriod,
             MediaWatchdogPeriod);
+    }
 
-    private void OnMediaWatchdogTick(TaskCompletionSource<Error> failure)
+    private void OnMediaWatchdogTick(
+        TaskCompletionSource<Error> failure,
+        bool[] mediaFlowing,
+        DateTimeOffset startedAt)
     {
         if (Volatile.Read(ref _disposed))
         {
+            return;
+        }
+
+        if (!Volatile.Read(ref mediaFlowing[0]))
+        {
+            // Первый аудиокадр ещё не пришёл: если media path не подтвердился за порог, это
+            // «signaling поднят, звука нет» — Degraded/Reconnecting (FR-018/FR-021). Проверка
+            // отдельная от SessionHealthMonitor, потому что при полном отсутствии кадров media
+            // оценивается как Inactive, а не Stalled.
+            if (_timeProvider.GetUtcNow() - startedAt >= _healthMonitor.MediaTimeout)
+            {
+                failure.TrySetResult(new Error(
+                    RealtimeTransportErrorCodes.MediaFlowLost,
+                    "Media path не подтвердился: первый аудиокадр не пришёл."));
+            }
+
             return;
         }
 
@@ -1600,6 +1632,12 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     private static Error CreateMediaFlowLostError() => new(
         RealtimeTransportErrorCodes.MediaFlowLost,
         "Media flow потерян.");
+
+    private static bool IsDeviceAudioFailure(Error error) =>
+        error.Code is AudioErrorCodes.CaptureUnavailable
+            or AudioErrorCodes.PlaybackUnavailable
+            or AudioErrorCodes.BufferUnavailable
+            or AudioErrorCodes.AdapterFailed;
 
     private static Error MapAdapterFailure(Exception exception) => exception switch
     {

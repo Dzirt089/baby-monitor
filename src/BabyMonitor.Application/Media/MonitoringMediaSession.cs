@@ -7,20 +7,29 @@ namespace BabyMonitor.Application.Media;
 /// </summary>
 public sealed class MonitoringMediaSession : IAsyncDisposable
 {
+    private readonly IDisposable? _ownedCodec;
     private readonly IAsyncDisposable? _ownedDependency;
     private int _disposed;
 
     /// <summary>Создаёт обёртку сеанса.</summary>
     /// <param name="coordinator">Координатор media-сеанса (владеет transport/listener/audio/discovery).</param>
+    /// <param name="ownedCodec">
+    /// Кодек сеанса (IDisposable), созданный composition root-ом; освобождается этим объектом.
+    /// Может быть null.
+    /// </param>
     /// <param name="ownedDependency">
     /// Дополнительная зависимость, которой владеет composition root (например, IConnectivityMonitor);
     /// освобождается этим объектом. Может быть null.
     /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="coordinator"/> равен null.</exception>
-    public MonitoringMediaSession(MonitoringMediaCoordinator coordinator, IAsyncDisposable? ownedDependency)
+    public MonitoringMediaSession(
+        MonitoringMediaCoordinator coordinator,
+        IDisposable? ownedCodec,
+        IAsyncDisposable? ownedDependency)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         Coordinator = coordinator;
+        _ownedCodec = ownedCodec;
         _ownedDependency = ownedDependency;
     }
 
@@ -35,12 +44,23 @@ public sealed class MonitoringMediaSession : IAsyncDisposable
             return;
         }
 
+        // Порядок: координатор (циклы/сессии) → кодек → внешняя зависимость; сбой любого шага
+        // не должен блокировать освобождение остальных (Application без logging).
         try
         {
             await Coordinator.DisposeAsync().ConfigureAwait(false);
         }
         finally
         {
+            try
+            {
+                _ownedCodec?.Dispose();
+            }
+            catch (Exception)
+            {
+                // Best effort: см. XML-doc.
+            }
+
             if (_ownedDependency is not null)
             {
                 try

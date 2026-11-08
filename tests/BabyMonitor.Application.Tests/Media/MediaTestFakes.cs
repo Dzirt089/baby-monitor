@@ -806,7 +806,7 @@ internal sealed class FakeAudioPlaybackSession : IAudioPlaybackSession
 }
 
 /// <summary>Fake IAudioCodec: фиксирует длины PCM/Opus кадров, encode → 2 байта, decode → 20 мс PCM.</summary>
-internal sealed class FakeAudioCodec : IAudioCodec
+internal sealed class FakeAudioCodec : IAudioCodec, IDisposable
 {
     private readonly object _sync = new();
     private readonly List<int> _encodedPcmLengths = new();
@@ -815,6 +815,8 @@ internal sealed class FakeAudioCodec : IAudioCodec
     public AudioFormat Format => AudioFormat.Default;
 
     public int MaxEncodedBytes => 1275;
+
+    public int DisposeCalls { get; private set; }
 
     public byte[] EncodedPayload { get; set; } = [0xAA, 0xBB];
 
@@ -851,6 +853,8 @@ internal sealed class FakeAudioCodec : IAudioCodec
         EncodedPayload.AsSpan().CopyTo(encodedDestination);
         return EncodedPayload.Length;
     }
+
+    public void Dispose() => DisposeCalls++;
 
     public int Decode(ReadOnlySpan<byte> encoded, Span<byte> pcmDestination)
     {

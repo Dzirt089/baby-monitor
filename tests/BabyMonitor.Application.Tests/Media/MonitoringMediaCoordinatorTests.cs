@@ -424,7 +424,7 @@ public sealed class MonitoringMediaCoordinatorTests
     }
 
     [Fact]
-    public async Task Child_после_долгого_backoff_не_считает_старый_media_кадр_stall()
+    public async Task Child_после_долгого_backoff_без_кадра_срабатывает_first_frame_watchdog()
     {
         var harness = new Harness();
         harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
@@ -439,16 +439,15 @@ public sealed class MonitoringMediaCoordinatorTests
         transport.Fail(new Error(RealtimeTransportErrorCodes.MediaFlowLost, "Media-поток потерян."));
         await WaitForStateAsync(coordinator, MediaSessionState.Reconnecting);
 
-        // Backoff (2.5 с) больше media timeout (2 с): health monitor не должен унаследовать
-        // последний кадр предыдущей попытки и объявить stall на новом соединении.
+        // Backoff (2.5 с) больше media timeout (2 с). Новый attempt не получает ни одного кадра:
+        // first-frame watchdog (не health-stall старого кадра) обязан перевести сеанс в reconnect.
         await AdvanceUntilAsync(harness.Time, () => harness.Listener.StartCalls >= 2, "повторная попытка");
         await WaitForStateAsync(coordinator, MediaSessionState.Connected);
-        await WaitUntilAsync(() => harness.Time.PendingTimerCount > 0, "watchdog media health");
+        await WaitUntilAsync(() => harness.Time.PendingTimerCount > 0, "first-frame watchdog");
 
         harness.Time.Advance(TimeSpan.FromSeconds(5));
-        await Task.Delay(50);
-
-        Assert.Equal(MediaSessionState.Connected, coordinator.Snapshot!.State);
+        await WaitForStateAsync(coordinator, MediaSessionState.Reconnecting);
+        Assert.Equal(MediaSessionState.Reconnecting, coordinator.Snapshot!.State);
         var stop = await coordinator.StopAsync(CancellationToken.None);
         Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
     }
@@ -536,6 +535,91 @@ public sealed class MonitoringMediaCoordinatorTests
 
         Assert.Throws<ArgumentException>(() => harness.Create(DeviceRole.Child, peerFingerprintSha256: "not-a-sha256"));
         Assert.Throws<ArgumentException>(() => harness.Create(DeviceRole.Unknown));
+    }
+
+
+    [Fact]
+    public async Task Parent_без_первого_аудиокадра_уходит_в_reconnect_по_watchdog()
+    {
+        var harness = new Harness();
+        var connectSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        harness.Transport.ConnectHandler = _ =>
+        {
+            connectSignal.TrySetResult();
+            return Task.FromResult(Result<IRealtimeTransportSession>.Success(new FakeRealtimeTransportSession()));
+        };
+        await using var coordinator = harness.Create(DeviceRole.Parent);
+
+        var start = await coordinator.StartAsync(CancellationToken.None);
+        Assert.True(start.IsSuccess);
+        Assert.Equal(MediaSessionState.Discovering, start.Value.State);
+
+        harness.Discovery.LastSession!.AddPeer(CreatePeer());
+        await connectSignal.Task.WaitAsync(TestTimeout);
+
+        // Ни одного аудиокадра не приходит: watchdog обязан заметить «media path не подтвердился»
+        // по истечении mediaTimeout (2 с) и уйти в reconnect, а не висеть в Connected.
+        var reconnect = await WaitForStateAsyncWithTimeAsync(
+            harness.Time,
+            coordinator,
+            MediaSessionState.Reconnecting);
+
+        Assert.Equal(DeviceRole.Parent, reconnect.Role);
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+        Assert.True(stop.IsSuccess);
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+    }
+
+    [Fact]
+    public async Task MonitoringMediaSession_освобождает_codec_и_connectivity_при_dispose()
+    {
+        var harness = new Harness();
+        var coordinator = harness.Create(DeviceRole.Child);
+        var session = new MonitoringMediaSession(coordinator, harness.Codec, harness.Connectivity);
+
+        await session.DisposeAsync();
+        await session.DisposeAsync();
+
+        Assert.Equal(1, harness.Codec.DisposeCalls);
+        Assert.Equal(1, harness.Connectivity.DisposeCalls);
+    }
+
+    private static async Task<MediaSessionSnapshot> WaitForStateAsyncWithTimeAsync(
+        ManualTimeProvider time,
+        MonitoringMediaCoordinator coordinator,
+        MediaSessionState state)
+    {
+        var signal = new TaskCompletionSource<MediaSessionSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Handler(object? sender, MediaSessionSnapshot snapshot)
+        {
+            if (snapshot.State == state)
+            {
+                signal.TrySetResult(snapshot);
+            }
+        }
+
+        coordinator.SnapshotChanged += Handler;
+        try
+        {
+            if (coordinator.Snapshot is { } current && current.State == state)
+            {
+                return current;
+            }
+
+            var waitTask = signal.Task;
+            var deadline = DateTime.UtcNow + TestTimeout;
+            while (!waitTask.IsCompleted && DateTime.UtcNow < deadline)
+            {
+                time.Advance(TimeSpan.FromMilliseconds(500));
+                await Task.Delay(5);
+            }
+
+            return await waitTask.WaitAsync(TestTimeout);
+        }
+        finally
+        {
+            coordinator.SnapshotChanged -= Handler;
+        }
     }
 
     private static DiscoveredPeer CreatePeer() => new(

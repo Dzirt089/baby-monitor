@@ -34,13 +34,13 @@ docs/operations/device-test-checklist-v0.2.0.md). **005 phase 2** реализо
 media/audio + FGS/UI интеграция) и готовится к v0.3.0; device-прогон слышимости/reconnect/battery —
 владельцем на Huawei nova 13 Pro и Huawei nova Y90 (чек-лист v0.3.0), adb пока недоступен.
 
-**Следующий крупный этап — 005 phase 2**: design-ADR-0007 вариант A (mutual TLS + pinning
-self-signed ECDSA identity, media — SIPSorcery DTLS-SRTP) и Application-порты аудио/signaling
-подготовлены на ветке 005 phase 2; далее реализация signaling/media/AudioRecord/AudioTrack →
-v0.3.0 и device-проверка слышимости владельцем.
+**005 phase 2** (PR #16): signaling/TLS+pinning/identity assertion, SIPSorcery media Opus/DTLS-SRTP,
+Android audio adapters, Application coordinator + FGS/UI интеграция — реализованы; независимый
+security review — APPROVE, MEDIUM-замечания закрыты (media path absent до первого кадра, честные
+UI-строки, heartbeat/telemetry — в 007). После зелёного CI — merge → v0.3.0 → device-прогон
+слышимости/reconnect/battery владельцем (Huawei nova 13 Pro + Huawei nova Y90, adb недоступен).
 
-**Дальше**: 005 phase 2 (media/signaling, ADR-0007 вариант A) разблокируется после merge PR 005
-phase 2 (design/порты уже подготовлены); устройства владельца доступны для device-проверок после
-v0.3.0. 007/008 требуют результатов device-прогонов и
-явного подтверждения владельца по signing/secrets/видимости/публичному релизу; major-версия,
-удаление тегов/релизов/веток — только с разрешения владельца.
+**Дальше**: 007 (control heartbeat/ParentLossAlarm, telemetry counters, OEM/Doze/TalkBack, 8h soak,
+battery, 100 циклов reconnect) и 008 (release readiness, public visibility) — только после результатов
+device-прогона 0.3.0 и явного подтверждения владельца по signing/secrets/видимости/публичному
+релизу; major-версия, удаление тегов/релизов/веток — только с разрешения владельца.

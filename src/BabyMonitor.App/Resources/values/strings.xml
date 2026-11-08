@@ -6,7 +6,7 @@
     <string name="role_note">Выберите роль этого устройства. Ребёнок передаёт звук, родитель слушает. Роль можно сменить только остановив мониторинг.</string>
     <string name="role_child_button">Я ребёнок</string>
     <string name="role_parent_button">Я родитель</string>
-    <string name="role_media_note">Передача звука работает после сопряжения двух устройств в одной Wi-Fi сети (v0.3.0+). Приложение не является медицинским изделием.</string>
+    <string name="role_media_note">Передача звука добавлена в v0.3.0; работоспособность на двух устройствах ещё не подтверждена. Приложение не является медицинским изделием.</string>
 
     <string name="monitoring_label">Мониторинг</string>
     <string name="monitoring_title_child">Режим ребёнка</string>
@@ -15,7 +15,7 @@
     <string name="monitoring_start">Запустить мониторинг</string>
     <string name="monitoring_stop">Остановить</string>
     <string name="monitoring_back">Назад</string>
-    <string name="monitoring_media_note">Звук идёт от детского устройства к родительскому по локальной сети; интернет не требуется.</string>
+    <string name="monitoring_media_note">Передача звука добавлена в v0.3.0; слышимость на двух устройствах ещё не подтверждена — проверьте перед использованием.</string>
     <string name="monitoring_unexpected_error">Не удалось выполнить операцию. Повторите позже.</string>
     <string name="monitoring_state_initial">Не запущено</string>
     <string name="monitoring_state_starting">Запуск…</string>
@@ -86,7 +86,7 @@
     <string name="pairing_forget_confirm_negative">Отмена</string>
     <string name="pairing_repair">Сопрячь заново</string>
     <string name="pairing_skip">Продолжить без сопряжения</string>
-    <string name="pairing_media_note">Сопряжение выполняется офлайн через QR. Передача звука по локальной сети появляется в v0.3.0 (signaling/media).</string>
+    <string name="pairing_media_note">Сопряжение выполняется офлайн через QR. Передача звука добавлена в v0.3.0; работоспособность на двух устройствах ещё не подтверждена.</string>
     <string name="pairing_back">Назад</string>
     <string name="pairing_error_format">{0}: {1}</string>
     <string name="pairing_unexpected_error">Не удалось выполнить операцию сопряжения. Повторите позже.</string>

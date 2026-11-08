@@ -128,9 +128,9 @@ Parent не запрашивает RECORD_AUDIO. При перегрузке с�
 - [x] AC-001: Domain КА + переходы/инварианты покрыты unit-тестами (phase 1).
 - [x] AC-002: ReconnectPolicy (рост, cap, jitter, детерминизм) покрыт тестами (phase 1).
 - [x] AC-003: Health monitor и ParentLossAlarm покрыты тестами с fake TimeProvider (phase 1).
-- [ ] AC-004: Signaling TLS + pinning + identity assertion реализованы, покрыты contract/security
+- [x] AC-004 (реализовано+тесты; Android SslStream путь — device): Signaling TLS + pinning + identity assertion реализованы, покрыты contract/security
   тестами (недоверенный peer/replay/version/downgrade); без cleartext и отключения TLS validation.
-- [ ] AC-005: Media adapter SIPSorcery (Opus/DTLS-SRTP) за IRealtimeTransport проходит общий
+- [x] AC-005 (реализовано+тесты; реальный Android media/audio — device): Media adapter SIPSorcery (Opus/DTLS-SRTP) за IRealtimeTransport проходит общий
   contract suite; audio adapters (AudioRecord/AudioTrack) реализуют Application-порты и role
   invariants (Child send-only, Parent receive-only).
 - [ ] AC-006: End-to-end сессия «Parent подключается к Child и слышит звук» подтверждена владельцем
@@ -139,6 +139,8 @@ Parent не запрашивает RECORD_AUDIO. При перегрузке с�
   звонки/audio focus, смена IP, OEM/Doze — **BLOCKED: частично** (2 устройства владельца после
   v0.3.0; полная OEM-матрица — 007).
 - [-] AC-008: Battery drain/CPU/temperature/allocations — после device-прогонов (007).
+- [ ] AC-009 (follow-up 007): control heartbeat (ping/peers) и ParentLossAlarm интеграция в media-сеанс;
+  media path absent до первого аудиокадра уже детектируется watchdog-ом (Degraded/Reconnecting).
 
 ## Out of Scope
 

@@ -54,7 +54,16 @@ internal static class SignalingFrameCodec
         await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    internal static async Task<SignalingFrame> ReadAsync(Stream stream, CancellationToken cancellationToken)
+    /// <param name="stream">Поток signaling.</param>
+    /// <param name="cancellationToken">Отмена чтения.</param>
+    /// <param name="maxPayloadOverride">
+    /// Дополнительный жёсткий лимит payload (например, до проверки identity разрешено читать только
+    /// control-размер, а не 256 KiB SDP); при null используется лимит типа кадра.
+    /// </param>
+    internal static async Task<SignalingFrame> ReadAsync(
+        Stream stream,
+        CancellationToken cancellationToken,
+        int? maxPayloadOverride = null)
     {
         ArgumentNullException.ThrowIfNull(stream);
 
@@ -70,6 +79,11 @@ internal static class SignalingFrameCodec
         if (maxPayload < 0)
         {
             throw new SignalingProtocolException("Неизвестный тип signaling-кадра.");
+        }
+
+        if (maxPayloadOverride is { } overrideLimit && overrideLimit < maxPayload)
+        {
+            maxPayload = overrideLimit;
         }
 
         if (payloadLength > (uint)maxPayload)

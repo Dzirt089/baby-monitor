@@ -182,6 +182,15 @@ public sealed class MonitoringForegroundService : Service
 
     private void StartMediaSession(DeviceRole role)
     {
+        lock (_sync)
+        {
+            if (_mediaSession is not null)
+            {
+                // Защита от гонки повторного ActionStart: активный сеанс не осиротеваем.
+                return;
+            }
+        }
+
         if (Application is not IMonitoringMediaSessionFactoryProvider provider)
         {
             PublishMediaFailure(role, new Error(
