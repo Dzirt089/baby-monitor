@@ -109,8 +109,8 @@
   увеличить/ждать до deadline попытки (LOW PR #24).
 - [x] T051 (v0.4.5) Async-iterator cleanup: non-OCE pending MoveNext не маскирует typed ошибку,
   dispose best-effort; regression-тест.
-- [ ] T053 Auto-reconnect после кратковременного Wi-Fi flap: 10 s off → оба терминально Failed за 139 s,
-  ручной рестарт обязателен; network-aware wait/сброс attempts/ожидание connectivity до исчерпания policy.
+- [x] T053 (v0.4.7, device-retest pending) Auto-reconnect после Wi-Fi flap: LAN-gate + network-loss
+  retries (60 s/250 ms/5), MaxAttempts не расходуется; tests +5; device evidence v0.4.4 FAIL → retest v0.4.7.
 - [ ] T052 Bounded initial DoS: 5 подряд rogue-отказов (Child) / rogue mDNS candidates (Parent) всё ещё
   дают initial FailStartup — documented limitation; рассмотреть продолжать Advertising/сбрасывать окно
   (H3). Device evidence v0.4.4: 3 rogue → Connecting, 5 rogue → Failed tls_failure.
@@ -126,6 +126,7 @@
 | Дата | Проверка | Результат |
 |---|---|---|
 | 2026-11-08 | v0.4.4 device rogue/flood (single nova Y90) | 3 rogue TCP connect+close → Child Connecting (retry/cooldown), 5 → terminal FailStartup tls_failure (bounded, residual DoS H3/T052); crash buffer пуст; rate-limit cooldown device-observation PASS-partial |
+| 2026-11-08 | v0.4.7 gates | 560/560 (Domain 38, Application 291, Infrastructure 172, Architecture 59); Debug/Release 0 warnings; format clean; vuln OK; T053 network-aware reconnect |
 | 2026-11-08 | v0.4.6 gates | 555/555 (Domain 38, Application 286, Infrastructure 172, Architecture 59); Debug/Release 0 warnings; format clean; vuln OK; T048 A/B; v0.4.5 tag orphan (Release failed) — v0.4.6 actual |
 | 2026-11-08 | v0.4.5 gates | 552/552 (Domain 38, Application 283, Infrastructure 172, Architecture 59); Debug/Release 0 warnings; format clean; vuln OK; T048/T049/T051 |
 | 2026-11-08 | v0.4.4 two-device T040/T043 (Huawei pair) | MediaFlowing PASS; live telemetry LIVE (↑14775/↓14827, uptime 5:00/5:12); Wi-Fi off → alarm ≤5 s, terminal Failed signaling_timeout + standalone alarm id1004 importance HIGH category err PASS; screen-off 90 s PASS; recovery после ручного рестарта PASS; **T053 auto-reconnect 10 s flap FAIL** (both terminal Failed за 139 s); sound/vibration/DND/calls/BT/TalkBack/100 cycles/8h — NOT RUN |

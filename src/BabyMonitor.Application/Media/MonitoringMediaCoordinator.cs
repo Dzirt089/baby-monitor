@@ -65,6 +65,18 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     /// <summary>Верхняя граница ожидания публикации Starting в Stop (защита от блокирующего подписчика).</summary>
     private static readonly TimeSpan StartupPublicationTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// Сколько reconnect-loop ждёт восстановления LAN, не расходуя MaxAttempts/backoff (T053):
+    /// короткий Wi-Fi flap (10–30 s) не должен приводить к terminal Failed.
+    /// </summary>
+    private static readonly TimeSpan NetworkWaitTimeout = TimeSpan.FromSeconds(60);
+
+    /// <summary>Период поллинга LAN-состояния во время ожидания восстановления сети.</summary>
+    private static readonly TimeSpan NetworkWaitPollPeriod = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>Лимит последовательных network-loss setup-отказов без расхода MaxAttempts.</summary>
+    private const int MaxNetworkLossRetries = 5;
+
     private readonly object _sync = new();
 
     /// <summary>
@@ -598,10 +610,26 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     private async Task RunSessionAsync(CancellationToken runToken)
     {
         var retryIndex = 0;
+        var networkLossRetries = 0;
 
         while (true)
         {
             runToken.ThrowIfCancellationRequested();
+
+            // T053: пока LAN-сеть недоступна, attempt не запускаем (Child не поднимает
+            // listener/advertise, Parent не тратит candidates) и НЕ расходуем MaxAttempts/backoff.
+            // Ждём восстановления сети bounded: короткий Wi-Fi flap переживается без terminal Failed.
+            if (!await IsLanNetworkAvailableAsync(runToken))
+            {
+                if (!await WaitForLanNetworkAsync(runToken, publishReconnecting: retryIndex > 0))
+                {
+                    FailUnrecoveredNetwork(retryIndex);
+                    return;
+                }
+
+                retryIndex = 0;
+                networkLossRetries = 0;
+            }
 
             if (retryIndex > 0)
             {
@@ -626,6 +654,23 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
 
             if (outcome.Kind is AttemptKind.SetupFailure)
             {
+                if (IsNetworkLossError(outcome.Error!))
+                {
+                    // Сеть пропала во время setup (wifi_unavailable/network_unavailable): это не
+                    // исчерпание политики, а сетевой флэп. Ждём восстановления сети bounded и
+                    // начинаем backoff заново, не расходуя MaxAttempts (T053).
+                    networkLossRetries++;
+                    if (networkLossRetries > MaxNetworkLossRetries
+                        || !await WaitForLanNetworkAsync(runToken, publishReconnecting: retryIndex > 0))
+                    {
+                        FailUnrecoveredNetwork(retryIndex);
+                        return;
+                    }
+
+                    retryIndex = 0;
+                    continue;
+                }
+
                 if (retryIndex == 0)
                 {
                     FailStartup(outcome.Error!);
@@ -641,6 +686,8 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
 
                 continue;
             }
+
+            networkLossRetries = 0;
 
             // Первичный отказ самого аудио-устройства (микрофон/динамик/буфер) — это не сетевой
             // разрыв: сообщаем typed error, не запуская reconnect-цикл. Сетевые потери (включая
@@ -2283,6 +2330,61 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             or RealtimeTransportErrorCodes.SignalingTimeout
             or RealtimeTransportErrorCodes.MediaPathAbsent
             or RealtimeTransportErrorCodes.MediaFlowLost;
+
+    /// <summary>
+    /// Ошибки setup, означающие потерю локальной сети (а не отказ peer-а/policy): такие попытки
+    /// не расходуют MaxAttempts, а ждут восстановления connectivity (T053).
+    /// </summary>
+    private static bool IsNetworkLossError(Error error) =>
+        error.Code is RealtimeTransportErrorCodes.NetworkUnavailable
+            or DiscoveryErrorCodes.WifiUnavailable;
+
+    private static Error CreateNetworkWaitTimeoutError() => new(
+        RealtimeTransportErrorCodes.NetworkUnavailable,
+        "Сеть недоступна дольше допустимого: не удалось дождаться восстановления подключения.");
+
+    private async Task<bool> IsLanNetworkAvailableAsync(CancellationToken cancellationToken)
+    {
+        var snapshot = await _connectivity.GetSnapshotAsync(cancellationToken);
+        return snapshot.IsSuccess && snapshot.Value.HasLanNetwork;
+    }
+
+    private async Task<bool> WaitForLanNetworkAsync(CancellationToken runToken, bool publishReconnecting)
+    {
+        if (publishReconnecting)
+        {
+            // UI должен видеть «переподключаемся», а не зависший MediaFlowing; для первичного
+            // запуска молчим, чтобы не публиковать промежуточные состояния до Advertising.
+            PublishDegraded(DisconnectReason.NetworkChanged);
+            PublishReconnecting();
+        }
+
+        var deadline = _timeProvider.GetUtcNow() + NetworkWaitTimeout;
+        while (_timeProvider.GetUtcNow() < deadline)
+        {
+            await Task.Delay(NetworkWaitPollPeriod, _timeProvider, runToken);
+            if (await IsLanNetworkAvailableAsync(runToken))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void FailUnrecoveredNetwork(int retryIndex)
+    {
+        var error = CreateNetworkWaitTimeoutError();
+        if (retryIndex == 0)
+        {
+            FailStartup(error);
+            return;
+        }
+
+        PublishDegraded(DisconnectReason.NetworkChanged);
+        PublishReconnecting();
+        FailReconnect(error);
+    }
 
     private static bool IsDeviceAudioFailure(Error error) =>
         error.Code is AudioErrorCodes.CaptureUnavailable
