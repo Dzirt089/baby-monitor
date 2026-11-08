@@ -110,6 +110,11 @@ Privacy: device test — без аудиоданных; alarm-нотификац
 
 **Вывод:** T053 фикс подтверждён на устройстве (auto-reconnect переживает 10 s Wi-Fi flap).
 
+**Ограничение доступа (актуально):** после прогона оба устройства оказались заблокированы PIN/биометрией;
+автоматизировать дальнейшие device-проверки (Home/background FGS, clean Stop, media-only alarm,
+sound/vibration/DND, calls/BT/TalkBack, 100 cycles, 8h soak) без разблокировки владельцем нельзя.
+Попытка Home/background теста дала NOT RUN (screens locked); остальная матрица — pending owner unlock/времени.
+
 ### v0.4.4 rogue/flood single-device (nova Y90, no Parent, 2026-11-08): versionCode 404 install PASS;
 Child Advertising/Media Connecting, listener 0.0.0.0:47800. Host (192.168.3.x) сделал 3 rogue TCP
 connect+close → Child остался Connecting (retry Accept/cooldown), notification «Подключение…», crash
