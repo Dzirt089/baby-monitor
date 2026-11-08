@@ -48,13 +48,14 @@
 - Trusted store не восстанавливается через backup (llowBackup=false); integrity/rollback binding — 005.
 - Ротация/миграция identity alias — 007/008.
 
-- End-to-end на реальных устройствах (QR scan, Keystore OEM variations, screen capture/OS-level
-  malware) не проверены: **BLOCKED: нет реальных устройств**.
+- End-to-end pairing на двух реальных Huawei — PASS 2026-11-08 (paste-fallback, code совпал,
+  trusted store); не проверены screen capture/OS-level malware, camera↔camera и Keystore OEM
+  variations — 007.
 
 ## 006 phase 2: офлайн-обмен QR через экраны
 
-Сетевой signaling-канал (005 phase 2) BLOCKED, поэтому первичное сопряжение по 004-протоколу
-завершается out-of-band: Child показывает QR приглашения, Parent сканирует его и показывает QR
+Сетевой signaling реализован в 005 phase 2 (v0.3.1, ADR-0007 Accepted), но первичное сопряжение по
+004-протоколу сознательно остаётся out-of-band (продукт-решение: меньше поверхности атаки до доверия): Child показывает QR приглашения, Parent сканирует его и показывает QR
 ответа, Child сканирует ответ. Оба устройства независимо выводят verification code, пользователи
 сравнивают и подтверждают.
 
@@ -105,8 +106,8 @@
 
 ### Residual risks (BLOCKED)
 
-- Реальный QR-обмен камера↔камера на двух устройствах, различные OEM/камеры, яркость/размер экрана
-  и TalkBack не проверены: **BLOCKED: нет реальных устройств**.
+- Реальный QR-обмен камера↔камера не выполнялся (NOT RUN; использован paste-fallback PASS 2026-11-08);
+  различные OEM/камеры, яркость/размер экрана и TalkBack — 007.
 - Скриншоты/OS-level malware и компрометация процесса — вне scope 006 (007/008 hardening).
 
 ## 005 phase 2: signaling и media (ADR-0007 Accepted, вариант A)

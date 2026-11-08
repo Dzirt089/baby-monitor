@@ -10,9 +10,9 @@
 ## Контекст
 
 006 phase 2 добавляет pairing UI по 004-протоколу: Child показывает QR приглашения, Parent сканирует
-его и показывает QR ответа, Child сканирует ответ. Сетевой signaling-канал (005 phase 2) остаётся
-**BLOCKED** (ADR-0007 Proposed, нет устройств), поэтому обмен выполняется out-of-band через
-физические экраны. Нужны:
+его и показывает QR ответа, Child сканирует ответ. Сетевой signaling реализован в 005 phase 2
+(ADR-0007 Accepted, v0.3.1), но первичное сопряжение остаётся out-of-band через физические экраны
+(продукт-решение). Нужны:
 
 - генерация QR из строки payload (приглашение ~400–500 символов base64url; ответ ~350 символов);
 - декодирование QR с камеры на устройстве (Camera2, API 24+), без облака/Google Play Services;
@@ -61,9 +61,9 @@ Android platform API не содержит QR encoder/decoder. CameraX/AndroidX 
 - APK увеличивается на managed-сборку ZXing; Release/linker поведение проверяется в CI.
 - В manifest появляется runtime-permission CAMERA (используется только pairing-экраном по явному
   действию; код камеры — только Platform.Android.Qr).
-- Реальный QR decode на камерах разных OEM не проверен: **BLOCKED: нет реальных устройств**; на
-  эмуляторе проверяется открытие/закрытие камеры и paste-fallback; decoding correctness
-  проверяется host-side spike и unit-тестами codecs.
+- Реальный QR decode на камерах разных OEM не проверен (NOT RUN; paste-fallback PASS 2026-11-08);
+  на эмуляторе проверены открытие/закрытие камеры и paste-fallback; decoding correctness —
+  host-side spike и unit-тесты codecs; camera↔camera/OEM — 007.
 - Собственная криптография не добавляется: QR — только транспорт/кодирование публичных данных и
   короткоживущего token; проверки подписей/ECDH остаются в Application (004).
 

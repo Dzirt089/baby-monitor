@@ -92,7 +92,8 @@ NSD, foreground service, UI, автоподключение/reconnect-полит
 
 ## Dependencies & Assumptions
 
-- 2 реальных Android-устройства в одной Wi-Fi LAN для phase 3 (пока не предоставлены).
+- 2 реальных Android-устройства в одной Wi-Fi LAN для phase 3 предоставлены: Huawei nova Y90 +
+  nova 13 Pro; device pass (MediaFlowing, owner-confirmed звук) — 2026-11-08, расширенные метрики — 007.
 - SIPSorcery принят (ADR-0005 Accepted 2026-11-07): pin >= 10.0.17 в Directory.Packages.props,
   THIRD-PARTY-NOTICES.md; PackageReference и адаптер добавляются в 003/005 только в Infrastructure.
 - Emulator (API 35) допускается только для smoke компиляции/упаковки, не для audio-метрик.

@@ -9,7 +9,7 @@
 - [x] CHK-006 Cancellation/cleanup (NsdManager, listeners, multicast lock) зафиксированы в контракте.
 - [x] CHK-007 Platform-типы не протекают в Application; проверяется architecture tests.
 - [x] CHK-008 Ошибки типизированы и различимы (wifi/service/resolve/permission/invalid_txt).
-- [x] CHK-009 Device matrix честно BLOCKED (нет устройств); emulator не выдан за device-тест.
+- [x] CHK-009 Device matrix: discovery/connect на 2 реальных Huawei PASS 2026-11-08; guest/AP isolation/VLAN — 007; emulator за device-тест не выдаётся.
 - [x] CHK-010 Трассируемость FR → tasks.md.
 
 ## Review Record

@@ -2,7 +2,7 @@
 
 **Feature Branch**: 003-foreground-monitoring
 **Created**: 2026-11-07
-**Status**: Done (2026-11-08). Контракт + Android service/notification; device-проверки на 2 Huawei/Android 12: FGS Child/Parent, «Звук передаётся», screen-off 12 с, Stop снимает уведомление/AudioTrack. Android 13+/14+/Doze — 007.
+**Status**: Done (с оговорками, 2026-11-08): контракт + Android service/notification; device-проверки на 2 Huawei/Android 12: FGS Child/Parent, «Звук передаётся», screen-off 12 с, Stop снимает уведомление/AudioTrack. Android 13+/14+/Doze — 007.
 **Input**: AGENTS.md разделы 9, 11, 20; roadmap 003
 
 ## Контекст

@@ -77,8 +77,8 @@ media должны аутентифицироваться по этой identity
 
 - [x] AC-001: Application-контракты и протокол реализованы, сборка без warnings.
 - [x] AC-002: Unit-тесты протокола (happy/replay/expiry/tamper/QR/код/отказ/SPKI/версия) зелёные.
-- [ ] AC-003: Android Keystore identity adapter + trusted store adapter компилируются; architecture
-  tests подтверждают отсутствие Android-типов в Application.
+- [x] AC-003: Android Keystore identity adapter + trusted store adapter реализованы; architecture
+  tests подтверждают отсутствие Android-типов в Application; device pass 2026-11-08.
 - [x] AC-004: QR/ошибки не содержат секретов; тесты проверяют отсутствие private key material.
 - [x] AC-005: Полное сопряжение двух реальных устройств — PASS 2026-11-08 (QR paste-fallback,
   одинаковый code, trusted store обоих; camera↔camera — 007).
@@ -92,7 +92,8 @@ Emulator smoke pairing UI выявил интероп-дефект, не вид�
 `pairing.invalid_signature` при валидных ключах. Исправление: `PairingCrypto.TryVerifySignature`
 принимает обе стандартные кодировки (BCL overloads `DSASignatureFormat`), семантика протокола не
 меняется; добавлены regression tests `PairingSignatureInteropTests` (DER Child, DER Parent,
-обе стороны DER, tampered DER). Device E2E по-прежнему BLOCKED (нет реальных устройств).
+обе стороны DER, tampered DER). Device E2E — PASS 2026-11-08 на двух Huawei (paste-fallback,
+  одинаковый code, trusted store); camera↔camera — 007.
 
 ## Out of Scope
 
