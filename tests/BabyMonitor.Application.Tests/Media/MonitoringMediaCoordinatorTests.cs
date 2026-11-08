@@ -1491,6 +1491,137 @@ public sealed class MonitoringMediaCoordinatorTests
     }
 
     [Fact]
+    public async Task Stop_публикует_строгий_порядок_Starting_Stopping_Stopped_без_событий_после_terminal()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+        var states = new ConcurrentQueue<MediaSessionState>();
+        coordinator.SnapshotChanged += (_, snapshot) => states.Enqueue(snapshot.State);
+
+        var start = await coordinator.StartAsync(CancellationToken.None);
+        Assert.True(start.IsSuccess);
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+
+        var ordered = states.ToArray();
+        Assert.Equal(MediaSessionState.Starting, ordered[0]);
+        var stoppingIndex = Array.IndexOf(ordered, MediaSessionState.Stopping);
+        var stoppedIndex = Array.IndexOf(ordered, MediaSessionState.Stopped);
+        Assert.True(
+            stoppingIndex > 0 && stoppedIndex > stoppingIndex,
+            "Ожидался строгий порядок Starting < Stopping < Stopped, факт: " + string.Join(",", ordered));
+        Assert.Equal(MediaSessionState.Stopped, ordered[^1]);
+
+        var countAfterTerminal = states.Count;
+        harness.Time.Advance(TimeSpan.FromSeconds(5));
+        await Task.Delay(20);
+        Assert.Equal(countAfterTerminal, states.Count);
+    }
+
+    [Fact]
+    public async Task Стресс_конкурентного_Stop_после_Starting_сохраняет_порядок_и_не_публикует_после_terminal()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+        var states = new ConcurrentQueue<MediaSessionState>();
+
+        for (var iteration = 0; iteration < 100; iteration++)
+        {
+            var startIndex = states.Count;
+            using var startingEntered = new ManualResetEventSlim(false);
+            using var releaseStarting = new ManualResetEventSlim(false);
+            EventHandler<MediaSessionSnapshot> handler = (_, snapshot) =>
+            {
+                if (snapshot.State is MediaSessionState.Starting)
+                {
+                    startingEntered.Set();
+                    releaseStarting.Wait(TimeSpan.FromSeconds(5));
+                }
+
+                states.Enqueue(snapshot.State);
+            };
+            coordinator.SnapshotChanged += handler;
+            try
+            {
+                var startTask = Task.Run(() => coordinator.StartAsync(CancellationToken.None));
+                Assert.True(
+                    startingEntered.Wait(TimeSpan.FromSeconds(5)),
+                    "iteration " + iteration + ": Starting handler не вызван");
+                var stopTask = coordinator.StopAsync(CancellationToken.None);
+                releaseStarting.Set();
+                await Task.WhenAll(startTask, stopTask).WaitAsync(TimeSpan.FromSeconds(10));
+
+                var slice = states.Skip(startIndex).ToArray();
+                Assert.True(
+                    slice.Length >= 3,
+                    "iteration " + iteration + ": мало событий: " + string.Join(",", slice));
+                Assert.Equal(MediaSessionState.Starting, slice[0]);
+                var stopping = Array.IndexOf(slice, MediaSessionState.Stopping);
+                var stopped = Array.IndexOf(slice, MediaSessionState.Stopped);
+                Assert.True(
+                    stopping > 0 && stopped > stopping,
+                    "iteration " + iteration + " порядок: " + string.Join(",", slice));
+                Assert.Equal(MediaSessionState.Stopped, slice[^1]);
+            }
+            finally
+            {
+                coordinator.SnapshotChanged -= handler;
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Stop_при_блокирующемся_Starting_подписчике_завершается_bounded()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+        using var startingEntered = new ManualResetEventSlim(false);
+        using var releaseStarting = new ManualResetEventSlim(false);
+        coordinator.SnapshotChanged += (_, snapshot) =>
+        {
+            if (snapshot.State is MediaSessionState.Starting)
+            {
+                startingEntered.Set();
+                releaseStarting.Wait(TimeSpan.FromSeconds(30));
+            }
+        };
+
+        var startTask = Task.Run(() => coordinator.StartAsync(CancellationToken.None));
+        Assert.True(startingEntered.Wait(TimeSpan.FromSeconds(5)));
+        var stopTask = coordinator.StopAsync(CancellationToken.None);
+
+        try
+        {
+            // Подписчик не отпущен: Stop обязан сам принудительно открыть gate по
+            // TimeProvider-таймауту и завершиться bounded (MEDIUM-B PR #26).
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (!stopTask.IsCompleted)
+            {
+                if (DateTime.UtcNow > deadline)
+                {
+                    throw new TimeoutException("Stop завис при блокирующемся Starting-подписчике.");
+                }
+
+                harness.Time.Advance(TimeSpan.FromSeconds(1));
+                await Task.Delay(5);
+            }
+
+            var stop = await stopTask.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+        }
+        finally
+        {
+            releaseStarting.Set();
+        }
+
+        var start = await startTask.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(start.IsSuccess);
+    }
+
+    [Fact]
     public async Task Parent_walk_non_OCE_ошибка_enumeration_даёт_adapter_failure_и_освобождает_discovery()
     {
         var harness = new Harness();

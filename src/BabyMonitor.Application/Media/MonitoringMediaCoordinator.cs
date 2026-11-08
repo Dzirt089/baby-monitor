@@ -66,6 +66,14 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     private static readonly TimeSpan StartupPublicationTimeout = TimeSpan.FromSeconds(5);
 
     private readonly object _sync = new();
+
+    /// <summary>
+    /// Сериализует публикацию Stopping (StopAsync) и терминального снимка (FinalizeRunAsync),
+    /// чтобы порядок Starting→Stopping→Stopped не нарушался при конкурентном Stop (T048).
+    /// Семафор намеренно не освобождается в Dispose: вызовы после Dispose не должны бросать.
+    /// </summary>
+    private readonly SemaphoreSlim _terminalPublicationGate = new(1, 1);
+
     private readonly DeviceRole _role;
     private readonly IPeerDiscovery _discovery;
     private readonly IPeerAdvertiser _advertiser;
@@ -402,24 +410,39 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             CancelQuietly(runCts);
         }
 
-        if (startingGate is not null)
+        if (!alreadyTerminal)
         {
+            // T048 (MEDIUM-A/B PR #26): Stopping публикуется под семафором, который держит и
+            // FinalizeRunAsync для terminal-снимка. Семафор берём ДО ожидания gate, чтобы
+            // RunAsync не мог опубликовать Stopped раньше Stopping; по TimeProvider-таймауту gate
+            // принудительно открывается, чтобы Stop оставался bounded даже при подписчике, который
+            // не вернул управление (нарушение контракта SnapshotChanged).
+            await _terminalPublicationGate.WaitAsync(cancellationToken);
             try
             {
-                // T048: Stopping не должен публиковаться раньше Starting, даже если конкурентный
-                // Stop попал в окно между освобождением _sync и вызовом handler-а Starting.
-                // Таймаут защищает от вечного ожидания, если подписчик нарушил контракт.
-                await startingGate.Task.WaitAsync(StartupPublicationTimeout, cancellationToken);
-            }
-            catch (TimeoutException)
-            {
-                // Подписчик Starting не завершил публикацию; не подвешиваем Stop навсегда.
-            }
-        }
+                if (startingGate is not null)
+                {
+                    await AwaitStartingPublicationOrForceAsync(startingGate, cancellationToken);
+                }
 
-        if (stoppingSnapshot is not null)
-        {
-            stoppingHandler?.Invoke(this, stoppingSnapshot);
+                var publishStopping = false;
+                lock (_sync)
+                {
+                    // RunAsync мог терминально завершиться (например, отменённый setup): stale
+                    // Stopping после terminal не публикуем.
+                    publishStopping = stoppingSnapshot is not null
+                        && _snapshot is { IsTerminal: false };
+                }
+
+                if (publishStopping)
+                {
+                    stoppingHandler?.Invoke(this, stoppingSnapshot!);
+                }
+            }
+            finally
+            {
+                _terminalPublicationGate.Release();
+            }
         }
 
         if (runTask is not null && !runTask.IsCompleted)
@@ -448,6 +471,27 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
 
             return Result<MediaSessionSnapshot>.Success(CreateSnapshotLocked(snapshot.State, snapshot.Error));
         }
+    }
+
+    private async Task AwaitStartingPublicationOrForceAsync(
+        TaskCompletionSource startingGate,
+        CancellationToken cancellationToken)
+    {
+        using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var timeoutTask = Task.Delay(StartupPublicationTimeout, _timeProvider, waitCts.Token);
+        var completed = await Task.WhenAny(startingGate.Task, timeoutTask);
+        waitCts.Cancel();
+        if (completed == startingGate.Task)
+        {
+            await startingGate.Task;
+            return;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Подписчик Starting не вернул управление дольше StartupPublicationTimeout: принудительно
+        // открываем gate, чтобы RunAsync завершился и Stop не завис (MEDIUM-B PR #26).
+        startingGate.TrySetResult();
     }
 
     /// <summary>
@@ -1403,6 +1447,21 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     }
 
     private async Task FinalizeRunAsync(Error? unexpected)
+    {
+        // Публикация терминального снимка сериализуется с публикацией Stopping (StopAsync):
+        // порядок Starting→Stopping→Stopped и отсутствие событий после terminal (T048 MEDIUM-A).
+        await _terminalPublicationGate.WaitAsync();
+        try
+        {
+            FinalizeRunCore(unexpected);
+        }
+        finally
+        {
+            _terminalPublicationGate.Release();
+        }
+    }
+
+    private void FinalizeRunCore(Error? unexpected)
     {
         // Терминальный Stopped не должен показывать тревогу; для Parent+Failed флаг форсируется
         // при построении снимка. Reset вне _sync: AlarmChanged-обработчик сам берёт _sync.

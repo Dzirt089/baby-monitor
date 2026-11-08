@@ -31,10 +31,17 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 
 ### Verification
 
-- Debug/Release build 0 warnings; format clean; vuln scan чистый; тесты **552/552**
-  (Domain 38, Application 283, Infrastructure 172, Architecture 59); независимое review — после PR.
-- Device: v0.4.5 retest pending; v0.4.4 rogue/flood single-device PASS-partial; двухдевайсовые
-  T040/T043 — после возвращения Parent-телефона.
+- Debug/Release build 0 warnings; format clean; vuln scan чистый; тесты **555/555**
+  (Domain 38, Application 286, Infrastructure 172, Architecture 59); независимое review — после PR.
+- **Device v0.4.4 two-device (T040/T043, partial)**: обе Huawei на adb; MediaFlowing обе; метрики
+  Diagnostics живые (Child ↑14775↓0 uptime 5:00, Parent ↑0↓14827 uptime 5:12); Wi-Fi Child off → Parent
+  alarm ≤5 s (high-importance notification id=1004, channel parent_alarm, importance HIGH, category=err),
+  после bounded retries terminal Failed realtime.signaling_timeout, FGS остановлен, standalone alarm
+  сохраняется; Child Failed typed discovery.wifi_unavailable; screen-off 90 s — обе flowing без crash;
+  после возврата Wi-Fi и ручного рестарта — MediaFlowing обе.
+- **Известный дефект (T053)**: auto-reconnect после 10 s Wi-Fi off не восстановился за 139 s — оба сеанса
+  терминально Failed (ручной рестарт); нужно network-aware ожидание/сброс attempts. Sound/vibration/DND
+  alarm, calls/BT/TalkBack, 100 cycles, 8h soak — NOT RUN.
 
 ## [0.4.4] - 2026-11-08
 
