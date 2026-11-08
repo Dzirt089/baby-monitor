@@ -14,6 +14,25 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 фоновой сессии на экране выбора роли) и 008 (release readiness, owner-gated публикация/лицензия/
 дистрибуция).
 
+## [0.4.3] - 2026-11-08
+
+### Fixed
+
+- **Инверсия порядка событий Starting/Advertising**: RunAsync мог опубликовать Advertising/Connected
+  раньше, чем StartAsync вызывал обработчик Starting (Task.Run запускался до invoke). Это давало
+  flaky-падение Release workflow v0.4.2 на тесте SnapshotChanged и могло показать UI состояние
+  Starting после Advertising. Теперь RunAsync ждёт gate, который открывается только после вызова
+  обработчика Starting (в finally — исключение подписчика не подвешивает run); Stop/Dispose/
+  cancellation семантика сохранена.
+- Regression-тесты: Starting при медленном подписчике приходит первым; Stop во время публикации
+  Starting не зависает.
+
+### Verification
+
+- Debug/Release build 0 warnings; format clean; vuln scan чистый; тесты **538/538**
+  (Domain 38, Application 275, Infrastructure 167, Architecture 58); Application.Tests прогнаны
+  и в Debug, и в Release (275/275).
+
 ## [0.4.2] - 2026-11-08
 
 ### Fixed
@@ -43,10 +62,9 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 
 ### Device status
 
-- v0.4.2 device-retest pending (оба устройства нужны для двухдевайсовой сессии; остался только
-  Child nova Y90): single-device проверка «Child без Parent остаётся Advertising» — T046;
-  live counters/terminal alarm/media-only/sound-vibration-DND — T040/T043 после возвращения второго
-  телефона. До ретеста устройство-специфичные фичи v0.4.2 не заявляются проверенными.
+- v0.4.2 **T046 single-device retest PASS** (nova Y90 без Parent): Child остаётся Running/Media Connecting
+  >40 s, без terminal signaling_timeout, crash buffer пуст. Live counters/terminal alarm/media-only/
+  sound-vibration-DND — T040/T043 после возвращения второго телефона (pending).
 
 ## [0.4.1] - 2026-11-08
 
