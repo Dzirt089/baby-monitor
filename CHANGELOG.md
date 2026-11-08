@@ -6,9 +6,13 @@
 
 ## [Unreleased]
 
-Следующая работа: 007-device-hardening по результатам device-прогонов 0.3.0 (OEM/Doze/audio
-route/TalkBack, 8h soak) и 008-release-readiness; device-подтверждение слышимости владельцем — до
-объявления приложения рабочей радионяней.
+Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 12) выполнен: pairing,
+передача звука Child→Parent, **слышимость подтверждена владельцем**, MediaFlowing, reconnect Wi-Fi,
+выключенный экран, чистый Stop — PASS; детали — docs/operations/device-test-results-2026-11-08.md.
+Дальше — 007 (heartbeat/ParentLossAlarm/telemetry, calls/audio focus, BT/наушники, 8h soak,
+100 циклов, battery без зарядки, TalkBack, camera↔camera, OEM-матрица; UX: индикация активной
+фоновой сессии на экране выбора роли) и 008 (release readiness, owner-gated публикация/лицензия/
+дистрибуция).
 
 ## [0.3.1] - 2026-11-08
 
@@ -20,10 +24,18 @@ route/TalkBack, 8h soak) и 008-release-readiness; device-подтвержден
   (например, media.no_trusted_peer) — обнаружено smoke-проверкой release APK v0.3.0 на эмуляторе.
 - Регрессионный тест на гонку StartAsync/Failed в MonitoringScreenModel.
 
+### Verified on devices
+
+- 2026-11-08, Huawei nova Y90 (Child) + Huawei nova 13 Pro (Parent), Android 12: сопряжение
+  офлайн QR (paste-fallback), одинаковый verification code, trusted store; MediaFlowing на обоих;
+  Parent AudioTrack started (USAGE_MEDIA/CONTENT_TYPE_SPEECH); **владелец подтвердил слышимость**;
+  reconnect Wi-Fi off/on → MediaFlowing; screen-off 12 с — передача продолжается; Stop снимает
+  уведомления/AudioTrack. Battery/BT/calls/TalkBack/OEM — 007 (см. device results).
+
 ## [0.3.0] - 2026-11-08
 
-**Кодовая база 005 phase 2: signaling/media/audio реализованы, но слышимость ещё НЕ подтверждена
-владельцем на двух устройствах** — приложение пока не объявляется рабочей радионяней.
+**Кодовая база 005 phase 2: signaling/media/audio реализованы; на момент релиза слышимость ещё не
+была подтверждена (подтверждена владельцем на v0.3.1, 2026-11-08).**
 
 ### Added
 

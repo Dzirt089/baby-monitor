@@ -1,5 +1,11 @@
 # Device-тест 0.3.0 (2 Android-устройства) — звук/reconnect/battery
 
+> **Частично выполнен 2026-11-08** на Huawei nova Y90 + Huawei nova 13 Pro (Android 12, v0.3.1):
+> pairing, слышимость (владелец подтвердил), MediaFlowing, reconnect Wi-Fi off/on, screen-off 12 с,
+> Stop — PASS. Не выполнены: звонки/audio focus, Bluetooth/наушники, battery без зарядки, 8h soak,
+> 100 циклов, TalkBack, camera↔camera, OEM-матрица — 007. Результаты:
+> [device-test-results-2026-11-08.md](device-test-results-2026-11-08.md).
+
 **Устройства владельца**: Huawei nova 13 Pro и Huawei nova Y90 (adb недоступен — тест ручной).
 **Цель**: подтвердить реальную слышимость Child → Parent по локальной сети, поведение при обрыве
 сети/звонке/маршруте и ориентировочный расход батареи.

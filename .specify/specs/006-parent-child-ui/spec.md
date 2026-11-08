@@ -132,9 +132,8 @@ signaling-этапе 005); при отказе/несовпадении дове
   Platform.Android; App — только Activity/XML + связка с screen models.
 - **NFR-003**: Camera2 + ImageReader на background-потоке; кадры не сохраняются; bounded обработка
   (drop frames), без утечек camera/ImageReader при Stop/Dispose/OnPause.
-- **NFR-004**: Emulator smoke: QR Child рендерится (скриншот), Parent-камера открывается без
-  падения, UI/навигация/диагностика работают, crash buffer пуст; два реальных устройства с
-  камерой — **BLOCKED: нет реальных устройств**.
+- **NFR-004**: Emulator smoke + реальные Huawei (v0.3.1): pairing paste-fallback, UI/навигация/
+  диагностика, crash buffer пуст; camera↔camera на реальных устройствах — 007.
 
 ## Acceptance Criteria
 
@@ -146,13 +145,14 @@ signaling-этапе 005); при отказе/несовпадении дове
 - [x] AC-005: Pairing UI/QR: Child invite QR → Parent scan/paste → Parent response QR → Child
   scan/paste → одинаковый code → оба confirm → PairedDevice в trusted store; покрыто Application
   unit-тестами полного офлайн-цикла и emulator smoke (QR render + host verify + camera open);
-  реальный обмен между двумя устройствами — **BLOCKED: нет реальных устройств** (отражено в
-  AC-007/AC-008).
+  реальный обмен между двумя реальными Huawei выполнен 2026-11-08 (QR paste-fallback: code 848016,
+  trusted store обоих; camera↔camera — 007).
 - [x] AC-006: Diagnostics screen + TrustedDevices (просмотр/forget/re-pair) + ViewModels в отдельных
   классах + a11y/локализация; проверено build/tests/emulator smoke.
-- [-] AC-007: Проверка на реальных устройствах (12+/13+/14+ permission flows, OEM, camera
-  matrix, TalkBack) — **BLOCKED**.
-- [-] AC-008: Реальная передача звука/media — **BLOCKED** (005 phase 2, ADR-0007 Proposed).
+- [-] AC-007: Android 12 permission flows/FGS/pairing на реальных Huawei — PASS; 13+/14+ OEM/
+  camera⁄TalkBack — **BLOCKED/007**.
+- [x] AC-008: Реальная передача звука/media — PASS: v0.3.1, MediaFlowing на обоих, владелец
+  подтвердил слышимость (2026-11-08); camera↔camera и расширенная матрица — 007.
 
 ## Out of Scope
 

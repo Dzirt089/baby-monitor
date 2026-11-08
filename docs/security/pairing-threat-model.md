@@ -156,10 +156,18 @@
 
 ### Residual risks (005 phase 2)
 
-- Реальная слышимость, задержка, echo/focus/route и поведение на OEM проверяются владельцем на двух
-  устройствах после v0.3.0; до подтверждения приложение не считается работающей радионяней.
+- **Слышимость подтверждена владельцем 2026-11-08** на Huawei nova Y90 + nova 13 Pro (Android 12,
+  v0.3.1): pairing, MediaFlowing, звук, reconnect Wi-Fi, screen-off, Stop. Задержка/echo оценены
+  субъективно (без жалоб); полная OEM-матрица, звонки/audio focus, BT/route, 8h soak, 100 циклов,
+  battery drain — 007 (docs/operations/device-test-results-2026-11-08.md).
 - ICE host-only: сети с client isolation/разными VLAN не поддерживаются (typed error; 007).
 - Jitter buffer/Opus параметры — стартовые измеряемые настройки, не финальные; пересмотр по device
   метрикам.
-- Если SIPSorcery не пройдёт device matrix — замена адаптера на libwebrtc (ADR-0005), Domain/
-  Application не меняются.
+- LAN availability: rogue mDNS/TCP connect+close может временно помешать старту; bounded retry/
+  rate-limit handshake — 007 (H3/H5), trust/pinning не обходится.
+- Trusted store — private SharedPreferences без tamper-evidence; компрометация файла потребует
+  pairing/UI решения (008/007).
+- Android SslStream + ephemeral mutual TLS проверены на 2 Huawei/Android 12; 13+/14+ и OEM
+  security-политики — 007.
+- Если SIPSorcery не пройдёт расширенную device matrix — замена адаптера на libwebrtc (ADR-0005),
+  Domain/Application не меняются.
