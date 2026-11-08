@@ -54,5 +54,5 @@
 
 ## Критерии готовности плана
 
-- Все AC 007 имеют evidence (PASS/FAIL/PARTIAL/IOS/BLOCKED с причиной); никаких заявленных
+- Все AC 007 имеют evidence (PASS/FAIL/PARTIAL/NOT RUN/BLOCKED с причиной); никаких заявленных
   непроверенных device-AC; релиз по предохранителям (review + CI + tag).

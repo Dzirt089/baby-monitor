@@ -2,7 +2,7 @@
 
 **Feature Branch**: 004-secure-pairing
 **Created**: 2026-11-07
-**Status**: In Progress (phase 1 контракты/протокол/тесты + phase 2 Android Keystore/trusted store; end-to-end на устройствах BLOCKED)
+**Status**: Done (2026-11-08). Контракты/протокол/тесты + Android Keystore/trusted store; end-to-end pairing на 2 реальных Huawei: одинаковый verification code, trusted store обоих, DER/P1363 interop. Camera↔camera на реальных устройствах — 007.
 **Input**: AGENTS.md раздел 10; roadmap 004; docs/security/pairing-threat-model.md
 
 ## Контекст
@@ -70,8 +70,8 @@ media должны аутентифицироваться по этой identity
   malformed QR, несовпадение кода, отказ пользователя, удаление trusted device.
 - **NFR-002**: Domain/Application не содержат Android-типов; Keystore/SharedPreferences — только
   Platform.Android.
-- **NFR-003**: Эмуляторный smoke — только install/launch; реальное сопряжение двух устройств
-  **BLOCKED: нет реальных устройств**.
+- **NFR-003**: Эмуляторный smoke + реальное сопряжение двух Huawei (paste-fallback) выполнено
+  2026-11-08; camera↔camera — 007.
 
 ## Acceptance Criteria
 
@@ -80,9 +80,9 @@ media должны аутентифицироваться по этой identity
 - [ ] AC-003: Android Keystore identity adapter + trusted store adapter компилируются; architecture
   tests подтверждают отсутствие Android-типов в Application.
 - [x] AC-004: QR/ошибки не содержат секретов; тесты проверяют отсутствие private key material.
-- [ ] AC-005: Полное сопряжение двух реальных устройств (QR scan, код, переподключение) —
-  **BLOCKED: нет реальных устройств**; emulator/unit — частичная проверка.
-- [-] AC-006: Проверка на разных OEM/API для Keystore — **BLOCKED: нет устройств** (007).
+- [x] AC-005: Полное сопряжение двух реальных устройств — PASS 2026-11-08 (QR paste-fallback,
+  одинаковый code, trusted store обоих; camera↔camera — 007).
+- [-] AC-006: Keystore/pairing проверены на 2 Huawei/Android 12; другие OEM/API 13+/14+ — **007**.
 
 ## Delta 006 phase 2 (2026-11-07)
 

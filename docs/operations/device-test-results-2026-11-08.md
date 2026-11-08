@@ -8,18 +8,30 @@
 
 | Роль в тесте | Модель | Android | API | Сборка | IP / сеть |
 |---|---|---|---|---|---|
-| Child | HUAWEI nova Y90 (CTR-L21) | 12 | 31 | 13.0.0.298(C10E2R4P2) | 192.168.3.48, один Wi-Fi LAN |
-| Parent | HUAWEI nova 13 Pro (MIS-LX9) | 12 | 31 | EMUI/HarmonyOS build (Android 12) | 192.168.3.64, тот же LAN/BSSID |
+| Child | HUAWEI nova Y90 (CTR-L21) | 12 | 31 | 13.0.0.298(C10E2R4P2) | 192.168.3.x, один Wi-Fi LAN |
+| Parent | HUAWEI nova 13 Pro (MIS-LX9) | 12 | 31 | EMUI/HarmonyOS build (Android 12) | 192.168.3.y, тот же LAN/BSSID |
 
 - APK: GitHub Release **v0.3.1**, `io.github.dzirt089.babymonitor-Signed.apk`,
   SHA-256 `43c4a90aad288c7a14ef5de2b78db7cd6240a2a4f2deb7d429b69510ceb6caaf` (совпал с checksum релиза);
   versionCode 301 / versionName 0.3.1 на обоих.
 - Сопряжение: диагностический QR-fallback (камера↔камера не автоматизировалась): invite QR Child
   декодирован на хосте, вставлен в Parent; response QR Parent декодирован и вставлен в Child;
-  оба устройства показали одинаковый код **848016**; подтверждение на обоих; trusted store:
-  Child видит peer «родитель» с отпечатком a5706ebe, Parent — «ребёнок» d2007a60.
+  оба устройства показали одинаковый 6-значный verification code; подтверждение на обоих; trusted store:
+  Child и Parent видят peer с короткими fingerprint в диагностике (полные fingerprints в отчёт не
+  переносятся).
 - Мониторинг запущен на обеих ролях; Parent — mediaPlayback, Child — microphone; экраны устройства
   в foreground, USB-отладка включена.
+
+## Методы снятия evidence (adb, без секретов)
+
+- AudioTrack: `adb shell dumpsys audio | grep AudioPlaybackConfiguration` — state=started,
+  usage=USAGE_MEDIA, content=CONTENT_TYPE_SPEECH, uid/pid приложения (сессия 345/345).
+- Crash buffer: `adb shell logcat -d -b crash -t 40` — пусто на обоих после сценариев.
+- Permissions Parent: `adb shell dumpsys package io.github.dzirt089.babymonitor | grep RECORD_AUDIO` —
+  `granted=false` после Parent-сессии (CAMERA=false); Child получает разрешение по действию Start.
+- Состояния UI/уведомлений: `adb shell uiautomator dump` + `dumpsys notification --noredact`
+  (фиксировались тексты «Звук передаётся», Media: MediaFlowing; аудио/секретов в отчёте нет).
+- Логи/скриншоты в репозиторий не коммитятся (privacy; в них могут быть посторонние уведомления).
 
 ## Результаты
 

@@ -7,10 +7,10 @@
 - [x] CHK-005 Reconnect: backoff+jitter+final cap+max attempts (CanAttempt/GetDelay); детерминизм.
 - [x] CHK-006 Parent alarm локален и не зависит от Child; событие/сброс.
 - [x] CHK-007 Роли: Child capture only, Parent playback only (КА/health тесты).
-- [ ] CHK-008 Нет аудио/секретов в логах (проверяется в phase 2 для adapters).
-- [ ] CHK-009 SIPSorcery только в Infrastructure, contract suite (phase 2).
-- [ ] CHK-010 Android audio adapters + bounded buffers (phase 2).
-- [-] CHK-011 Device: 100 циклов/soak/Wi-Fi loss/звонки — **BLOCKED: нет устройств**.
+- [x] CHK-008 Нет аудио/секретов в логах — architecture tests (MediaPipelineArchitectureTests) PASS.
+- [x] CHK-009 SIPSorcery только в Infrastructure; contract suite + media loopback PASS.
+- [x] CHK-010 Android audio adapters + bounded buffers реализованы и проверены на реальных Huawei.
+- [x] CHK-011 Device: Wi-Fi loss/reconnect/screen-off/Stop PASS (2 Huawei, 2026-11-08); 100 циклов/soak/звонки — 007.
 - [x] CHK-012 Трассируемость FR → tasks.md.
 
 ## Review Record

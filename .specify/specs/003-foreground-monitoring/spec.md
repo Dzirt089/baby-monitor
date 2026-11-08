@@ -2,7 +2,7 @@
 
 **Feature Branch**: 003-foreground-monitoring
 **Created**: 2026-11-07
-**Status**: In Progress (контракт + Android service реализованы; device-проверки BLOCKED)
+**Status**: Done (2026-11-08). Контракт + Android service/notification; device-проверки на 2 Huawei/Android 12: FGS Child/Parent, «Звук передаётся», screen-off 12 с, Stop снимает уведомление/AudioTrack. Android 13+/14+/Doze — 007.
 **Input**: AGENTS.md разделы 9, 11, 20; roadmap 003
 
 ## Контекст
@@ -71,11 +71,10 @@ Child service объявляет тип `microphone`, Parent — `mediaPlayback`
 - [x] AC-004: POST_NOTIFICATIONS adapter + typed denial; для Child дополнительно RECORD_AUDIO
   (Android 14+ FGS microphone), запрашивается только Child; без разрешений старт отклоняется
   типизированными ошибками.
-- [-] AC-005: Activity может быть уничтожена при живом service — **BLOCKED**: нет устройств;
-  emulator-старт service невозможен без UI/instrumentation (non-exported).
-- [-] AC-006: Android 13+ notification permission и 14+ foreground restrictions на реальных
-  прошивках — **BLOCKED: нет реальных устройств**.
-- [-] AC-007: Battery/Doze/OEM поведение — **BLOCKED: нет реальных устройств** (007).
+- [-] AC-005: FGS переживает Activity на Android 12 Huawei (screen-off/Stop PASS 2026-11-08);
+  Activity destroyed/13+/14+ — **007**.
+- [-] AC-006: Android 12 permission/FGS flows PASS на 2 Huawei; 13+/14+ restrictions — **007**.
+- [-] AC-007: Battery/Doze/OEM — PARTIAL (USB-питание, 2 Huawei); полный прогон — **007**.
 
 ## Out of Scope
 

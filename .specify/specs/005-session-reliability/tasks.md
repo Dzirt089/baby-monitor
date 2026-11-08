@@ -17,14 +17,14 @@
 - [x] T008 Application: порты IRealtimeTransportListener, IAudioCapture, IAudioPlayback, IConnectivityMonitor, IAudioCodec (+ immutable contracts, XML-docs), DeviceIdentityPublicKey.VerifySignature
 - [x] T009 Infrastructure: TLS signaling (TCP, TLS 1.2+, mutual auth, pinning identity из trusted store, versioned hello/nonce, SDP exchange)
 - [x] T010 Contract/security tests signaling: недоверенный peer, replay, version mismatch, timeout, отсутствие cleartext/отключения TLS validation
-- [x] T011 Keystore-in-TLS spike: non-exportable Keystore key нельзя отдать в SslStream (Android) → принят fallback ADR-0007 (эфемерный TLS-серт + identity assertion); подтверждено на реальных Huawei (mutual TLS + pinning работают)
+- [x] T011 SslStream/Keystore spike: non-exportable Keystore key нельзя отдать в SslStream → выбран fallback ADR-0007 (ephemeral TLS-серт + identity assertion); fallback подтверждён device-прогоном (mutual TLS+pinning работают). Отдельный spike, доказывающий невозможность, не выполнялся — fallback принят по ADR-0007
 
 ## Phase 2b — Media (SIPSorcery)
 
 - [x] T012 SIPSorcery media adapter за IRealtimeTransport/Listener: WebRTC audio-only, Opus, DTLS-SRTP, ICE host-only
 - [x] T013 Contract suite для media-адаптера (общий для реализаций IRealtimeTransport); Opus encode/decode round-trip
 - [ ] T014 Telemetry counters (packets, RTT, jitter, media silence, buffers, encode/decode) без аудио/секретов
-- [ ] T015 Architecture tests: SIPSorcery только Infrastructure; отсутствие audio payload в логах/файлах
+- [x] T015 Architecture tests: SIPSorcery только Infrastructure; отсутствие audio payload в логах/файлах
 
 ## Phase 2c — Android audio
 
@@ -35,7 +35,7 @@
 
 ## Phase 2d — Application orchestration
 
-- [x] T020 Application: connection/media coordinator (discovery → TLS → media → audio) + reconnect/integration с SessionHealthMonitor/ParentLossAlarm/IConnectivityMonitor
+- [ ] T020 Application: connection/media coordinator (discovery → TLS → media → audio) + reconnect/SessionHealthMonitor/IConnectivityMonitor — done; ParentLossAlarm/heartbeat integration → H1 (007)
 - [x] T021 Foreground service integration: сеанс в MonitoringForegroundService, Activity только snapshot; Stop освобождает ресурсы; cancellation/dispose
 - [x] T022 Typed errors mapping (unauthorized_peer/tls_failure/signaling_timeout/media_path_absent/capture/playback/network_lost/unsupported_version)
 

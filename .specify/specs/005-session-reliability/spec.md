@@ -2,10 +2,11 @@
 
 **Feature Branch**: 005-phase2-media
 **Created**: 2026-11-07 (обновлено 2026-11-08)
-**Status**: Phase 1 merged (PR #12). Phase 2 **unblocked**: ADR-0007 Accepted (2026-11-08, вариант A),
-SIPSorcery разрешён (ADR-0005, >= 10.0.17), у владельца есть 2 физических Android-устройства для
-device-проверки. До подтверждения слышимости владельцем приложение не объявляется работающей
-радионяней.
+**Status**: Phase 1 merged (PR #12); **Phase 2 реализована и device-verified** (v0.3.0/0.3.1, PR #16;
+ADR-0007 Accepted вариант A; security review APPROVE). Device pass 2026-11-08: Huawei nova Y90 +
+nova 13 Pro (Android 12) — pairing, MediaFlowing, **слышимость подтверждена владельцем**, reconnect,
+screen-off, Stop. Остаточные 007-пункты: control heartbeat/ParentLossAlarm/telemetry, OEM/soak/
+calls/BT/TalkBack. См. docs/operations/device-test-results-2026-11-08.md.
 **Input**: AGENTS.md разделы 2, 6, 7, 9, 10, 11, 15; roadmap 005; ADR-0005 (SIPSorcery),
 ADR-0007 Accepted (signaling/TLS/pinning, DTLS-SRTP), ADR-0011 (QR pairing UI, 006)
 
@@ -142,7 +143,7 @@ Parent не запрашивает RECORD_AUDIO. При перегрузке с�
   (нет полной матрицы/части сценариев).
 - [-] AC-008: Battery drain/CPU/temperature/allocations — PARTIAL: ~8 мин на USB-питании
   (76 %/31 °C; 70 %/35 °C), валидный drain без зарядки — 007.
-- [ ] AC-009 (follow-up 007): control heartbeat (ping/peers) и ParentLossAlarm интеграция в media-сеанс;
+- [ ] AC-009 (follow-up 007): control heartbeat (ping/pong) и ParentLossAlarm интеграция в media-сеанс;
   media path absent до первого аудиокадра уже детектируется watchdog-ом (Degraded/Reconnecting).
 
 ## Out of Scope

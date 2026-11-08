@@ -10,8 +10,8 @@
 2. **Phase 2 (выполнена)**: NSD discover/advertise/resolve adapter в Platform.Android,
    multicast lock, permission adapter (ACCESS_LOCAL_NETWORK, API 36/37), manifest permissions,
    connectivity precondition (Wi-Fi/Ethernet), API-34+ ServiceInfoCallback.
-3. **Phase 3**: local gates + emulator smoke (install/launch; discovery без UI/инструментации
-   неприменим), device matrix BLOCKED (нет устройств), PR → CI → независимое ревью → merge.
+3. **Phase 3**: local gates + emulator smoke; реальный discovery Child↔Parent на 2 Huawei — PASS
+   2026-11-08 (v0.3.1); guest/AP isolation/VLAN — 007; PR → CI → review → merge.
 
 Адаптеры пока не включены в composition root (App): подключение и permission host появятся в
 003/006 вместе с UI/сервисом. До этого экспорт типов из Platform.Android не используется приложением.
@@ -43,8 +43,8 @@ Contract suite (`BabyMonitor.Infrastructure.Tests`, net10.0) не может с�
 `BabyMonitor.Platform.Android` (net10.0-android), поэтому в CI он гоняет только fake-реализации.
 Реальный NSD-адаптер проверяется: (a) сборкой Platform.Android и всего solution без warnings;
 (b) architecture tests (manifest permissions/no microphone/platform isolation); (c) независимым
-review; (d) device tests — **BLOCKED: нет реальных устройств** (нужен net10.0-android test host
-или ручной прогон на телефоне). Чистая логика (TXT wire-format, валидация endpoint/роли) вынесена
+review; (d) device tests — реальный прогон на 2 Huawei выполнен 2026-11-08 (discovery/connect через v0.3.1);
+остальные сети — 007. Чистая логика (TXT wire-format, валидация endpoint/роли) вынесена
 в Application и покрыта unit-тестами. Это ограничение зафиксировано в PR и отчёте, а не выдаётся
 за полную проверку.
 

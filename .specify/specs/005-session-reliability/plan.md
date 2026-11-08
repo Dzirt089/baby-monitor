@@ -1,7 +1,7 @@
 # Implementation Plan: 005-session-reliability (phase 2)
 
 **Spec**: [spec.md](./spec.md) | **ADR**: [ADR-0007](../../../docs/architecture/adr/0007-local-security-signaling-pairing.md) Accepted (2026-11-08, вариант A), [ADR-0005](../../../docs/architecture/adr/0005-media-transport-library.md) (SIPSorcery >= 10.0.17)
-**Status**: Phase 1 merged (PR #12); phase 2 in progress | **Created**: 2026-11-07 (обновлён 2026-11-08)
+**Status**: Phase 1 merged (PR #12); phase 2 implemented + device-verified (v0.3.0/0.3.1; 2026-11-08, owner-confirmed sound); residual 007 items (heartbeat/alarm/telemetry/OEM/soak) | **Created**: 2026-11-07 (обновлён 2026-11-08)
 
 ## Phases
 

@@ -66,7 +66,7 @@ TalkBack/доступность, camera↔camera pairing, полная OEM-ма�
   и ошибки читаемы; размеры touch targets >= 48dp.
 - **FR-013**: Camera↔camera pairing на двух реальных устройствах (сканирование QR камерой) работает
   без сохранения/логирования кадров; отказ CAMERA — typed ошибка.
-- **FR-014**: Все device-результаты (PASS/FAIL/PARTIAL/IOS) фиксируются в docs/operations с датой,
+- **FR-014**: Все device-результаты (PASS/FAIL/PARTIAL/NOT RUN/BLOCKED) фиксируются в docs/operations с датой,
   моделями/API, сборкой/APK hash и краткими шагами; непроверенное не заявляется проверенным.
 
 ## Non-Functional

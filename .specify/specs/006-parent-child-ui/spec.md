@@ -2,8 +2,8 @@
 
 **Feature Branch**: 006-pairing-ui (phase 2; phase 1 merged в main PR #13)
 **Created**: 2026-11-07
-**Status**: Phase 2 реализована в PR (pairing UI/QR офлайн-обмен, verification code, trusted devices, diagnostics screen, ViewModels, a11y); device matrix и real 2-device QR BLOCKED (нет устройств); media/audio BLOCKED (005 phase 2)
-**Input**: AGENTS.md разделы 3, 5, 6, 9, 10, 13, 15; roadmap 006; ADR-0006 Accepted; ADR-0011 Accepted (ZXing.Net); 004 secure pairing protocol; 005 phase 2 BLOCKED
+**Status**: Phase 2 реализована и device-verified (pairing UI/QR paste-fallback, verification code, trusted devices, diagnostics, ViewModels, a11y — на двух Huawei, 2026-11-08); media/audio — PASS (005 phase 2, v0.3.1, owner-confirmed звук); camera↔camera/13+/14+/OEM/TalkBack — 007
+**Input**: AGENTS.md разделы 3, 5, 6, 9, 10, 13, 15; roadmap 006; ADR-0006 Accepted; ADR-0011 Accepted (ZXing.Net); 004 secure pairing protocol; 005 phase 2 Done (v0.3.1, device-verified)
 
 ## Контекст
 
@@ -12,8 +12,7 @@
 Activity только связывает View и команды, VM (presentation-agnostic screen model) вызывает только
 Application-порты и наблюдает immutable snapshots.
 
-Полноценная передача звука и сетевой signaling-канал не реализованы (005 phase 2 BLOCKED:
-ADR-0007 Proposed + нет устройств). Поэтому в phase 2 первичное сопряжение (004-протокол)
+Передача звука и signaling реализованы в 005 phase 2 (ADR-0007 Accepted; v0.3.0/v0.3.1) и подтверждены на двух реальных Huawei 2026-11-08. Pairing (004-протокол)
 выполняется **офлайн-обменом QR через физические экраны** (out-of-band канал, доверенный по
 threat model 004): Child показывает QR приглашения → Parent сканирует и показывает QR ответа →
 Child сканирует ответ → оба устройства показывают одинаковый 6-значный verification code →
@@ -76,7 +75,7 @@ signaling-этапе 005); при отказе/несовпадении дове
 - **FR-004**: Composition root — в App/Composition (per-Activity scope), без global service locator;
   Activity не создаёт Android-сервисы/адаптеры напрямую (кроме связки View↔команды).
 - **FR-005**: UI показывает только реальное состояние; не заявляет работающую передачу звука, пока
-  media не реализована (005 phase 2 BLOCKED).
+  media реализована в 005 phase 2 (v0.3.1); device-подтверждение — 2026-11-08.
 - **FR-006**: Состояние foreground-сессии переживает пересоздание Activity (сервис независим;
   экран перечитывает snapshot).
 - **FR-007**: Strings — в resources (русский), a11y (contentDescription для интерактивных
@@ -121,13 +120,13 @@ signaling-этапе 005); при отказе/несовпадении дове
   THIRD-PARTY-NOTICES); CAMERA объявлен в manifest, camera hardware — uses-feature required=false;
   Application/Domain не ссылаются на Android/ZXing; тесты фиксируют это.
 - **FR-021**: Честность состояний: pairing работает без сети, но UI не заявляет сетевую связь,
-  повторное подключение или передачу аудио; media/audio и device E2E остаются BLOCKED (005/007).
+  повторное подключение или передачу аудио; media/audio подтверждены на 2 устройствах (v0.3.1), расширенный device E2E — 007.
 
 ## Non-Functional Requirements
 
 - **NFR-001**: Pairing UI-flow покрыт unit-тестами (child↔parent roundtrip, expiry, invalid QR,
   tamper signature, reject, store failure, dispose) на Application-уровне с fakes; Android camera /
-  два реальных устройства — emulator smoke + BLOCKED.
+  два реальных устройства — выполнено 2026-11-08 (pairing paste-fallback; camera↔camera — 007).
 - **NFR-002**: Domain/Application без Android-типов и без ZXing; Keystore/camera — только
   Platform.Android; App — только Activity/XML + связка с screen models.
 - **NFR-003**: Camera2 + ImageReader на background-потоке; кадры не сохраняются; bounded обработка
@@ -150,14 +149,14 @@ signaling-этапе 005); при отказе/несовпадении дове
 - [x] AC-006: Diagnostics screen + TrustedDevices (просмотр/forget/re-pair) + ViewModels в отдельных
   классах + a11y/локализация; проверено build/tests/emulator smoke.
 - [-] AC-007: Android 12 permission flows/FGS/pairing на реальных Huawei — PASS; 13+/14+ OEM/
-  camera⁄TalkBack — **BLOCKED/007**.
+  camera↔camera/TalkBack — **007**.
 - [x] AC-008: Реальная передача звука/media — PASS: v0.3.1, MediaFlowing на обоих, владелец
   подтвердил слышимость (2026-11-08); camera↔camera и расширенная матрица — 007.
 
 ## Out of Scope
 
-Media/audio (005 phase 2 BLOCKED), сетевой signaling и DTLS-SRTP, облако, видео, QR scanning на
-двух реальных устройствах (BLOCKED), AndroidX/CameraX и Google Play Services (камера — platform
+Видео/облако/двусторонняя связь (вне MVP), camera↔camera на реальных устройствах (007), QR scanning на
+реальных камерах — 007; AndroidX/CameraX и Google Play Services (камера — platform
 Camera2), изменение 004-криптопротокола, release signing/публикация.
 
 ## Dependencies & Assumptions
@@ -166,6 +165,6 @@ Camera2), изменение 004-криптопротокола, release signing
   реализован и покрыт тестами; private keys — Android Keystore.
 - ADR-0011 Accepted: ZXing.Net 0.16.11 (Apache-2.0) в Platform.Android для QR encode/decode.
 - Camera2 — platform API (API 24+), без AndroidX-пакетов.
-- Реальные устройства отсутствуют — camera/2-device E2E BLOCKED.
+- Camera↔camera/2-device camera E2E не выполнялся (использован paste-fallback) — 007; реальные устройства есть.
 - Офлайн QR-обмен не заменяет signaling 005: runtime-сессия по-прежнему требует
   аутентифицированного канала; повторные подключения — 005.

@@ -2,7 +2,7 @@
 
 **Spec**: [spec.md](./spec.md) | **ADR**: [ADR-0006](../../../docs/architecture/adr/0006-ui-framework.md) Accepted,
 [ADR-0011](../../../docs/architecture/adr/0011-qr-encoding-decoding-library.md) Accepted (ZXing.Net)
-**Status**: Phase 2 реализована в PR #14 (independent review APPROVE WITH FIXES → findings закрыты; device matrix и real 2-device QR BLOCKED) | **Created**: 2026-11-07
+**Status**: Phase 2 реализована (PR #14, independent review APPROVE; findings закрыты). Device pass 2026-11-08: pairing paste-fallback + media/audio PASS на двух Huawei (owner-confirmed звук); camera↔camera/TalkBack/13+/14+/OEM — 007 | **Created**: 2026-11-07
 
 ## Phases
 
@@ -14,12 +14,11 @@
    screen, ViewModels в отдельных presentation-agnostic классах Application, a11y/локализация.
 3. **Проверки**: build/tests/format; emulator UI smoke (QR render, camera open, pairing UI,
    monitoring start/stop); реальный QR-обмен между двумя устройствами и camera/OEM matrix —
-   **BLOCKED: нет реальных устройств**.
+   Device pass 2026-11-08 выполнен (pairing paste-fallback, media/audio owner-confirmed); camera↔camera — 007.
 
 ## Phase 2 Design Decisions
 
-- **Офлайн QR-обмен вместо сети**: 005 phase 2 (signaling/media) BLOCKED (ADR-0007 Proposed, нет
-  устройств), поэтому 004-протокол завершается out-of-band через физические экраны: Child
+- **Офлайн QR-обмен вместо сети**: 005 phase 2 реализован отдельно (ADR-0007 Accepted, v0.3.0/0.3.1), поэтому 004-протокол завершается out-of-band через физические экраны: Child
   показывает QR приглашения (секрет, TTL 5 минут), Parent его сканирует и показывает QR ответа
   (только публичные данные), Child сканирует ответ и выводит симметричный verification code.
   Сеть не используется; signaling для runtime-сессии остаётся в 005.
@@ -71,19 +70,19 @@
 
 | Риск | Митигация |
 |---|---|
-| Camera2 lifecycle/утечки на разных OEM | Stop/Dispose/OnPause, emulator smoke; device matrix BLOCKED (007) |
-| QR decode на реальных камерах не проверен | ZXing.Net зрелая библиотека + fallback; device E2E BLOCKED |
+| Camera2 lifecycle/утечки на разных OEM | Stop/Dispose/OnPause, emulator smoke; camera↔camera/OEM — 007 |
+| QR decode на реальных камерах не проверен | ZXing.Net зрелая библиотека + fallback; camera↔camera — 007 (paste-fallback PASS 2026-11-08) |
 | Секреты (token/code) в логах/строках | тесты secret-scan; запрет печати payload; paste-поле маскируется |
-| Ложное ощущение рабочей радионяни | явный статус «media не реализована (005 BLOCKED)» на pairing/monitoring/diagnostics |
+| Ложное ощущение рабочей радионяни | честный статус о непроверенной слышимости до owner confirmation (подтверждено 2026-11-08); ограничения матрицы видны |
 | Новый NuGet (ZXing.Net) | ADR-0011, централизованная версия, лицензия/upstream/размер/безопасность проверены |
 | Офлайн-обмен не заменяет signaling | явно в spec/UI: pairing завершён, передача звука/переподключение — 005 |
 | Activity recreate во время pairing | сессия в screen model; при recreate старый flow пересоздаётся (QR/код regenerated) — документировано |
 | CAMERA permission в одном APK для обеих ролей | camera только на pairing-экране по действию; manifest uses-feature required=false |
-| Camera preview orientation/aspect на OEM | preview может быть повёрнут/растянут (transform не делается); QR decode от этого не зависит; device matrix BLOCKED (007) |
+| Camera preview orientation/aspect на OEM | preview может быть повёрнут/растянут (transform не делается); QR decode не зависит; camera↔camera/OEM — 007 |
 | MVP: один доверенный peer | при наличии trust UI скрывает scan/paste/skip и работает с первым peer; несколько записей store возможны только через явное «Сопрячь заново» — единый peer-полиси для 007/008 |
 
 ## Gate
 
 Build/tests/format/emulator smoke обязательны. Реальный QR-обмен двух устройств, camera matrix,
-TalkBack/OEM, media/audio — **BLOCKED: нет реальных устройств** (007) / 005 phase 2 BLOCKED.
+TalkBack/OEM/camera↔camera — 007; media/audio подтверждены на 2 Huawei (v0.3.1, 2026-11-08).
 UI не заявляет передачу звука, сетевую связь или повторное подключение.

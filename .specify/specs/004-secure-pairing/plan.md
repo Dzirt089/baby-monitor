@@ -10,8 +10,8 @@
    replay/expiry, подтверждение), unit-тесты протокола и store.
 2. **Phase 2 (следующий PR)**: Android Keystore adapter ECDSA P-256, Android trusted store
    (только публичные данные), architecture tests, документация/review.
-3. **Проверки**: local gates; emulator install/launch; end-to-end pairing на двух устройствах —
-   **BLOCKED: нет реальных устройств**.
+3. **Проверки**: local gates; emulator install/launch; end-to-end pairing на двух реальных Huawei —
+   PASS 2026-11-08 (paste-fallback; camera↔camera — 007).
 
 ## Protocol Notes
 

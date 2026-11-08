@@ -62,9 +62,9 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 
 ### Known limitations (device-проверки ещё не выполнены)
 
-- Реальная слышимость, задержка, echo/audio focus/route, работа Android SslStream + SIPSorcery
-  ICE/DTLS/Opus на устройствах **не подтверждены** — нужен прогон владельцем на Huawei nova 13 Pro
-  и Huawei nova Y90 (v0.3.0 checklist).
+- На момент 0.3.0 реальная слышимость/задержка/echo/audio focus/route и Android SslStream +
+  SIPSorcery ICE/DTLS/Opus не были подтверждены; подтверждены на v0.3.1 (2026-11-08, Huawei nova Y90
+  + nova 13 Pro) — см. [0.3.1] Verified on devices; остальные сценарии — 007.
 - Автоматическое переподключение после установленной сессии реализовано кодом и unit/loopback
   tests; реальная потеря Wi-Fi/смена IP — device-прогон.
 - Media path absent до первого аудиокадра детектируется watchdog-ом (typed media_flow_lost →

@@ -20,7 +20,7 @@
 
 - [x] T009 Local gates: build Debug/Release, все test-проекты, format — `BabyMonitor.slnx`
 - [-] T010 Emulator smoke advertise/discover — НЕПРИМЕНИМО без UI/инструментации: APK install/launch smoke выполнен, но discovery нельзя запустить из приложения; покрыть в 003/006
-- [-] T011 Device matrix (2 устройства, guest/AP isolation, VLAN, смена IP) — BLOCKED: нет реальных устройств
+- [-] T011 Device matrix: 2 Huawei в одном LAN PASS (2026-11-08); guest/AP isolation/VLAN/смена IP — 007
 - [x] T012 PR #8 → CI green (run 42359660579) → независимое ревью (phase1 PASS WITH COMMENTS, delta CHANGES REQUIRED → MAJOR-cleanup исправлен) → merge — GitHub
 
 ## Verification Log
@@ -30,4 +30,5 @@
 | 2026-11-07 | Build + tests phase 1 | Application 68/68, Infrastructure 37/37, 0 warnings |
 | 2026-11-07 | Build + tests phase 2 | build Debug/Release 0 warnings; Domain 6, Application 74, Architecture 40, Infrastructure 42 = 162/162 pass; format exit 0 |
 | 2026-11-07 | Emulator smoke | APK install/launch на AVD API 35; discovery не запускается без UI/инструментации — задокументировано как неприменимое |
-| 2026-11-07 | Device matrix | **BLOCKED**: нет реальных Android-устройств |
+| 2026-11-07 | Device matrix | (исторически) BLOCKED: нет устройств |
+| 2026-11-08 | Device pass v0.3.1 | discovery Child↔Parent на Huawei nova Y90 + nova 13 Pro PASS; остальные сети/OEM — 007 |

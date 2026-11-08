@@ -2,7 +2,7 @@
 
 **Feature Branch**: 002-device-discovery
 **Created**: 2026-11-07
-**Status**: In Progress (phase 1 — контракт и contract suite; phase 2 — Android NSD adapter и permissions — реализованы; emulator smoke неприменим без UI/инструментации, device matrix BLOCKED)
+**Status**: Done (2026-11-08). Контракт/contract suite + Android NSD adapter/permissions; discovery Child↔Parent проверен на двух реальных Huawei (v0.3.1, один LAN). Guest Wi-Fi/AP isolation — 007.
 **Input**: AGENTS.md разделы 8, 10; roadmap 002
 
 ## Контекст
@@ -69,9 +69,8 @@ Platform permission-адаптер запрашивает только необ�
 - [x] AC-005: Manifest permissions минимальны (INTERNET, ACCESS_NETWORK_STATE,
   CHANGE_WIFI_MULTICAST_STATE, ACCESS_LOCAL_NETWORK); permission-адаптер возвращает типизированный
   permission_denied; microphone permissions отсутствуют (проверяется architecture test).
-- [ ] AC-006: Emulator smoke (advertise/discover) выполнен или честно задокументирован как
-  неприменимый; **device matrix BLOCKED: нет реальных устройств** (guest Wi-Fi/AP isolation/VLAN,
-  смена IP, два разных телефона — только на железе).
+- [x] AC-006: Emulator smoke + реальный discovery Child↔Parent на двух Huawei (v0.3.1, один LAN)
+  PASS 2026-11-08; guest Wi-Fi/AP isolation/VLAN/смена IP — 007.
 
 ## Out of Scope
 
@@ -82,5 +81,6 @@ Discovery не даёт доверия peer по IP/mDNS: доверие — т�
 
 - Android NSD (NsdManager), targetSdk 36, minSdk 24; WifiManager multicast lock;
   ACCESS_LOCAL_NETWORK runtime permission (enforced с Android 17/targetSdk 37; на API 36 — opt-in).
-- 2 реальных Android-устройства в одной LAN для device-проверок (НЕТ; BLOCKED).
+- 2 реальных Android-устройства в одной LAN для device-проверок (есть: Huawei nova Y90 + nova 13 Pro,
+  device pass 2026-11-08; остальные сети/OEM — 007).
 - Emulator API 35 — только smoke, не доказательство LAN-поведения.

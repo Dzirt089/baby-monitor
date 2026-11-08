@@ -1,6 +1,6 @@
 # Implementation Plan: 008 — Release readiness & distribution
 
-**Spec**: [spec.md](spec.md) · **Status**: Ready (side-load релизы уже выпускаются)
+**Spec**: [spec.md](spec.md) · **Status**: In Progress (side-load релизы выпускаются; owner-gated остатки)
 
 ## Что уже работает (evidence)
 

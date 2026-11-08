@@ -1,8 +1,8 @@
 # Feature Specification: 008 — Release readiness & distribution
 
 **Feature branch**: `008-release-readiness` (планируется)
-**Status**: **Ready** (private side-load цепочка уже работает: v0.2.0/v0.3.0/v0.3.1 GitHub Releases;
-публичная дистрибуция — только по явному решению владельца)
+**Status**: **In Progress** (private side-load цепочка работает: v0.2.0/v0.3.0/v0.3.1 GitHub Releases;
+остались signing-chain runbook/rotation, license/privacy/disclaimer, distribution decision — owner-gated)
 **Created**: 2026-11-08
 **Зависит от**: 000 (CI/release-by-tag), 007 (device hardening), ADR-0008 (side-load), ADR-0009
 (versioning)

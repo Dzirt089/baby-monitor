@@ -6,10 +6,10 @@
 - [x] CHK-004 Start/Stop только по действию пользователя; typed errors.
 - [x] CHK-005 Parent не запрашивает RECORD_AUDIO; Child — по действию.
 - [x] CHK-006 Composition root в App/Composition (per-Activity), host/VM Dispose.
-- [x] CHK-007 UI не заявляет работающую передачу звука (media BLOCKED).
+- [x] CHK-007 UI не заявляет работающую передачу звука до owner confirmation; после 2026-11-08 статус честный (подтверждено на 2 Huawei).
 - [x] CHK-008 Strings/a11y — в ресурсах; ошибки без секретов.
 - [x] CHK-009 Pairing UI/QR (phase 2): офлайн-обмен QR Child→Parent→Child + verification code.
-- [-] CHK-010 Device permission/a11y/OEM — **BLOCKED**.
+- [-] CHK-010 Android 12 permission/FGS PASS (2026-11-08); 13+/14+/a11y/OEM — **007**.
 - [x] CHK-011 Трассируемость FR → tasks.md.
 - [x] CHK-012 ADR-0011 Accepted до добавления ZXing.Net; лицензия/upstream/размер проверены.
 - [x] CHK-013 QR приглашения не логируется/не показывается текстом; paste-поле очищается.
@@ -18,7 +18,7 @@
 - [x] CHK-016 Diagnostics screen без секретов и personal data.
 - [x] CHK-017 ViewModels presentation-agnostic, покрыты fakes-тестами.
 - [x] CHK-018 Архитектурные тесты: ZXing/camera только Platform.Android; Domain/Application чистые.
-- [-] CHK-019 Camera/QR на реальных устройствах и TalkBack — **BLOCKED: нет устройств**.
+- [-] CHK-019 Camera↔camera/TalkBack — **007**; pair paste-fallback PASS 2026-11-08.
 
 ## Review Record
 
