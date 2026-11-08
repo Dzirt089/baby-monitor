@@ -95,8 +95,9 @@ public sealed class MonitoringScreenModel : IDisposable
             var result = await _host.StartAsync(_role, cancellationToken);
             if (result.IsSuccess)
             {
-                ClearError();
-                Apply(result.Value);
+                // Не применяем устаревший снимок: за время StartAsync media-сеанс мог завершиться
+                // ошибкой, и host.Current уже содержит более новый терминальный снимок.
+                Apply(_host.Current ?? result.Value);
             }
             else
             {
@@ -124,8 +125,7 @@ public sealed class MonitoringScreenModel : IDisposable
             var result = await _host.StopAsync(cancellationToken);
             if (result.IsSuccess)
             {
-                ClearError();
-                Apply(result.Value);
+                Apply(_host.Current ?? result.Value);
             }
             else if (result.Error!.Code != ForegroundSessionErrorCodes.NotRunning)
             {
@@ -156,7 +156,15 @@ public sealed class MonitoringScreenModel : IDisposable
     {
         Snapshot = snapshot;
         IsRoleMismatch = snapshot.Role != _role && !snapshot.IsTerminal;
-        ClearError();
+        if (snapshot.State is MonitoringForegroundState.Failed && snapshot.Error is { } error)
+        {
+            SetError(error);
+        }
+        else
+        {
+            ClearError();
+        }
+
         RaiseChanged();
     }
 

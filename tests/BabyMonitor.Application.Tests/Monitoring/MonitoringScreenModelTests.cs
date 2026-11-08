@@ -14,6 +14,8 @@ public sealed class MonitoringScreenModelTests
 
         public event EventHandler<ForegroundSessionSnapshot>? SnapshotChanged;
 
+        public Func<DeviceRole, CancellationToken, Task<Result<ForegroundSessionSnapshot>>>? StartHandler { get; set; }
+
         public Result<ForegroundSessionSnapshot> StartResult { get; set; } = Result<ForegroundSessionSnapshot>.Failure(
             new Error(ForegroundSessionErrorCodes.ServiceUnavailable, "Нет сервиса."));
 
@@ -30,7 +32,7 @@ public sealed class MonitoringScreenModelTests
         public Task<Result<ForegroundSessionSnapshot>> StartAsync(DeviceRole role, CancellationToken cancellationToken)
         {
             StartCalls++;
-            return Task.FromResult(StartResult);
+            return StartHandler?.Invoke(role, cancellationToken) ?? Task.FromResult(StartResult);
         }
 
         public Task<Result<ForegroundSessionSnapshot>> StopAsync(CancellationToken cancellationToken)
@@ -51,6 +53,30 @@ public sealed class MonitoringScreenModelTests
 
     private static ForegroundSessionSnapshot Snapshot(DeviceRole role, MonitoringForegroundState state) =>
         new(role, state);
+
+    [Fact]
+    public async Task StartAsync_не_перетирает_более_новый_терминальный_снимок_устаревшим_результатом()
+    {
+        var host = new FakeHost();
+        var failed = new ForegroundSessionSnapshot(
+            DeviceRole.Child,
+            MonitoringForegroundState.Failed,
+            new Error("media.no_trusted_peer", "Сначала сопрягите два устройства через QR-код."));
+        host.StartHandler = (_, _) =>
+        {
+            // Снимок Failed приходит, пока StartAsync ещё ждёт подтверждения Running.
+            host.Raise(failed);
+            return Task.FromResult(Result<ForegroundSessionSnapshot>.Success(
+                Snapshot(DeviceRole.Child, MonitoringForegroundState.Running)));
+        };
+
+        using var model = new MonitoringScreenModel(host, DeviceRole.Child);
+        await model.StartAsync(CancellationToken.None);
+
+        Assert.Equal(MonitoringForegroundState.Failed, model.Snapshot!.State);
+        Assert.Equal("media.no_trusted_peer", model.ErrorCode);
+        Assert.Equal(failed.Error!.Message, model.ErrorMessage);
+    }
 
     [Fact]
     public async Task Initialize_NotRunning_не_является_ошибкой()
