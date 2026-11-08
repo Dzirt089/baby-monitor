@@ -103,6 +103,14 @@
   race network-change vs setup-timeout (Stale vs SetupFailure).
 - [x] T046 (v0.4.2, device PASS single-device) Child listener ждёт Parent: HandshakeTimeout только после
   TCP accept; device-retest v0.4.2 на nova Y90 без Parent: Media Connecting >40 s, без Failed, crash buffer пуст.
+- [x] T047 (v0.4.3) Starting event order gate; Regression: slow subscriber/Stop during Starting.
+- [ ] T050 Parent candidate wait 250 ms может быть мал для медленного NSD resolve — тест slow-discovery/
+  увеличить/ждать до deadline попытки (LOW PR #24).
+- [ ] T051 Async-iterator edge: pending MoveNext с non-OCE исключением в Parent discovery walk — обернуть
+  dispose/await в try-final (LOW PR #24).
+- [ ] T052 Bounded initial DoS: 5 подряд rogue-отказов (Child) / rogue mDNS candidates (Parent) всё ещё
+  дают initial FailStartup — documented limitation; рассмотреть продолжать Advertising/сбрасывать окно
+  (H3). Device evidence v0.4.4: 3 rogue → Connecting, 5 rogue → Failed tls_failure.
 - [ ] T045 Product decision: discovery-loss коды дают «Связь потеряна!» и на initial-попытке (ребёнок не
   найден) — решить, нужен ли отдельный текст/без alarm для initial setup.
 - [ ] T048 Строгий порядок Starting при конкурентном Stop (сериализация/ожидание gate) + XML-doc
@@ -114,6 +122,7 @@
 
 | Дата | Проверка | Результат |
 |---|---|---|
+| 2026-11-08 | v0.4.4 device rogue/flood (single nova Y90) | 3 rogue TCP connect+close → Child Connecting (retry/cooldown), 5 → terminal FailStartup tls_failure (bounded, residual DoS H3/T052); crash buffer пуст; rate-limit cooldown device-observation PASS-partial |
 | 2026-11-08 | v0.4.4 gates | 549/549 (Domain 38, Application 281, Infrastructure 172, Architecture 58); Debug/Release 0 warnings; format clean; vuln OK; T007a/T007b |
 | 2026-11-08 | v0.4.3 device sanity (single nova Y90) | install versionCode 403 PASS; Child без Parent: Running/Media Connecting >20 s, без Failed/crash, Stop PASS; двухдевайсовые T040/T043 pending |
 | 2026-11-08 | v0.4.3 gates | 538/538 (Domain 38, Application 275, Infrastructure 167, Architecture 58); Debug/Release 0 warnings; format clean; vuln OK; Release-run Application tests 275/275; T047 event order |

@@ -81,6 +81,14 @@
 | 7 | Media-only loss alarm (control жив, кадры стоят) | NOT RUN |
 | 8 | 20/100 Wi-Fi reconnect циклов с новой методикой | NOT RUN (тестовая методика дорабатывается) |
 
+**v0.4.4 rogue/flood single-device (nova Y90, no Parent, 2026-11-08):** versionCode 404 install PASS;
+Child Advertising/Media Connecting, listener 0.0.0.0:47800. Host (192.168.3.5) сделал 3 rogue TCP
+connect+close → Child остался Connecting (retry Accept/cooldown), notification «Подключение…», crash
+buffer пуст. После 5 суммарных rogue-подключений (bounded attempts exhausted) — terminal Failed
+`realtime.tls_failure`, последующие TCP connect time-out (сервис остановлен). Это подтверждает bounded
+resilience и **остаточную DoS-возможность**: активный LAN-атакующий 5+ подряд может сорвать initial
+start (known limitation H3/T052, trust/pinning не обходится).
+
 **v0.4.3 single-device sanity (nova Y90, no Parent, 2026-11-08):** versionCode 403 install PASS;
 Child-сеанс без Parent: «Подключение…», Running/Media Connecting >20 s, без Failed/crash, Stop PASS.
 Порядок Starting-before-RunAsync (T047) подтверждён косвенно успешным стартом; двухдевайсовые
