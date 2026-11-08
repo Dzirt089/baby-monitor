@@ -1,6 +1,6 @@
 # Roadmap: Радионяня (Baby Monitor)
 
-**Обновлено**: 2026-11-07
+**Обновлено**: 2026-11-08
 **Текущая фаза**: 006-parent-child-ui (phase 2 в PR #14: pairing UI/QR, diagnostics, ViewModels; device matrix BLOCKED — нет реальных устройств)
 
 Допустимые статусы milestone: Proposed, Ready, In Progress, Blocked, Done.
@@ -29,10 +29,14 @@ GitHub Issues/PR и CI. Отдельные PROGRESS/STATUS файлы не ве�
 
 ## Ближайший шаг
 
-**006 phase 2** реализована в PR #14 (pairing UI/QR офлайн-обмен, verification code, trusted
-devices, camera scan по ADR-0011, diagnostics screen, ViewModels, a11y/l10n); независимое ревью
-закрыто. Реальный QR-обмен камера↔камера, camera/OEM/TalkBack matrix — **BLOCKED: нет реальных
-устройств** (007).
+**006 phase 2** реализована в PR #14; независимое ревью закрыто. Готовится **v0.2.0** — тестовая
+сборка для device-прогонов на двух устройствах владельца (pairing/камера/FGS/диагностика;
+чек-лист — docs/operations/device-test-checklist-v0.2.0.md). Реальный QR-обмен камера↔камера,
+camera/OEM/TalkBack матрица закрываются по результатам прогона (007).
+
+**Следующий крупный этап — 005 phase 2**: ADR-0007 Accepted (вариант A: mutual TLS + pinning
+self-signed ECDSA identity, media — SIPSorcery DTLS-SRTP), signaling + AudioRecord/AudioTrack +
+реальная передача звука → v0.3.0 и device-проверка слышимости владельцем.
 
 **Дальше**: 007-device-hardening и 008-release-readiness требуют реальных устройств и явного
 подтверждения владельца по signing/secrets/видимости репозитория; 005 phase 2 (media/signaling,

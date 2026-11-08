@@ -122,10 +122,27 @@ SemVer-тегу `vMAJOR.MINOR.PATCH`, который создаёт челове
 > Если id когда-либо изменится — нужен новый ADR, обновление `TargetFrameworkTests` и README;
 > release workflow читает ApplicationId из csproj через `dotnet msbuild -getProperty:ApplicationId`.
 
-Первый release **не выполнялся**:
-постоянный keystore и Environment `release` с signing secrets подготовлены, однако manual approval
-на GitHub Free для private-репозитория недоступен (см. [release-runbook](docs/operations/release-runbook.md)).
-Подробности версионирования — [docs/architecture/adr/0009-android-versioning.md](docs/architecture/adr/0009-android-versioning.md).
+`v0.2.0` — первая тестовая сборка для device-проверок (pairing UI; передача звука ещё не
+реализована). Постоянный keystore и Environment `release` с signing secrets подготовлены; manual
+approval на GitHub Free для private-репозитория недоступен (см.
+[release-runbook](docs/operations/release-runbook.md)). Подробности версионирования —
+[docs/architecture/adr/0009-android-versioning.md](docs/architecture/adr/0009-android-versioning.md).
+
+## Тестовые сборки (side-load)
+
+До публичного распространения тестовые сборки выкладываются как **GitHub Releases** (private repo:
+скачивание под аккаунтом владельца) и устанавливаются на устройства вручную — без авто-обновлений
+([ADR-0008](docs/architecture/adr/0008-app-update-strategy.md)):
+
+1. GitHub → Releases → нужная версия → скачать `io.github.dzirt089.babymonitor-Signed.apk` и
+   `app-release.apk.sha256`.
+2. Проверить SHA-256 APK и сверить с checksum.
+3. Установить на устройства (разрешить установку из неизвестных источников). Обновления ставятся
+   «поверх»: подпись постоянным release keystore не меняется.
+4. Чек-лист проверок для текущей сборки — в [docs/operations/](docs/operations/).
+
+Тестовая сборка **не является рабочей радионяней**: передача звука появится в 0.3.0 и будет
+считаться подтверждённой только после прогона владельцем на двух устройствах.
 
 ## Подпись и секреты
 
@@ -145,7 +162,7 @@ Keystore, пароли и signing secrets **запрещено** хранить 
 
 Media-библиотека **SIPSorcery** принята владельцем в [ADR-0005](docs/architecture/adr/0005-media-transport-library.md):
 BSD-3-Clause + Additional Use Restriction; версия зафиксирована `>= 10.0.17` в `Directory.Packages.props`.
-Пакет будет подключён к Infrastructure при реализации media-адаптера (feature 003/005).
+Пакет подключается к Infrastructure при реализации media-адаптера в 005 phase 2 (ADR-0007 Accepted).
 
 ## Лицензия
 

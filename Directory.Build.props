@@ -12,7 +12,7 @@
 
     <!-- Единый источник версии: bootstrap 0.1.0. Релизный workflow передаёт значения из SemVer-тега. -->
     <BabyMonitorVersionMajor>0</BabyMonitorVersionMajor>
-    <BabyMonitorVersionMinor>1</BabyMonitorVersionMinor>
+    <BabyMonitorVersionMinor>2</BabyMonitorVersionMinor>
     <BabyMonitorVersionPatch>0</BabyMonitorVersionPatch>
     <VersionPrefix>$(BabyMonitorVersionMajor).$(BabyMonitorVersionMinor).$(BabyMonitorVersionPatch)</VersionPrefix>
     <BabyMonitorVersionCode>$([MSBuild]::Add($([MSBuild]::Add($([MSBuild]::Multiply($(BabyMonitorVersionMajor), 10000)), $([MSBuild]::Multiply($(BabyMonitorVersionMinor), 100)))), $(BabyMonitorVersionPatch)))</BabyMonitorVersionCode>
