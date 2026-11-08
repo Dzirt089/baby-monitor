@@ -143,8 +143,9 @@ Parent не запрашивает RECORD_AUDIO. При перегрузке с�
   (нет полной матрицы/части сценариев).
 - [-] AC-008: Battery drain/CPU/temperature/allocations — PARTIAL: ~8 мин на USB-питании
   (76 %/31 °C; 70 %/35 °C), валидный drain без зарядки — 007.
-- [ ] AC-009 (follow-up 007): control heartbeat (ping/pong) и ParentLossAlarm интеграция в media-сеанс;
-  media path absent до первого аудиокадра уже детектируется watchdog-ом (Degraded/Reconnecting).
+- [-] AC-009 (follow-up 007, частично): control heartbeat (ping/pong) и ParentLossAlarm интеграция в
+  media-сеанс реализованы в v0.4.0 (498/498 tests, device-проверка BLOCKED); telemetry counters —
+  частично (sent/recv/reconnect/uptime), полный FR-022 — 007.
 
 ## Out of Scope
 

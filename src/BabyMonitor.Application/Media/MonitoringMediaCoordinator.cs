@@ -83,6 +83,8 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     private RealtimeTransportState? _transportState;
     private bool _captureActive;
     private bool _playbackActive;
+    private bool _mediaAlarmActive;
+    private long _attemptGeneration;
     private long _sentFrames;
     private long _receivedFrames;
     private int _reconnectAttempts;
@@ -106,8 +108,19 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     /// отображения (в снимок попадают первые 8 hex-символов) и не влияет на pinning/identity:
     /// решение о доверии принимает adapter. null — fingerprint неизвестен.
     /// </param>
+    /// <param name="heartbeatTimeout">
+    /// Порог потери control heartbeat для <see cref="SessionHealthMonitor"/> (heartbeat watchdog).
+    /// null — default монитора (10 s). Composition root передаёт значение transport options
+    /// (например, 15 s), чтобы coordinator и transport использовали единый порог; иначе watchdog
+    /// мог бы сработать раньше/позже транспортного heartbeat-контроля.
+    /// </param>
+    /// <param name="parentAlarmThreshold">
+    /// Порог локальной тревоги Parent по отсутствию heartbeat/media. null — default
+    /// <see cref="ParentLossAlarm"/> (15 s).
+    /// </param>
     /// <exception cref="ArgumentException">Роль Unknown/неизвестна или fingerprint некорректен.</exception>
     /// <exception cref="ArgumentNullException">Любой обязательный порт/политика/время равны null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Пороги heartbeat/alarm не положительны.</exception>
     public MonitoringMediaCoordinator(
         DeviceRole role,
         IPeerDiscovery discovery,
@@ -120,7 +133,9 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         IConnectivityMonitor connectivity,
         ReconnectPolicy reconnectPolicy,
         TimeProvider timeProvider,
-        string? peerFingerprintSha256 = null)
+        string? peerFingerprintSha256 = null,
+        TimeSpan? heartbeatTimeout = null,
+        TimeSpan? parentAlarmThreshold = null)
     {
         if (role is not (DeviceRole.Child or DeviceRole.Parent))
         {
@@ -161,8 +176,8 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         _connectivity = connectivity;
         _reconnectPolicy = reconnectPolicy;
         _timeProvider = timeProvider;
-        _healthMonitor = new SessionHealthMonitor(timeProvider);
-        _parentLossAlarm = new ParentLossAlarm(timeProvider);
+        _healthMonitor = new SessionHealthMonitor(timeProvider, heartbeatTimeout: heartbeatTimeout);
+        _parentLossAlarm = new ParentLossAlarm(timeProvider, parentAlarmThreshold);
         _parentLossAlarm.AlarmChanged += OnParentAlarmChanged;
         _connectivity.NetworkChanged += OnNetworkChanged;
     }
@@ -238,6 +253,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                 _transportState = null;
                 _captureActive = false;
                 _playbackActive = false;
+                _mediaAlarmActive = false;
                 Interlocked.Exchange(ref _sentFrames, 0);
                 Interlocked.Exchange(ref _receivedFrames, 0);
                 Volatile.Write(ref _reconnectAttempts, 0);
@@ -533,11 +549,14 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(runToken);
         var ct = attemptCts.Token;
         RegisterAttempt(attemptCts);
+        var attemptGeneration = Interlocked.Increment(ref _attemptGeneration);
 
         IRealtimeTransportListenerSession? listener = null;
         IPeerAdvertiserSession? advertiser = null;
         IRealtimeTransportSession? transport = null;
         IAudioCaptureSession? capture = null;
+        var heartbeatSeen = new bool[1];
+        EventHandler? heartbeatHandler = null;
 
         try
         {
@@ -577,6 +596,11 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             }
 
             transport = accepted.Value;
+            // Heartbeat-подписка сразу после создания transport-сессии и до PublishConnected/capture:
+            // первый pong не теряется в окне между handshake и запуском media loop (L7).
+            _healthMonitor.Reset();
+            heartbeatHandler = (_, _) => OnHeartbeat(heartbeatSeen);
+            transport.HeartbeatReceived += heartbeatHandler;
             UpdateTransportState(transport.State);
             PublishConnected();
 
@@ -589,7 +613,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             capture = captureResult.Value;
             SetCaptureActive(true);
 
-            return await RunChildMediaLoopAsync(transport, capture, runToken, ct);
+            return await RunChildMediaLoopAsync(transport, capture, runToken, ct, heartbeatSeen, attemptGeneration);
         }
         catch (OperationCanceledException) when (runToken.IsCancellationRequested)
         {
@@ -608,6 +632,11 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             UnregisterAttempt(attemptCts);
             await ReleaseCaptureAsync(capture);
             SetCaptureActive(false);
+            if (transport is not null && heartbeatHandler is not null)
+            {
+                transport.HeartbeatReceived -= heartbeatHandler;
+            }
+
             await ReleaseTransportAsync(transport);
             await ReleaseAdvertiserAsync(advertiser);
             await ReleaseListenerAsync(listener);
@@ -619,10 +648,13 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(runToken);
         var ct = attemptCts.Token;
         RegisterAttempt(attemptCts);
+        var attemptGeneration = Interlocked.Increment(ref _attemptGeneration);
 
         IPeerDiscoverySession? discovery = null;
         IRealtimeTransportSession? transport = null;
         IAudioPlaybackSession? playback = null;
+        var heartbeatSeen = new bool[1];
+        EventHandler? heartbeatHandler = null;
 
         try
         {
@@ -694,6 +726,11 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             }
 
             transport = connectResult.Value;
+            // Heartbeat-подписка сразу после создания transport-сессии и до playback:
+            // первый pong не теряется в окне между handshake и запуском media loop (L7).
+            _healthMonitor.Reset();
+            heartbeatHandler = (_, _) => OnHeartbeat(heartbeatSeen);
+            transport.HeartbeatReceived += heartbeatHandler;
             UpdateTransportState(transport.State);
             PublishConnected();
 
@@ -706,7 +743,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             playback = playbackResult.Value;
             SetPlaybackActive(true);
 
-            return await RunParentMediaLoopAsync(transport, playback, runToken, ct);
+            return await RunParentMediaLoopAsync(transport, playback, runToken, ct, heartbeatSeen, attemptGeneration);
         }
         catch (OperationCanceledException) when (runToken.IsCancellationRequested)
         {
@@ -725,6 +762,11 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             UnregisterAttempt(attemptCts);
             await ReleasePlaybackAsync(playback);
             SetPlaybackActive(false);
+            if (transport is not null && heartbeatHandler is not null)
+            {
+                transport.HeartbeatReceived -= heartbeatHandler;
+            }
+
             await ReleaseTransportAsync(transport);
             await ReleaseDiscoveryAsync(discovery);
         }
@@ -734,11 +776,12 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         IRealtimeTransportSession transport,
         IAudioCaptureSession capture,
         CancellationToken runToken,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool[] heartbeatSeen,
+        long attemptGeneration)
     {
         var failure = new TaskCompletionSource<Error>(TaskCreationOptions.RunContinuationsAsynchronously);
         var mediaFlowing = false;
-        var heartbeatSeen = new bool[1];
 
         EventHandler<RealtimeTransportStateChangedEventArgs> transportHandler = (_, args) =>
         {
@@ -748,10 +791,8 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                 failure.TrySetResult(args.Error ?? transport.LastError ?? CreateMediaFlowLostError());
             }
         };
-        EventHandler heartbeatHandler = (_, _) => OnHeartbeat(heartbeatSeen);
 
         transport.StateChanged += transportHandler;
-        transport.HeartbeatReceived += heartbeatHandler;
         try
         {
             UpdateTransportState(transport.State);
@@ -763,12 +804,9 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                     mediaFlowing: false);
             }
 
-            // Каждая новая media-попытка начинает измерение media health с нуля: иначе watchdog
-            // увидел бы последний кадр предыдущей попытки как stall сразу после reconnect.
-            _healthMonitor.Reset();
             using var mediaCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var mediaFlowingFlag = new bool[1];
-            using var watchdog = StartMediaWatchdog(failure, mediaFlowingFlag, heartbeatSeen);
+            using var watchdog = StartMediaWatchdog(failure, mediaFlowingFlag, heartbeatSeen, attemptGeneration);
             var pcmFrameBytes = _codec.Format.Frame20MsBytes;
             var pcmBuffer = new byte[pcmFrameBytes];
             var encodedBuffer = new byte[_codec.MaxEncodedBytes];
@@ -934,7 +972,6 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         finally
         {
             transport.StateChanged -= transportHandler;
-            transport.HeartbeatReceived -= heartbeatHandler;
         }
     }
 
@@ -942,11 +979,12 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         IRealtimeTransportSession transport,
         IAudioPlaybackSession playback,
         CancellationToken runToken,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool[] heartbeatSeen,
+        long attemptGeneration)
     {
         var failure = new TaskCompletionSource<Error>(TaskCreationOptions.RunContinuationsAsynchronously);
         var mediaFlowing = false;
-        var heartbeatSeen = new bool[1];
 
         EventHandler<RealtimeTransportStateChangedEventArgs> transportHandler = (_, args) =>
         {
@@ -956,10 +994,8 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                 failure.TrySetResult(args.Error ?? transport.LastError ?? CreateMediaFlowLostError());
             }
         };
-        EventHandler heartbeatHandler = (_, _) => OnHeartbeat(heartbeatSeen);
 
         transport.StateChanged += transportHandler;
-        transport.HeartbeatReceived += heartbeatHandler;
         try
         {
             UpdateTransportState(transport.State);
@@ -971,11 +1007,9 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                     mediaFlowing: false);
             }
 
-            // Каждая новая media-попытка начинает измерение media health с нуля (см. Child loop).
-            _healthMonitor.Reset();
             using var mediaCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var mediaFlowingFlag = new bool[1];
-            using var watchdog = StartMediaWatchdog(failure, mediaFlowingFlag, heartbeatSeen);
+            using var watchdog = StartMediaWatchdog(failure, mediaFlowingFlag, heartbeatSeen, attemptGeneration);
             var pcmBuffer = new byte[_codec.Format.Frame20MsBytes];
             var received = transport.ReceiveAudioAsync(mediaCts.Token).GetAsyncEnumerator(mediaCts.Token);
             try
@@ -1127,7 +1161,6 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         finally
         {
             transport.StateChanged -= transportHandler;
-            transport.HeartbeatReceived -= heartbeatHandler;
         }
     }
 
@@ -1148,6 +1181,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             _transportState = null;
             _captureActive = false;
             _playbackActive = false;
+            _mediaAlarmActive = false;
             _healthMonitor.Reset();
 
             if (_session is { } session && !session.IsTerminal)
@@ -1359,14 +1393,56 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         }
     }
 
+    private void ActivateMediaAlarm(long attemptGeneration)
+    {
+        if (_role is not DeviceRole.Parent)
+        {
+            return;
+        }
+
+        MediaSessionSnapshot? snapshot = null;
+        EventHandler<MediaSessionSnapshot>? handler = null;
+        lock (_sync)
+        {
+            if (_disposed
+                || _stopRequested
+                || Volatile.Read(ref _attemptGeneration) != attemptGeneration
+                || _session is null
+                || _snapshot is not { } current)
+            {
+                return;
+            }
+
+            // Media watchdog текущей попытки: тревога Parent поднимается по media loss независимо
+            // от heartbeat (FR-002 007) и публикуется без смены State; state Degraded/Reconnecting
+            // увидит флаг в следующих снимках.
+            _mediaAlarmActive = true;
+            var updated = CreateSnapshotLocked(current.State, current.Error);
+            if (updated.ParentAlarmActive == current.ParentAlarmActive)
+            {
+                return;
+            }
+
+            _snapshot = updated;
+            snapshot = updated;
+            handler = SnapshotChanged;
+        }
+
+        if (snapshot is not null)
+        {
+            handler?.Invoke(this, snapshot);
+        }
+    }
+
     private ITimer StartMediaWatchdog(
         TaskCompletionSource<Error> failure,
         bool[] mediaFlowing,
-        bool[] heartbeatSeen)
+        bool[] heartbeatSeen,
+        long attemptGeneration)
     {
         var startedAt = _timeProvider.GetUtcNow();
         return _timeProvider.CreateTimer(
-            _ => OnMediaWatchdogTick(failure, mediaFlowing, heartbeatSeen, startedAt),
+            _ => OnMediaWatchdogTick(failure, mediaFlowing, heartbeatSeen, attemptGeneration, startedAt),
             null,
             MediaWatchdogPeriod,
             MediaWatchdogPeriod);
@@ -1376,6 +1452,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         TaskCompletionSource<Error> failure,
         bool[] mediaFlowing,
         bool[] heartbeatSeen,
+        long attemptGeneration,
         DateTimeOffset startedAt)
     {
         if (Volatile.Read(ref _disposed))
@@ -1413,21 +1490,23 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             // «signaling поднят, звука нет» — Degraded/Reconnecting (FR-018/FR-021). Проверка
             // отдельная от SessionHealthMonitor, потому что при полном отсутствии кадров media
             // оценивается как Inactive, а не Stalled.
-            if (now - startedAt >= _healthMonitor.MediaTimeout)
-            {
-                failure.TrySetResult(new Error(
+            if (now - startedAt >= _healthMonitor.MediaTimeout
+                && failure.TrySetResult(new Error(
                     RealtimeTransportErrorCodes.MediaFlowLost,
-                    "Media path не подтвердился: первый аудиокадр не пришёл."));
+                    "Media path не подтвердился: первый аудиокадр не пришёл.")))
+            {
+                ActivateMediaAlarm(attemptGeneration);
             }
 
             return;
         }
 
-        if (health.Media is AudioFlowState.Stalled)
-        {
-            failure.TrySetResult(new Error(
+        if (health.Media is AudioFlowState.Stalled
+            && failure.TrySetResult(new Error(
                 RealtimeTransportErrorCodes.MediaFlowLost,
-                "Media flow остановился: аудиокадры не поступают."));
+                "Media flow остановился: аудиокадры не поступают.")))
+        {
+            ActivateMediaAlarm(attemptGeneration);
         }
     }
 
@@ -1562,10 +1641,16 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     {
         if (_role is DeviceRole.Parent)
         {
-            // Восстановленный media flow снимает локальную тревогу (FR-002 007) до публикации
-            // MediaFlowing: пользователь снова слышит peer, без промежуточного «тревожного» снимка.
-            // Если peer опять замолчит, тревога поднимется заново.
+            lock (_sync)
+            {
+                // Media loss alarm снимается восстановленным потоком до публикации MediaFlowing.
+                _mediaAlarmActive = false;
+            }
+
+            // Reset + ReportPeerAlive: тревога снимается без окна ложного срабатывания —
+            // сброшенная история last-alive сразу подтверждается жизнью peer-а (FR-002 007).
             _parentLossAlarm.Reset();
+            _parentLossAlarm.ReportPeerAlive();
         }
 
         PublishTransition(MediaSessionState.MediaFlowing, null, session =>
@@ -1725,7 +1810,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
 
     private bool IsParentAlarmActiveLocked(MediaSessionState state) =>
         _role is DeviceRole.Parent
-        && (state is MediaSessionState.Failed || _parentLossAlarm.IsRaised);
+        && (state is MediaSessionState.Failed || _parentLossAlarm.IsRaised || _mediaAlarmActive);
 
     private MediaSessionTelemetry BuildTelemetryLocked()
     {

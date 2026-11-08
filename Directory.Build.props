@@ -10,7 +10,7 @@
     <DebugType>portable</DebugType>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
 
-    <!-- Единый источник версии (сейчас 0.3.0). Релизный workflow передаёт значения из SemVer-тега. -->
+    <!-- Единый источник версии (сейчас 0.4.0). Релизный workflow передаёт значения из SemVer-тега. -->
     <BabyMonitorVersionMajor>0</BabyMonitorVersionMajor>
     <BabyMonitorVersionMinor>4</BabyMonitorVersionMinor>
     <BabyMonitorVersionPatch>0</BabyMonitorVersionPatch>

@@ -5,13 +5,14 @@
 ## Phase 1 — Reliability code (Application/Infrastructure)
 
 - [x] T001 Heartbeat: periodic ping/pong в signaling-сессии + HeartbeatReceived в
-  IRealtimeTransportSession; SessionHealthMonitor.MarkHeartbeat (v0.4.0, 498/498 tests).
+  IRealtimeTransportSession; SessionHealthMonitor.MarkHeartbeat (v0.4.0, 502/502 tests).
 - [x] T002 Typed `realtime.heartbeat_missed` отдельно от media stall + first-heartbeat watchdog;
   integration в coordinator (Degraded/Reconnecting), unit-тесты с fake TimeProvider.
 - [x] T003 ParentLossAlarm: evaluator (TimeProvider) в coordinator + snapshot.ParentAlarmActive;
-  high-importance alarm-уведомление/статус «Связь потеряна!»; unit-тесты (device-проверка — T027b).
-- [x] T004 Telemetry: MediaSessionTelemetry counters (send/recv кадры, reconnect attempts, uptime,
-  last media frame) в snapshot; без аудио/SDP/fingerprint/IP (underruns/silence — 007 follow-up).
+  high-importance alarm-уведомление/статус «Связь потеряна!»; unit-тесты (device-проверка — T040).
+- [x] T004 Telemetry (частично): MediaSessionTelemetry counters (send/recv кадры, reconnect attempts,
+  uptime, last media frame) в snapshot; без аудио/SDP/fingerprint/IP. Lost/underruns/silence/buffer
+  depth/encode-decode — 007 follow-up.
 - [x] T005 Диагностика: строка метрик в Diagnostics screen; arch-тесты на отсутствие секретов/аудио.
 - [ ] T006 H4: прямые тесты TlsPeerCertificateValidator (CA/expired/EKU/RSA), клиентский
   unsupported-version ack, SDP 256 KiB лимит; semantic arch-test SslStream/Tcp.
@@ -79,10 +80,17 @@
 - [ ] T039 Проверить, что при выборе другой роли во время активной сессии UI не создаёт вторую
   сессию/не теряет управление; typed error/подсказка.
 
+## Phase 7 — device-проверка v0.4.0
+
+- [-] T040 Проверить на 2 устройствах: heartbeat/pong, срабатывание ParentLossAlarm «Связь потеряна!»
+  (heartbeat loss и media-only loss), звук/вибрация/DND alarm-канала, terminal Failed Parent alarm,
+  телеметрия в Diagnostics. — **BLOCKED: adb nova 13 Pro пропал после reboot (нужно подтвердить
+  USB-отладку); после восстановления выполнить.**
+
 ## Verification Log
 
 | Дата | Проверка | Результат |
 |---|---|---|
-| 2026-11-08 | v0.4.0 reliability code gates | heartbeat/ParentLossAlarm/telemetry реализованы+тесты: 498/498 (Domain 38, Application 258, Infrastructure 145, Architecture 57); Debug/Release 0 warnings; format clean; vuln OK |
+| 2026-11-08 | v0.4.0 reliability code gates | heartbeat/ParentLossAlarm/telemetry реализованы+тесты: 502/502 (Domain 38, Application 262, Infrastructure 145, Architecture 57); Debug/Release 0 warnings; format clean; vuln OK |
 | 2026-11-08 | Автоматизированный 100-цикловый Wi-Fi reconnect на v0.3.1 | 8 циклов PASS (~27-28 s восстановление), затем harness/Wi-Fi OEM деградация → typed Failed после исчерпания policy; тест остановлен, НЕ заявляется пройденным (нужна новая методика/состояние сети) |
 | 2026-11-08 | Device pass v0.3.1 на Huawei nova Y90 + nova 13 Pro (Android 12) | pairing/PASS, audibility owner-confirmed/PASS, MediaFlowing/PASS, reconnect/PASS, screen-off 12s/PASS, Stop/PASS; battery/BT/calls/TalkBack/OEM — NOT RUN/BLOCKED; см. docs/operations/device-test-results-2026-11-08.md |

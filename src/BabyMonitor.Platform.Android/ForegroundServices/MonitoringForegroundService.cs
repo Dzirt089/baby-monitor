@@ -70,6 +70,7 @@ public sealed class MonitoringForegroundService : Service
     private Task? _mediaLifetime;
     private int _mediaGeneration;
     private bool _parentAlarmActive;
+    private bool _keepParentAlarmOnStop;
 
     /// <summary>Создаёт сервис; Android создаёт его без зависимостей приложения.</summary>
     public MonitoringForegroundService()
@@ -103,8 +104,6 @@ public sealed class MonitoringForegroundService : Service
         {
             CreateNotificationChannelApi26();
         }
-
-        CreateAlarmNotificationChannel();
     }
 
     /// <inheritdoc />
@@ -141,7 +140,7 @@ public sealed class MonitoringForegroundService : Service
         }
 
         PublishTerminalIfNeeded();
-        CancelParentAlarmNotification();
+        DismissParentAlarmOnStop();
         StopMediaSession();
         base.OnDestroy();
     }
@@ -161,6 +160,14 @@ public sealed class MonitoringForegroundService : Service
             PublishTerminalIfNeeded();
             StopSelf();
             return;
+        }
+
+        // Новый запуск не должен сохранять stale standalone alarm предыдущей упавшей сессии.
+        DismissParentAlarmOnRestart();
+        if (role is DeviceRole.Parent)
+        {
+            // Канал тревоги нужен только Parent (L5); для API 24–25 каналов нет — legacy builder.
+            CreateAlarmNotificationChannel();
         }
 
         try
@@ -282,9 +289,7 @@ public sealed class MonitoringForegroundService : Service
         {
             if (media.State is MediaSessionState.Failed)
             {
-                PublishMediaFailure(media.Role, media.Error ?? new Error(
-                    MediaSessionErrorCodes.AdapterFailure,
-                    MediaFailureMessage));
+                PublishFailedMedia(media);
                 return;
             }
 
@@ -309,6 +314,27 @@ public sealed class MonitoringForegroundService : Service
     private void PublishMediaFailure(DeviceRole role, Error error)
     {
         Publish(new ForegroundSessionSnapshot(role, MonitoringForegroundState.Failed, error));
+        StopSession();
+    }
+
+    /// <summary>
+    /// Публикует терминальный Failed media-снимок ВМЕСТЕ с media: UI видит ParentAlarmActive и
+    /// показывает «Связь потеряна!», а high-importance alarm Parent переживает остановку сервиса.
+    /// </summary>
+    private void PublishFailedMedia(MediaSessionSnapshot media)
+    {
+        var error = media.Error ?? new Error(MediaSessionErrorCodes.AdapterFailure, MediaFailureMessage);
+        Publish(new ForegroundSessionSnapshot(media.Role, MonitoringForegroundState.Failed, error, media));
+
+        if (media.Role is DeviceRole.Parent && media.ParentAlarmActive)
+        {
+            lock (_sync)
+            {
+                // Alarm уже поднят внутри Publish → UpdateParentLossAlarm; StopSession его не снимает.
+                _keepParentAlarmOnStop = true;
+            }
+        }
+
         StopSession();
     }
 
@@ -339,7 +365,7 @@ public sealed class MonitoringForegroundService : Service
         }
 
         PublishTerminalIfNeeded();
-        CancelParentAlarmNotification();
+        DismissParentAlarmOnStop();
         StopMediaSession();
         StopSelf();
     }
@@ -452,9 +478,13 @@ public sealed class MonitoringForegroundService : Service
     }
 
     /// <summary>
-    /// Создаёт отдельный high-importance канал тревоги (звук/вибрация по умолчанию). Best-effort:
-    /// отсутствие права на звук/вибрацию не должно ломать foreground service.
+    /// Создаёт отдельный high-importance канал тревоги (звук/вибрация по умолчанию) только для
+    /// Parent. Best-effort: отсутствие права на звук/вибрацию не должно ломать foreground service.
     /// </summary>
+    /// <remarks>
+    /// Device-only: звук/вибрация/DND канала не покрыты unit-тестами Platform.Android;
+    /// manifest/VIBRATE не меняются. Для API 24–25 каналов нет — используется legacy builder.
+    /// </remarks>
     private void CreateAlarmNotificationChannel()
     {
         if (!OperatingSystem.IsAndroidVersionAtLeast(26))
@@ -513,12 +543,17 @@ public sealed class MonitoringForegroundService : Service
     /// <summary>
     /// Transition-based тревога Parent: high-importance уведомление поднимается только на
     /// false→true и снимается на true→false/остановке; каждый SnapshotChanged не спамит.
+    /// ParentAlarmActive учитывается независимо от состояния: терминальный Failed Parent тоже
+    /// показывает alarm (уведомление остаётся standalone после остановки сервиса).
     /// </summary>
+    /// <remarks>
+    /// Device-only: путь уведомлений Platform.Android не покрыт unit-тестами (нет test infra);
+    /// звук, вибрация, heads-up и Do Not Disturb проверяются на устройстве. Manifest/VIBRATE не
+    /// меняются; без права вибрации уведомление деградирует best-effort.
+    /// </remarks>
     private void UpdateParentLossAlarm(ForegroundSessionSnapshot snapshot)
     {
-        var isActive = snapshot.Role is DeviceRole.Parent
-            && snapshot.State is MonitoringForegroundState.Running
-            && snapshot.Media?.ParentAlarmActive is true;
+        var isActive = snapshot.Role is DeviceRole.Parent && snapshot.Media?.ParentAlarmActive is true;
 
         bool raise;
         bool cancel;
@@ -534,6 +569,11 @@ public sealed class MonitoringForegroundService : Service
                 _parentAlarmActive = isActive;
                 raise = isActive;
                 cancel = !isActive;
+                if (!isActive && snapshot.State is MonitoringForegroundState.Running)
+                {
+                    // Успешное восстановление: отложенное сохранение alarm больше не нужно.
+                    _keepParentAlarmOnStop = false;
+                }
             }
         }
 
@@ -543,7 +583,16 @@ public sealed class MonitoringForegroundService : Service
         }
         else if (cancel)
         {
-            CancelParentAlarmNotification();
+            bool keep;
+            lock (_sync)
+            {
+                keep = _keepParentAlarmOnStop;
+            }
+
+            if (!keep)
+            {
+                CancelParentAlarmNotification();
+            }
         }
     }
 
@@ -561,7 +610,7 @@ public sealed class MonitoringForegroundService : Service
         }
     }
 
-    /// <summary>Снимает alarm-уведомление; идемпотентно.</summary>
+    /// <summary>Снимает alarm-уведомление и сбрасывает флаг; идемпотентно.</summary>
     private void CancelParentAlarmNotification()
     {
         lock (_sync)
@@ -569,6 +618,44 @@ public sealed class MonitoringForegroundService : Service
             _parentAlarmActive = false;
         }
 
+        CancelAlarmNotificationOnly();
+    }
+
+    /// <summary>
+    /// Остановка сервиса: standalone alarm терминального Failed Parent сохраняется (AutoCancel
+    /// снимет его по тапу пользователя); в остальных случаях уведомление снимается.
+    /// </summary>
+    private void DismissParentAlarmOnStop()
+    {
+        bool keep;
+        lock (_sync)
+        {
+            keep = _keepParentAlarmOnStop;
+            _parentAlarmActive = false;
+        }
+
+        if (keep)
+        {
+            return;
+        }
+
+        CancelAlarmNotificationOnly();
+    }
+
+    /// <summary>Новый запуск сервиса: stale standalone alarm предыдущей сессии снимается.</summary>
+    private void DismissParentAlarmOnRestart()
+    {
+        lock (_sync)
+        {
+            _parentAlarmActive = false;
+            _keepParentAlarmOnStop = false;
+        }
+
+        CancelAlarmNotificationOnly();
+    }
+
+    private void CancelAlarmNotificationOnly()
+    {
         try
         {
             var manager = (NotificationManager?)GetSystemService(NotificationService);

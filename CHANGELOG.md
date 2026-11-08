@@ -19,16 +19,19 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 ### Added
 
 - **Control heartbeat** в signaling-сессии: периодический ping/pong по существующему TLS
-  control-каналу (HeartbeatInterval 5 s, HeartbeatTimeout 15 s; TimeProvider), событие
+  control-каналу (HeartbeatInterval 5 s, HeartbeatTimeout 15 s — единый порог из
+  SipsorceryTransportOptions передаётся в Application/health; TimeProvider), событие
   `IRealtimeTransportSession.HeartbeatReceived`, typed `realtime.heartbeat_missed` при потере
-  control-канала (независимо от media flow). Требует обновления обеих сторон.
-- **ParentLossAlarm в media-сеансе**: локальная тревога Parent при потере heartbeat/media
-  (порог 15 s), `MediaSessionSnapshot.ParentAlarmActive`, отдельное high-importance
-  alarm-уведомление «Связь потеряна!» (звук/вибрация) и статус на экране мониторинга;
-  тревога не зависит от ответа Child.
-- **Telemetry counters**: `MediaSessionTelemetry` в снимке сеанса (отправленные/принятые кадры,
-  reconnect-попытки, uptime, последний media frame); строка метрик в экране «Диагностика»
-  (без аудио/секретов).
+  control-канала (независимо от media flow). Mixed-version совместим: v0.3.x уже отвечает pong
+  на ping (protocol v1 не менялся), поэтому heartbeat работает с обновлённой стороной; для
+  собственного alarm/health на старой стороне нужно обновление (рекомендуется обновить обе).
+- **ParentLossAlarm в media-сеансе**: локальная тревога Parent при потере control heartbeat ИЛИ
+  media flow (alarm-порог 15 s; media-loss фиксируется watchdog-ом), `MediaSessionSnapshot.ParentAlarmActive`,
+  отдельное high-importance alarm-уведомление «Связь потеряна!» (звук/вибрация) и статус на экране
+  мониторинга; тревога не зависит от ответа Child и видна также при терминальном Failed Parent.
+- **Telemetry counters (частично)**: `MediaSessionTelemetry` в снимке сеанса (отправленные/принятые
+  кадры, reconnect-попытки, uptime, последний media frame); строка метрик в экране «Диагностика»
+  (без аудио/секретов). Lost/underruns/silence/buffer depth/encode-decode counters — 007 follow-up.
 - SessionHealthMonitor учитывает heartbeat (Control Degraded/Lost) отдельно от media stall;
   heartbeat watchdog и first-frame media watchdog дают typed Degraded/Reconnecting.
 
@@ -41,7 +44,11 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 - Автоматизированный 100-цикловый reconnect-тест на v0.3.1 оказался неустойчивым из-за поведения
   Wi-Fi драйвера Huawei (переассоциация ~25-28 s после toggle; после 8 циклов — typed Failed
   вследствие исчерпания reconnect-политики). Методика и повтор — 007 (не заявляется пройденным).
-- Пороги heartbeat/alarm — defaults (5/15 s, alarm 15 s); настройка/тюнинг по device-метрикам — 007.
+- На момент 0.4.0 ParentAlarmActive для терминального Failed Parent выставляется при любом терминальном
+  отказе (включая локальные ошибки audio/adapter) — scoping только loss-кодов и текст тревоги — 007 follow-up.
+- Пороги heartbeat/alarm — defaults (5/15 s, alarm 15 s; App composition передаёт 15 s в health);
+  настройка/тюнинг по device-метрикам — 007. Смешанные версии: v0.3.x отвечает pong, но сама не
+  поднимает heartbeat alarm.
 
 ## [0.3.1] - 2026-11-08
 

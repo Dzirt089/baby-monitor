@@ -95,7 +95,10 @@ internal sealed class MediaSessionFactory : IMonitoringMediaSessionFactory
             connectivity,
             new ReconnectPolicy(),
             _timeProvider,
-            peerFingerprint);
+            peerFingerprint,
+            // Единый источник heartbeat-порога: coordinator health/watchdog должен использовать
+            // то же значение, что и transport (иначе алерты/детект срабатывают раньше времени).
+            heartbeatTimeout: transportOptions.HeartbeatTimeout);
 
         return Result<MonitoringMediaSession>.Success(new MonitoringMediaSession(coordinator, codec, connectivity));
     }
