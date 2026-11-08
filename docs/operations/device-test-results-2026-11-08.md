@@ -81,7 +81,24 @@
 | 7 | Media-only loss alarm (control жив, кадры стоят) | NOT RUN |
 | 8 | 20/100 Wi-Fi reconnect циклов с новой методикой | NOT RUN (тестовая методика дорабатывается) |
 
-**v0.4.4 rogue/flood single-device (nova Y90, no Parent, 2026-11-08):** versionCode 404 install PASS;
+## v0.4.4 two-device retest (T040/T043, partial, 2026-11-08)
+
+Оба Huawei на adb, v0.4.4 (versionCode 404).
+
+| # | Проверка | Результат |
+|---|---|---|
+| 1 | Install/launch v0.4.4 на обоих, старт Parent+Child (Child теперь ждёт Parent — T046) | PASS: обе MediaFlowing |
+| 2 | Diagnostics live telemetry | PASS: Child «кадры ↑14775 ↓0 · reconnect 0 · uptime 00:05:00», Parent «↑0 ↓14827 · uptime 00:05:12» (version 0.4.4) — счётчики/uptime живые |
+| 3 | Alarm при Wi-Fi Child off | PASS: Parent alarm ≤5 s («Связь потеряна!», notification «Радионяня: связь потеряна»), затем terminal Failed `realtime.signaling_timeout` через bounded retries (~105–120 s); FGS остановлен, standalone alarm id=1004 (channel parent_alarm, importance HIGH, category=err) остаётся; Child Failed typed `discovery.wifi_unavailable` |
+| 4 | Screen-off 90 s | PASS: обе flowing по нотификациям, crash buffer пуст |
+| 5 | Recovery после включения Wi-Fi | PASS только после ручного рестарта: обе MediaFlowing |
+| 6 | **Auto-reconnect 10 s Wi-Fi flap** | **FAIL (T053)**: оба сеанса терминально Failed за 139 s, ручной рестарт обязателен; alarm Parent остаётся |
+| 7 | Media-only alarm, звук/вибрация/DND alarm-канала, calls/BT/TalkBack, 100 reconnect cycles, 8 h soak | NOT RUN |
+
+Privacy: device test — без аудиоданных; alarm-нотификация не содержит PII. Sound/vibration не подтверждены
+человеком (только channel importance/category).
+
+### v0.4.4 rogue/flood single-device (nova Y90, no Parent, 2026-11-08): versionCode 404 install PASS;
 Child Advertising/Media Connecting, listener 0.0.0.0:47800. Host (192.168.3.x) сделал 3 rogue TCP
 connect+close → Child остался Connecting (retry Accept/cooldown), notification «Подключение…», crash
 buffer пуст. После 5 суммарных rogue-подключений (bounded attempts exhausted) — terminal Failed

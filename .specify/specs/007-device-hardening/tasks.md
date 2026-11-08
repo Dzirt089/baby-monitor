@@ -85,7 +85,7 @@
 - [ ] T039 Проверить, что при выборе другой роли во время активной сессии UI не создаёт вторую
   сессию/не теряет управление; typed error/подсказка.
 
-## Phase 7 — device-проверка v0.4.1 (T040/T043)
+## Phase 7 — device-проверка (T040/T043, v0.4.4 partial)
 
 - [-] T040 (v0.4.1 retest pending) Проверить на 2 устройствах: heartbeat/pong, срабатывание ParentLossAlarm «Связь потеряна!»
   (heartbeat loss и media-only loss), звук/вибрация/DND alarm-канала, terminal Failed Parent alarm,
@@ -97,8 +97,9 @@
 - [-] T042 (v0.4.2, частично) Live-refresh 1/s переопубликовывает SnapshotChanged → FGS Notify и UI Render каждую секунду;
   оптимизировать (обновлять уведомление только при изменении текста/флага; UI — при изменении
   отображаемых полей), измерить battery/CPU во время 8h soak.
-- [ ] T043 Device-retest v0.4.1 (T040): live counters, terminal Failed standalone alarm, media-only alarm,
-  звук/вибрация/DND alarm-канала после восстановления adb.
+- [-] T043 (partial, v0.4.4) Device-retest: live counters PASS, terminal Failed standalone alarm PASS
+  (Parent id=1004, importance HIGH, category=err, FGS stopped), screen-off 90 s PASS, recovery после
+  ручного рестарта PASS; media-only alarm, звук/вибрация/DND, calls/BT/TalkBack — NOT RUN.
 - [ ] T044 Setup-timeout tests: Child reconnect Accept timeout, «timeout после успешного setup не срабатывает»,
   race network-change vs setup-timeout (Stale vs SetupFailure).
 - [x] T046 (v0.4.2, device PASS single-device) Child listener ждёт Parent: HandshakeTimeout только после
@@ -106,23 +107,27 @@
 - [x] T047 (v0.4.3) Starting event order gate; Regression: slow subscriber/Stop during Starting.
 - [ ] T050 Parent candidate wait 250 ms может быть мал для медленного NSD resolve — тест slow-discovery/
   увеличить/ждать до deadline попытки (LOW PR #24).
-- [ ] T051 Async-iterator edge: pending MoveNext с non-OCE исключением в Parent discovery walk — обернуть
-  dispose/await в try-final (LOW PR #24).
+- [x] T051 (v0.4.5) Async-iterator cleanup: non-OCE pending MoveNext не маскирует typed ошибку,
+  dispose best-effort; regression-тест.
+- [ ] T053 Auto-reconnect после кратковременного Wi-Fi flap: 10 s off → оба терминально Failed за 139 s,
+  ручной рестарт обязателен; network-aware wait/сброс attempts/ожидание connectivity до исчерпания policy.
 - [ ] T052 Bounded initial DoS: 5 подряд rogue-отказов (Child) / rogue mDNS candidates (Parent) всё ещё
   дают initial FailStartup — documented limitation; рассмотреть продолжать Advertising/сбрасывать окно
   (H3). Device evidence v0.4.4: 3 rogue → Connecting, 5 rogue → Failed tls_failure.
 - [ ] T045 Product decision: discovery-loss коды дают «Связь потеряна!» и на initial-попытке (ребёнок не
   найден) — решить, нужен ли отдельный текст/без alarm для initial setup.
-- [ ] T048 Строгий порядок Starting при конкурентном Stop (сериализация/ожидание gate) + XML-doc
-  SnapshotChanged «handlers must not block»; тест конкурентного Stop/Starting.
-- [ ] T049 Semantic arch-test расширить на Socket/UdpClient/HttpClient (cleartext вне
-  Infrastructure/Signaling|Realtime) — LOW gap.
+- [x] T048 (v0.4.5) Строгий порядок Starting при конкурентном Stop: StopAsync ждёт Starting-публикацию
+  (bounded 5 s) до Stopping; XML-doc SnapshotChanged contract; regression-тест.
+- [x] T049 (v0.4.5) Semantic arch-test расширен: Socket/UdpClient/SslStream/HttpClient/... только
+  Infrastructure/Signaling|Realtime; word-boundary Socket + matcher test.
 
 ## Verification Log
 
 | Дата | Проверка | Результат |
 |---|---|---|
 | 2026-11-08 | v0.4.4 device rogue/flood (single nova Y90) | 3 rogue TCP connect+close → Child Connecting (retry/cooldown), 5 → terminal FailStartup tls_failure (bounded, residual DoS H3/T052); crash buffer пуст; rate-limit cooldown device-observation PASS-partial |
+| 2026-11-08 | v0.4.5 gates | 552/552 (Domain 38, Application 283, Infrastructure 172, Architecture 59); Debug/Release 0 warnings; format clean; vuln OK; T048/T049/T051 |
+| 2026-11-08 | v0.4.4 two-device T040/T043 (Huawei pair) | MediaFlowing PASS; live telemetry LIVE (↑14775/↓14827, uptime 5:00/5:12); Wi-Fi off → alarm ≤5 s, terminal Failed signaling_timeout + standalone alarm id1004 importance HIGH category err PASS; screen-off 90 s PASS; recovery после ручного рестарта PASS; **T053 auto-reconnect 10 s flap FAIL** (both terminal Failed за 139 s); sound/vibration/DND/calls/BT/TalkBack/100 cycles/8h — NOT RUN |
 | 2026-11-08 | v0.4.4 gates | 549/549 (Domain 38, Application 281, Infrastructure 172, Architecture 58); Debug/Release 0 warnings; format clean; vuln OK; T007a/T007b |
 | 2026-11-08 | v0.4.3 device sanity (single nova Y90) | install versionCode 403 PASS; Child без Parent: Running/Media Connecting >20 s, без Failed/crash, Stop PASS; двухдевайсовые T040/T043 pending |
 | 2026-11-08 | v0.4.3 gates | 538/538 (Domain 38, Application 275, Infrastructure 167, Architecture 58); Debug/Release 0 warnings; format clean; vuln OK; Release-run Application tests 275/275; T047 event order |

@@ -1,10 +1,12 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace BabyMonitor.Architecture.Tests;
 
 /// <summary>
-/// Границы 005 phase 2: SIPSorcery только в Infrastructure, TLS-код только в Signaling-адаптере,
-/// аудио-данные не логируются и не пишутся на диск.
+/// Границы 005/007: SIPSorcery только в Infrastructure, сетевые/TLS/HTTP API — только в
+/// Infrastructure/Signaling|Realtime (signaling обязан быть TLS-only), аудио-данные не логируются
+/// и не пишутся на диск.
 /// </summary>
 public sealed class MediaPipelineArchitectureTests
 {
@@ -13,17 +15,29 @@ public sealed class MediaPipelineArchitectureTests
     private static readonly string[] FileWriteTokens = ["FileStream", "WriteAllBytes", "WriteAllText", "File."];
 
     /// <summary>
-    /// Сетевые/TLS-API, допустимые только в Infrastructure/Signaling|Realtime: signaling обязан быть
-    /// TLS-only (ADR-0007), cleartext TCP/HTTP в других слоях запрещён.
+    /// Сетевые/HTTP/TLS-API, допустимые только в Infrastructure/Signaling|Realtime: signaling обязан
+    /// быть TLS-only (ADR-0007), cleartext TCP/UDP/HTTP в других слоях запрещён. Токен Socket
+    /// сопоставляется по границам слова (SocketException/WebSocketSharp/System.Net.Sockets — не Socket).
     /// </summary>
-    private static readonly string[] NetworkAndTlsTokens =
+    private static readonly string[] ForbiddenNetworkTokens =
     [
+        "Socket",
+        "UdpClient",
+        "TcpListener",
+        "TcpClient",
         "SslStream",
         "SslClientAuthenticationOptions",
         "SslServerAuthenticationOptions",
-        "TcpListener",
-        "TcpClient"
+        "HttpClient",
+        "HttpMessageHandler",
+        "WebRequest"
     ];
+
+    // Эквивалент \bSocket\b без escape-последовательностей: Socket не внутри слова
+    // (SocketException/WebSocketSharp/System.Net.Sockets не считаются типом Socket).
+    private static readonly Regex SocketTypeToken = new(
+        "(?<![A-Za-z0-9_])Socket(?![A-Za-z0-9_])",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     [Fact]
     public void SIPSorcery_используется_только_в_Infrastructure()
@@ -179,9 +193,9 @@ public sealed class MediaPipelineArchitectureTests
 
             var relativePath = Path.GetRelativePath(ArchitectureTestSupport.FindRepositoryRoot(), filePath);
             var code = ReadCodeWithoutComments(filePath);
-            foreach (var token in NetworkAndTlsTokens)
+            foreach (var token in ForbiddenNetworkTokens)
             {
-                if (code.Contains(token, StringComparison.Ordinal))
+                if (ContainsForbiddenNetworkToken(code, token))
                 {
                     violations.Add($"{relativePath}: {token}");
                 }
@@ -190,15 +204,50 @@ public sealed class MediaPipelineArchitectureTests
 
         Assert.True(
             violations.Count == 0,
-            "SslStream/TcpClient/TcpListener допускаются только в Infrastructure/Signaling|Realtime; " +
-            "signaling обязан быть TLS-only, cleartext-соединения в других слоях запрещены (ADR-0007): " +
+            "Socket/UdpClient/TcpClient/TcpListener/SslStream/HttpClient/HttpMessageHandler/WebRequest " +
+            "допускаются только в Infrastructure/Signaling|Realtime; signaling обязан быть TLS-only, " +
+            "cleartext-соединения в других слоях запрещены (ADR-0007): " +
             ArchitectureTestSupport.FormatList(violations));
     }
 
-    private static string ReadCodeWithoutComments(string filePath)
+    [Fact]
+    public void Socket_токен_учитывает_границы_слов_и_комментарии_вырезаются()
+    {
+        // Положительные: тип Socket, в том числе fully-qualified.
+        Assert.True(ContainsForbiddenNetworkToken(
+            "var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);",
+            "Socket"));
+        Assert.True(ContainsForbiddenNetworkToken("System.Net.Sockets.Socket accepted;", "Socket"));
+
+        // Отрицательные: SocketException/Sockets/WebSocketSharp не являются типом Socket.
+        Assert.False(ContainsForbiddenNetworkToken("catch (SocketException exception)", "Socket"));
+        Assert.False(ContainsForbiddenNetworkToken("using System.Net.Sockets;", "Socket"));
+        Assert.False(ContainsForbiddenNetworkToken("var client = new WebSocketSharp.WebSocket(url);", "Socket"));
+
+        // Комментарии и XML-doc вырезаются до поиска (как в остальных architecture-тестах):
+        // doc-ссылки/упоминания не дают violation.
+        var codeWithoutComments = JoinCodeWithoutComments(
+        [
+            "// Socket запрещён вне Infrastructure/Signaling",
+            "/// <see cref=\"System.Net.Sockets.Socket\"/>",
+            "var harmless = 1;"
+        ]);
+        Assert.False(ContainsForbiddenNetworkToken(codeWithoutComments, "Socket"));
+    }
+
+    /// <summary>Ищет запрещённый токен: Socket — по границам слова, остальные — как подстроку типа.</summary>
+    private static bool ContainsForbiddenNetworkToken(string code, string token) =>
+        string.Equals(token, "Socket", StringComparison.Ordinal)
+            ? SocketTypeToken.IsMatch(code)
+            : code.Contains(token, StringComparison.Ordinal);
+
+    private static string ReadCodeWithoutComments(string filePath) =>
+        JoinCodeWithoutComments(File.ReadAllLines(filePath));
+
+    private static string JoinCodeWithoutComments(IEnumerable<string> lines)
     {
         var result = new StringBuilder();
-        foreach (var line in File.ReadAllLines(filePath))
+        foreach (var line in lines)
         {
             var trimmed = line.TrimStart();
             if (trimmed.StartsWith("//", StringComparison.Ordinal)
