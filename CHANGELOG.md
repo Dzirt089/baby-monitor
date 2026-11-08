@@ -14,6 +14,29 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 фоновой сессии на экране выбора роли) и 008 (release readiness, owner-gated публикация/лицензия/
 дистрибуция).
 
+## [0.4.7] - 2026-11-08
+
+### Fixed
+
+- **Auto-reconnect после Wi-Fi flap (T053)**: быстрые setup-отказы network_unavailable/wifi_unavailable
+  (пока Wi-Fi assoc-ится) исчерпывали MaxAttempts/backoff и давали terminal Failed за секунды (device:
+  10 s flap → оба Failed за 139 s, ручной рестарт). Теперь reconnect-loop имеет LAN-gate через
+  IConnectivityMonitor: без сети attempt не запускается (Child не поднимает listener/advertise, Parent
+  не тратит discovery/candidates), MaxAttempts/backoff не расходуются; bounded ожидание 60 s с поллингом
+  250 ms через TimeProvider; network-loss setup-отказы не расходуют MaxAttempts (отдельный bounded
+  MaxNetworkLossRetries=5); после возврата сети — сброс retryIndex/backoff и обычный attempt.
+  Offline >60 s → честный terminal realtime.network_unavailable. Stop/Dispose/network-change прерывают
+  ожидание; Parent alarm сбрасывается после восстановления MediaFlowing.
+- **Device evidence (v0.4.4)**: 10 s Wi-Fi flap → оба terminal Failed за 139 s (T053); после фикса нужен
+  device-retest.
+
+### Verification
+
+- Debug/Release build 0 warnings; format clean; vuln scan чистый; тесты **560/560**
+  (Domain 38, Application 291, Infrastructure 172, Architecture 59); независимое review — после PR.
+- Device v0.4.7 retest pending (10 s Wi-Fi flap → auto-recovery), двухдевайсовые T040/T043 остаются
+  частичными; sound/vibration/DND/calls/BT/TalkBack/100 cycles/8h soak — NOT RUN.
+
 ## [0.4.6] - 2026-11-08
 
 ### Fixed / hardened

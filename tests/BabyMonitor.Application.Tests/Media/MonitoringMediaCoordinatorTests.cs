@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using BabyMonitor.Application.Abstractions.Audio;
+using BabyMonitor.Application.Abstractions.Connectivity;
 using BabyMonitor.Application.Abstractions.Discovery;
 using BabyMonitor.Application.Abstractions.Realtime;
 using BabyMonitor.Application.Media;
@@ -1269,10 +1270,12 @@ public sealed class MonitoringMediaCoordinatorTests
         var harness = new Harness();
         harness.Transport.ConnectHandler = _ => Task.FromResult(Result<IRealtimeTransportSession>.Failure(
             new Error(errorCode, "Соединение потеряно.")));
+        harness.Discovery.AutoPeer = CreatePeer();
         await using var coordinator = harness.Create(DeviceRole.Parent);
         await coordinator.StartAsync(CancellationToken.None);
 
-        harness.Discovery.LastSession!.AddPeer(CreatePeer());
+        // network_unavailable — network-loss: попытки не расходуют MaxAttempts, но после лимита
+        // network-recovery (5) сеанс всё равно уходит в terminal Failed с typed причиной (T053).
         var failed = await WaitForStateAsyncWithTimeAsync(harness.Time, coordinator, MediaSessionState.Failed);
 
         Assert.Equal(errorCode, failed.Error!.Code);
@@ -1281,7 +1284,7 @@ public sealed class MonitoringMediaCoordinatorTests
     }
 
     [Fact]
-    public async Task Parent_alarm_сохраняется_при_terminal_Failed_по_discovery_loss_после_retry()
+    public async Task Parent_alarm_сохраняется_при_terminal_Failed_после_долгой_потери_WiFi()
     {
         var harness = new Harness();
         var transport = new FakeRealtimeTransportSession();
@@ -1298,17 +1301,26 @@ public sealed class MonitoringMediaCoordinatorTests
         transport.PushEncodedFrame(new byte[] { 1 });
         await WaitForStateAsync(coordinator, MediaSessionState.MediaFlowing);
 
+        // T053: Wi-Fi пропал вместе с media-потоком; reconnect ждёт сеть до NetworkWaitTimeout,
+        // но дольше лимита честно уходит в terminal Failed с typed network_unavailable.
+        harness.Connectivity.GoOffline();
         transport.Fail(new Error(RealtimeTransportErrorCodes.MediaFlowLost, "Media-поток потерян."));
         await WaitForStateAsync(coordinator, MediaSessionState.Reconnecting);
 
-        // Device-evidence (v0.4.0): Child потерял Wi-Fi, retry Parent упирается в discovery.wifi_unavailable.
-        harness.Discovery.StartError = new Error(
-            DiscoveryErrorCodes.WifiUnavailable,
-            "Wi-Fi недоступен.");
-        await AdvanceUntilAsync(harness.Time, () => harness.Discovery.StartCalls >= 2, "повторный discovery");
-        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+        var deadline = DateTime.UtcNow + TestTimeout;
+        while (coordinator.Snapshot?.State != MediaSessionState.Failed)
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("Не дождались terminal Failed после длительной потери Wi-Fi.");
+            }
 
-        Assert.Equal(DiscoveryErrorCodes.WifiUnavailable, failed.Error!.Code);
+            harness.Time.Advance(TimeSpan.FromSeconds(5));
+            await Task.Delay(5);
+        }
+
+        var failed = coordinator.Snapshot!;
+        Assert.Equal(RealtimeTransportErrorCodes.NetworkUnavailable, failed.Error!.Code);
         Assert.True(failed.ParentAlarmActive);
         Assert.True(coordinator.Snapshot!.ParentAlarmActive);
 
@@ -1639,6 +1651,167 @@ public sealed class MonitoringMediaCoordinatorTests
         // исходную typed-ошибку; cleanup обязан освободить discovery (T051).
         Assert.Equal(MediaSessionErrorCodes.AdapterFailure, failed.Error!.Code);
         Assert.Equal(1, discoverySession.DisposeCalls);
+    }
+
+    [Fact]
+    public async Task Child_не_стартует_listener_и_advertise_пока_WiFi_offline()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        harness.Connectivity.GoOffline();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+
+        var startTask = coordinator.StartAsync(CancellationToken.None);
+        for (var index = 0; index < 4; index++)
+        {
+            harness.Time.Advance(TimeSpan.FromMilliseconds(500));
+            await Task.Delay(5);
+        }
+
+        Assert.False(startTask.IsCompleted);
+        Assert.Equal(0, harness.Listener.StartCalls);
+        Assert.Equal(0, harness.Advertiser.StartCalls);
+        Assert.NotEqual(MediaSessionState.Failed, coordinator.Snapshot!.State);
+
+        harness.Connectivity.GoOnline();
+        await AdvanceUntilAsync(harness.Time, () => startTask.IsCompleted, "старт после восстановления сети");
+        var start = await startTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.True(start.IsSuccess);
+        Assert.Equal(MediaSessionState.Advertising, start.Value.State);
+        Assert.Equal(1, harness.Listener.StartCalls);
+        Assert.Equal(1, harness.Advertiser.StartCalls);
+    }
+
+    [Fact]
+    public async Task Offline_дольше_лимита_даёт_terminal_network_unavailable()
+    {
+        var harness = new Harness();
+        harness.Connectivity.GoOffline();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+        var startTask = coordinator.StartAsync(CancellationToken.None);
+
+        // Ожидание сети упирается в NetworkWaitTimeout; гоняем виртуальное время, пока run не
+        // зарегистрирует poll-таймер (иначе единичный скачок мог бы пройти до старта ожидания).
+        var deadline = DateTime.UtcNow + TestTimeout;
+        while (!startTask.IsCompleted)
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("Не дождались terminal network_unavailable после офлайна.");
+            }
+
+            harness.Time.Advance(TimeSpan.FromMinutes(1));
+            await Task.Delay(5);
+        }
+
+        var start = await startTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.False(start.IsSuccess);
+        Assert.Equal(RealtimeTransportErrorCodes.NetworkUnavailable, start.Error!.Code);
+        Assert.Equal(MediaSessionState.Failed, coordinator.Snapshot!.State);
+        Assert.Equal(RealtimeTransportErrorCodes.NetworkUnavailable, coordinator.Snapshot.Error!.Code);
+    }
+
+    [Fact]
+    public async Task Stop_во_время_ожидания_сети_не_зависает()
+    {
+        var harness = new Harness();
+        harness.Connectivity.GoOffline();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+        var startTask = coordinator.StartAsync(CancellationToken.None);
+        harness.Time.Advance(TimeSpan.FromMilliseconds(500));
+        await Task.Delay(5);
+
+        var stop = await coordinator.StopAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+
+        var start = await startTask.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(start.IsSuccess);
+    }
+
+    [Fact]
+    public async Task Child_network_loss_setup_отказ_не_расходует_MaxAttempts()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        harness.Connectivity.EnqueueSnapshot(Result<NetworkSnapshot>.Success(new NetworkSnapshot(true)));
+        harness.Connectivity.EnqueueSnapshot(Result<NetworkSnapshot>.Success(new NetworkSnapshot(false)));
+        harness.Connectivity.EnqueueSnapshot(Result<NetworkSnapshot>.Success(new NetworkSnapshot(true)));
+        harness.Advertiser.EnqueueStartFailure(new Error(
+            DiscoveryErrorCodes.WifiUnavailable,
+            "Wi-Fi пропал во время advertise."));
+        await using var coordinator = harness.Create(DeviceRole.Child, Harness.CreatePolicy(maxAttempts: 1));
+
+        var startTask = coordinator.StartAsync(CancellationToken.None);
+        await AdvanceUntilAsync(harness.Time, () => startTask.IsCompleted, "повтор после network-loss setup отказа");
+        var start = await startTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // Отказ wifi_unavailable не съел MaxAttempts=1: после ожидания сети следующий attempt успешен.
+        Assert.True(start.IsSuccess);
+        Assert.Equal(MediaSessionState.Advertising, start.Value.State);
+        Assert.Equal(2, harness.Listener.StartCalls);
+        Assert.Equal(2, harness.Advertiser.StartCalls);
+        Assert.NotEqual(MediaSessionState.Failed, coordinator.Snapshot!.State);
+    }
+
+    [Fact]
+    public async Task Parent_переживает_кратковременную_потерю_WiFi_и_восстанавливает_MediaFlowing()
+    {
+        var harness = new Harness();
+        var transports = new List<FakeRealtimeTransportSession>();
+        harness.Transport.ConnectHandler = _ =>
+        {
+            var session = new FakeRealtimeTransportSession();
+            transports.Add(session);
+            return Task.FromResult(Result<IRealtimeTransportSession>.Success(session));
+        };
+        await using var coordinator = harness.Create(DeviceRole.Parent);
+        await coordinator.StartAsync(CancellationToken.None);
+        harness.Discovery.LastSession!.AddPeer(CreatePeer());
+        await WaitForStateAsync(coordinator, MediaSessionState.Connected);
+        await WaitUntilAsync(() => harness.Playback.LastSession is not null, "playback стартовал");
+        transports[0].RaiseHeartbeat();
+        transports[0].PushEncodedFrame(new byte[] { 1 });
+        await WaitForStateAsync(coordinator, MediaSessionState.MediaFlowing);
+        Assert.False(coordinator.Snapshot!.ParentAlarmActive);
+
+        // Wi-Fi off: monitor offline, NetworkChanged отменяет media-attempt.
+        harness.Connectivity.GoOffline();
+        harness.Connectivity.RaiseNetworkChanged();
+        await WaitForStateAsync(coordinator, MediaSessionState.Reconnecting);
+
+        // Пока сети нет, attempt-ы не запускаются: MaxAttempts/backoff не расходуются.
+        var discoveryCallsBefore = harness.Discovery.StartCalls;
+        for (var index = 0; index < 6; index++)
+        {
+            harness.Time.Advance(TimeSpan.FromMilliseconds(500));
+            await Task.Delay(5);
+        }
+
+        Assert.Equal(MediaSessionState.Reconnecting, coordinator.Snapshot!.State);
+        Assert.Equal(discoveryCallsBefore, harness.Discovery.StartCalls);
+
+        // Wi-Fi вернулся (10 s flap << 60 s): следующий attempt находит peer, MediaFlowing возвращается.
+        harness.Connectivity.GoOnline();
+        harness.Connectivity.RaiseNetworkChanged();
+        await AdvanceUntilAsync(
+            harness.Time,
+            () => harness.Discovery.StartCalls > discoveryCallsBefore,
+            "attempt после восстановления Wi-Fi");
+        harness.Discovery.LastSession!.AddPeer(CreatePeer());
+        await WaitForStateAsync(coordinator, MediaSessionState.Connected);
+        await WaitUntilAsync(() => harness.Playback.Sessions.Count >= 2, "playback после reconnect");
+        var recovered = transports[^1];
+        recovered.RaiseHeartbeat();
+        recovered.PushEncodedFrame(new byte[] { 2 });
+        await WaitForStateAsync(coordinator, MediaSessionState.MediaFlowing);
+
+        Assert.Equal(MediaSessionState.MediaFlowing, coordinator.Snapshot!.State);
+        Assert.False(coordinator.Snapshot.ParentAlarmActive);
+
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
     }
 
     private static DiscoveredPeer CreatePeer(string discoveryId, string host) => new(

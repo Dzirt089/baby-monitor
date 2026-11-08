@@ -194,6 +194,9 @@ internal sealed class FakePeerDiscovery : IPeerDiscovery
 
     public Error? StartError { get; set; }
 
+    /// <summary>Peer, автоматически добавляемый в каждую новую discovery-сессию (retry-тесты).</summary>
+    public DiscoveredPeer? AutoPeer { get; set; }
+
     public List<FakePeerDiscoverySession> Sessions { get; } = new();
 
     public FakePeerDiscoverySession? LastSession { get; private set; }
@@ -210,6 +213,11 @@ internal sealed class FakePeerDiscovery : IPeerDiscovery
             if (error is null)
             {
                 session = new FakePeerDiscoverySession();
+                if (AutoPeer is { } autoPeer)
+                {
+                    session.AddPeer(autoPeer);
+                }
+
                 LastSession = session;
                 Sessions.Add(session);
             }
@@ -311,7 +319,12 @@ internal sealed class FakePeerAdvertiser : IPeerAdvertiser
 
     public Error? StartError { get; set; }
 
+    private readonly Queue<Error> _startFailures = new();
+
     public FakePeerAdvertiserSession? LastSession { get; private set; }
+
+    /// <summary>Ставит ошибку для следующего StartAsync (после неё StartError/успех снова действуют).</summary>
+    public void EnqueueStartFailure(Error error) => _startFailures.Enqueue(error);
 
     public Task<Result<IPeerAdvertiserSession>> StartAsync(
         PeerAdvertisement advertisement,
@@ -320,9 +333,10 @@ internal sealed class FakePeerAdvertiser : IPeerAdvertiser
         ArgumentNullException.ThrowIfNull(advertisement);
         StartCalls++;
         LastAdvertisement = advertisement;
-        if (StartError is { } error)
+        Error? failure = _startFailures.Count > 0 ? _startFailures.Dequeue() : StartError;
+        if (failure is not null)
         {
-            return Task.FromResult(Result<IPeerAdvertiserSession>.Failure(error));
+            return Task.FromResult(Result<IPeerAdvertiserSession>.Failure(failure));
         }
 
         LastSession = new FakePeerAdvertiserSession();
@@ -901,14 +915,36 @@ internal sealed class FakeAudioCodec : IAudioCodec, IDisposable
 /// <summary>Fake IConnectivityMonitor: тест поднимает NetworkChanged вручную.</summary>
 internal sealed class FakeConnectivityMonitor : IConnectivityMonitor
 {
+    private readonly object _sync = new();
+    private readonly Queue<Result<NetworkSnapshot>> _snapshotSequence = new();
+
     public event EventHandler? NetworkChanged;
 
     public int DisposeCalls { get; private set; }
 
     public Result<NetworkSnapshot> SnapshotResult { get; set; } = Result<NetworkSnapshot>.Success(new NetworkSnapshot(true));
 
-    public Task<Result<NetworkSnapshot>> GetSnapshotAsync(CancellationToken cancellationToken) =>
-        Task.FromResult(SnapshotResult);
+    /// <summary>Ставит снимок для следующего GetSnapshotAsync (приоритетнее SnapshotResult).</summary>
+    public void EnqueueSnapshot(Result<NetworkSnapshot> snapshot)
+    {
+        lock (_sync)
+        {
+            _snapshotSequence.Enqueue(snapshot);
+        }
+    }
+
+    public void GoOffline() => SnapshotResult = Result<NetworkSnapshot>.Success(new NetworkSnapshot(false));
+
+    public void GoOnline() => SnapshotResult = Result<NetworkSnapshot>.Success(new NetworkSnapshot(true));
+
+    public Task<Result<NetworkSnapshot>> GetSnapshotAsync(CancellationToken cancellationToken)
+    {
+        lock (_sync)
+        {
+            return Task.FromResult(
+                _snapshotSequence.Count > 0 ? _snapshotSequence.Dequeue() : SnapshotResult);
+        }
+    }
 
     public ValueTask DisposeAsync()
     {
