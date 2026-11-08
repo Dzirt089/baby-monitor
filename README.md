@@ -151,7 +151,7 @@ approval на GitHub Free для private-репозитория недоступ
 
 Тестовая сборка **не является рабочей радионяней** и не медицинское изделие: передача звука
 подтверждена владельцем на v0.3.1 (Huawei pair, Android 12); актуальные device-результаты и
-открытые ограничения (T053 auto-reconnect, soak/100 cycles/OEM/calls/BT/TalkBack) —
+открытые ограничения (media-only alarm, sound/vibration/DND, calls/BT/TalkBack, soak/100 cycles/OEM) —
 [docs/operations/device-test-results-2026-11-08.md](docs/operations/device-test-results-2026-11-08.md).
 Полная release readiness matrix (AGENTS §16) не пройдена.
 
