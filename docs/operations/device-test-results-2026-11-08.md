@@ -81,6 +81,11 @@
 | 7 | Media-only loss alarm (control жив, кадры стоят) | NOT RUN |
 | 8 | 20/100 Wi-Fi reconnect циклов с новой методикой | NOT RUN (тестовая методика дорабатывается) |
 
+**v0.4.3 single-device sanity (nova Y90, no Parent, 2026-11-08):** versionCode 403 install PASS;
+Child-сеанс без Parent: «Подключение…», Running/Media Connecting >20 s, без Failed/crash, Stop PASS.
+Порядок Starting-before-RunAsync (T047) подтверждён косвенно успешным стартом; двухдевайсовые
+T040/T043 — pending.
+
 **T046 retest v0.4.2 (single-device, nova Y90, no Parent, 2026-11-08):** install versionCode 402 PASS;
 Child-сеанс без Parent остаётся Running/Media Connecting >40 s (10 замеров по 4 s), terminal
 signaling_timeout не наступает; notification «Радионяня: ребёнок»; crash buffer пуст; Stop PASS.

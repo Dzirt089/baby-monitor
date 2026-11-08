@@ -485,6 +485,7 @@ internal sealed class FakeRealtimeTransportListener : IRealtimeTransportListener
 {
     private readonly object _sync = new();
     private readonly Queue<Error> _startFailures = new();
+    private readonly Queue<Error> _acceptFailures = new();
     private TaskCompletionSource<int> _startSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private TaskCompletionSource<int> _acceptSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -507,6 +508,15 @@ internal sealed class FakeRealtimeTransportListener : IRealtimeTransportListener
         lock (_sync)
         {
             _startFailures.Enqueue(error);
+        }
+    }
+
+    /// <summary>Ставит peer-level отказ для следующего AcceptAsync (listener остаётся пригодным).</summary>
+    public void EnqueueAcceptFailure(Error error)
+    {
+        lock (_sync)
+        {
+            _acceptFailures.Enqueue(error);
         }
     }
 
@@ -578,19 +588,23 @@ internal sealed class FakeRealtimeTransportListener : IRealtimeTransportListener
         }
     }
 
-    internal FakeRealtimeTransportSession CreateAcceptedTransport()
+    internal Result<IRealtimeTransportSession> AcceptNextTransport()
     {
-        var transport = TransportFactory?.Invoke() ?? new FakeRealtimeTransportSession();
         lock (_sync)
         {
             AcceptCalls++;
+            if (_acceptFailures.Count > 0)
+            {
+                return Result<IRealtimeTransportSession>.Failure(_acceptFailures.Dequeue());
+            }
+
+            var transport = TransportFactory?.Invoke() ?? new FakeRealtimeTransportSession();
             LastAcceptedTransport = transport;
             var signal = _acceptSignal;
             _acceptSignal = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
             signal.TrySetResult(AcceptCalls);
+            return Result<IRealtimeTransportSession>.Success(transport);
         }
-
-        return transport;
     }
 }
 
@@ -609,11 +623,8 @@ internal sealed class FakeRealtimeTransportListenerSession : IRealtimeTransportL
 
     public int DisposeCalls { get; private set; }
 
-    public Task<Result<IRealtimeTransportSession>> AcceptAsync(CancellationToken cancellationToken)
-    {
-        var transport = _listener.CreateAcceptedTransport();
-        return Task.FromResult(Result<IRealtimeTransportSession>.Success(transport));
-    }
+    public Task<Result<IRealtimeTransportSession>> AcceptAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(_listener.AcceptNextTransport());
 
     public ValueTask DisposeAsync()
     {

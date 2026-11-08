@@ -300,7 +300,9 @@ public sealed class MonitoringMediaCoordinatorTests
         await coordinator.StartAsync(CancellationToken.None);
 
         harness.Discovery.LastSession!.AddPeer(CreatePeer());
-        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+        // Один rogue candidate: после transient-отказа ждём следующий ограниченное время, затем
+        // terminal SetupFailure с последней typed ошибкой (T007a).
+        var failed = await WaitForStateAsyncWithTimeAsync(harness.Time, coordinator, MediaSessionState.Failed);
 
         Assert.Equal(RealtimeTransportErrorCodes.PeerUnavailable, failed.Error!.Code);
         Assert.Equal(1, harness.Transport.ConnectCalls);
@@ -316,7 +318,7 @@ public sealed class MonitoringMediaCoordinatorTests
         await coordinator.StartAsync(CancellationToken.None);
 
         harness.Discovery.LastSession!.AddPeer(CreatePeer());
-        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+        var failed = await WaitForStateAsyncWithTimeAsync(harness.Time, coordinator, MediaSessionState.Failed);
 
         Assert.Equal(RealtimeTransportErrorCodes.UnauthorizedPeer, failed.Error!.Code);
     }
@@ -838,7 +840,7 @@ public sealed class MonitoringMediaCoordinatorTests
             () => harness.Discovery.StartCalls >= 2 && harness.Discovery.LastSession is not null,
             "повторный discovery");
         harness.Discovery.LastSession!.AddPeer(CreatePeer());
-        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+        var failed = await WaitForStateAsyncWithTimeAsync(harness.Time, coordinator, MediaSessionState.Failed);
 
         Assert.Equal(RealtimeTransportErrorCodes.PeerUnavailable, failed.Error!.Code);
         Assert.True(failed.ParentAlarmActive);
@@ -1233,7 +1235,7 @@ public sealed class MonitoringMediaCoordinatorTests
         await coordinator.StartAsync(CancellationToken.None);
 
         harness.Discovery.LastSession!.AddPeer(CreatePeer());
-        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+        var failed = await WaitForStateAsyncWithTimeAsync(harness.Time, coordinator, MediaSessionState.Failed);
 
         Assert.Equal(RealtimeTransportErrorCodes.PeerUnavailable, failed.Error!.Code);
         Assert.True(failed.ParentAlarmActive);
@@ -1251,7 +1253,7 @@ public sealed class MonitoringMediaCoordinatorTests
         await coordinator.StartAsync(CancellationToken.None);
 
         harness.Discovery.LastSession!.AddPeer(CreatePeer());
-        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+        var failed = await WaitForStateAsyncWithTimeAsync(harness.Time, coordinator, MediaSessionState.Failed);
 
         // Отказ доверия/версии — не потеря связи: loss-тревога не должна вводить пользователя в заблуждение.
         Assert.Equal(errorCode, failed.Error!.Code);
@@ -1271,7 +1273,7 @@ public sealed class MonitoringMediaCoordinatorTests
         await coordinator.StartAsync(CancellationToken.None);
 
         harness.Discovery.LastSession!.AddPeer(CreatePeer());
-        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+        var failed = await WaitForStateAsyncWithTimeAsync(harness.Time, coordinator, MediaSessionState.Failed);
 
         Assert.Equal(errorCode, failed.Error!.Code);
         Assert.True(failed.ParentAlarmActive);
@@ -1316,6 +1318,142 @@ public sealed class MonitoringMediaCoordinatorTests
         Assert.Equal(MediaSessionState.Failed, stop.Value.State);
         Assert.True(stop.Value.ParentAlarmActive);
     }
+
+    [Fact]
+    public async Task Child_повторяет_accept_после_peer_level_отказа()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        harness.Listener.EnqueueAcceptFailure(new Error(RealtimeTransportErrorCodes.TlsFailure, "Rogue peer."));
+        await using var coordinator = harness.Create(DeviceRole.Child);
+
+        var start = await coordinator.StartAsync(CancellationToken.None);
+        Assert.True(start.IsSuccess);
+
+        // Пауза перед повтором Accept идёт через TimeProvider: двигаем виртуальное время.
+        await AdvanceUntilAsync(
+            harness.Time,
+            () => harness.Listener.AcceptCalls >= 2 && harness.Listener.LastAcceptedTransport is not null,
+            "повторный Accept");
+        await WaitForStateAsync(coordinator, MediaSessionState.Connected);
+
+        Assert.Equal(2, harness.Listener.AcceptCalls);
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+    }
+
+    [Fact]
+    public async Task Child_пять_peer_level_отказов_дают_FailStartup_с_последней_ошибкой()
+    {
+        var harness = new Harness();
+        for (var index = 0; index < 5; index++)
+        {
+            harness.Listener.EnqueueAcceptFailure(new Error(
+                RealtimeTransportErrorCodes.TlsFailure,
+                "Rogue peer #" + index));
+        }
+
+        await using var coordinator = harness.Create(DeviceRole.Child);
+        var start = await coordinator.StartAsync(CancellationToken.None);
+        Assert.True(start.IsSuccess);
+
+        var failed = await WaitForStateAsyncWithTimeAsync(harness.Time, coordinator, MediaSessionState.Failed);
+
+        Assert.Equal(RealtimeTransportErrorCodes.TlsFailure, failed.Error!.Code);
+        Assert.Equal(5, harness.Listener.AcceptCalls);
+    }
+
+    [Fact]
+    public async Task Child_Stop_во_время_повтора_accept_не_зависает()
+    {
+        var harness = new Harness();
+        for (var index = 0; index < 5; index++)
+        {
+            harness.Listener.EnqueueAcceptFailure(new Error(
+                RealtimeTransportErrorCodes.TlsFailure,
+                "Rogue peer #" + index));
+        }
+
+        await using var coordinator = harness.Create(DeviceRole.Child);
+        await coordinator.StartAsync(CancellationToken.None);
+        await AdvanceUntilAsync(harness.Time, () => harness.Listener.AcceptCalls >= 1, "первый Accept");
+
+        var stop = await coordinator.StopAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+    }
+
+    [Fact]
+    public async Task Parent_перебирает_rogue_candidate_и_подключается_к_следующему()
+    {
+        var harness = new Harness();
+        var transport = new FakeRealtimeTransportSession();
+        var rogue = CreatePeer("rogue-child", "192.168.1.50");
+        var good = CreatePeer("good-child", "192.168.1.51");
+        var connectCalls = 0;
+        harness.Transport.ConnectHandler = _ =>
+        {
+            connectCalls++;
+            return connectCalls == 1
+                ? Task.FromResult(Result<IRealtimeTransportSession>.Failure(
+                    new Error(RealtimeTransportErrorCodes.PeerUnavailable, "Rogue candidate.")))
+                : Task.FromResult(Result<IRealtimeTransportSession>.Success(transport));
+        };
+        await using var coordinator = harness.Create(DeviceRole.Parent);
+        await coordinator.StartAsync(CancellationToken.None);
+        harness.Discovery.LastSession!.AddPeer(rogue);
+        harness.Discovery.LastSession.AddPeer(good);
+
+        await WaitForStateAsync(coordinator, MediaSessionState.Connected);
+
+        Assert.Equal(2, harness.Transport.ConnectCalls);
+        Assert.Equal(2, harness.Transport.Endpoints.Count);
+        Assert.Equal(rogue.Endpoint.Host, harness.Transport.Endpoints[0].Host);
+        Assert.Equal(good.Endpoint.Host, harness.Transport.Endpoints[1].Host);
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+    }
+
+    [Fact]
+    public async Task Parent_ограничивает_перебор_candidates_и_падает_с_последней_ошибкой()
+    {
+        var harness = new Harness();
+        harness.Transport.ConnectHandler = _ => Task.FromResult(Result<IRealtimeTransportSession>.Failure(
+            new Error(RealtimeTransportErrorCodes.PeerUnavailable, "Rogue candidate.")));
+        await using var coordinator = harness.Create(DeviceRole.Parent);
+        await coordinator.StartAsync(CancellationToken.None);
+        for (var index = 0; index < 7; index++)
+        {
+            harness.Discovery.LastSession!.AddPeer(CreatePeer("rogue-" + index, "192.168.1." + (50 + index)));
+        }
+
+        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+
+        Assert.Equal(RealtimeTransportErrorCodes.PeerUnavailable, failed.Error!.Code);
+        Assert.Equal(5, harness.Transport.ConnectCalls);
+    }
+
+    [Fact]
+    public async Task Parent_не_перебирает_candidates_при_non_retryable_ошибке()
+    {
+        var harness = new Harness();
+        harness.Transport.ConnectHandler = _ => Task.FromResult(Result<IRealtimeTransportSession>.Failure(
+            new Error(RealtimeTransportErrorCodes.UnsupportedVersion, "Downlevel peer.")));
+        await using var coordinator = harness.Create(DeviceRole.Parent);
+        await coordinator.StartAsync(CancellationToken.None);
+        harness.Discovery.LastSession!.AddPeer(CreatePeer("rogue-1", "192.168.1.50"));
+        harness.Discovery.LastSession.AddPeer(CreatePeer("good", "192.168.1.51"));
+
+        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+
+        Assert.Equal(RealtimeTransportErrorCodes.UnsupportedVersion, failed.Error!.Code);
+        Assert.Equal(1, harness.Transport.ConnectCalls);
+    }
+
+    private static DiscoveredPeer CreatePeer(string discoveryId, string host) => new(
+        discoveryId,
+        new TransportEndpoint(host, PeerDiscoveryConstants.ProvisionalTransportPort),
+        DeviceRole.Child,
+        PeerDiscoveryConstants.CurrentProtocolVersion);
 
     private static async Task<(FakeRealtimeTransportSession Transport, FakeAudioPlaybackSession Playback)> StartFlowingParentAsync(
         Harness harness,

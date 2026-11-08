@@ -14,6 +14,32 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 фоновой сессии на экране выбора роли) и 008 (release readiness, owner-gated публикация/лицензия/
 дистрибуция).
 
+## [0.4.4] - 2026-11-08
+
+### Fixed / hardened
+
+- **LAN peer resilience (T007a)**: rogue/silent TCP-peer на Child или rogue mDNS candidate на Parent
+  больше не срывает старт с первой попытки:
+  - Child повторяет listener.AcceptAsync после peer-level отказов (unauthorized_peer/tls_failure/
+    signaling_timeout) до 5 раз с паузой 250 ms (TimeProvider), затем typed SetupFailure;
+  - Parent перебирает до 5 discovered candidates в одной discovery-сессии при transient connect-
+    отказах (peer_unavailable/tls_failure/unauthorized_peer/signaling_timeout/media_path_absent/
+    media_flow_lost); non-retryable коды — terminal как раньше;
+  - обнаружен и исправлен реальный баг: Dispose async-iterator при незавершённом MoveNextAsync
+    бросал NotSupportedException и затирал typed ошибку — walk отменяется через linked CTS.
+- **Failed-handshake rate-limit (T007b)**: после неудачного TLS/handshake listener выдерживает
+  cooldown (SignalingOptions.FailedHandshakeCooldown, default 250 ms, TimeProvider) до следующего
+  Accept; успешный accept без задержки; Stop/Dispose/cancellation не зависают; rate-limit не
+  является полной защитой от flood (OS backlog — residual risk).
+
+### Verification
+
+- Debug/Release build 0 warnings; format clean; vuln scan чистый; тесты **549/549**
+  (Domain 38, Application 281, Infrastructure 172, Architecture 58); независимое review — после PR.
+- Device: v0.4.4 retest pending; v0.4.3 single-device sanity PASS. Rogue/flood device-сценарий —
+  после установки v0.4.4 (host TCP connect к listener) и двухдевайсовые T040/T043 — после возвращения
+  Parent-телефона.
+
 ## [0.4.3] - 2026-11-08
 
 ### Fixed
@@ -32,6 +58,8 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 - Debug/Release build 0 warnings; format clean; vuln scan чистый; тесты **538/538**
   (Domain 38, Application 275, Infrastructure 167, Architecture 58); Application.Tests прогнаны
   и в Debug, и в Release (275/275).
+- Device: v0.4.3 single-device (nova Y90, no Parent) install/start PASS — Running/Media Connecting
+  >20 s без Failed/crash; двухдевайсовые T040/T043 pending.
 
 ## [0.4.2] - 2026-11-08
 
