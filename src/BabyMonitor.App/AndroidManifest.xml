@@ -20,6 +20,9 @@
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.RECORD_AUDIO" />
   <uses-permission android:name="android.permission.CAMERA" />
+  <!-- 009 auto-update: установка подписанного APK из GitHub Releases через PackageInstaller.
+       Silent/background install запрещён: пользователь подтверждает установку в системном диалоге. -->
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
   <!-- Pairing UI работает и без камеры (paste-fallback); camera hardware не обязателен. -->
   <uses-feature android:name="android.hardware.camera.any" android:required="false" />

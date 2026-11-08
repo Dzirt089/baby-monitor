@@ -46,6 +46,15 @@
             android:contentDescription="@string/cd_role_parent"
             android:text="@string/role_parent_button" />
 
+        <Button
+            android:id="@+id/updates_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:minHeight="56dp"
+            android:contentDescription="@string/cd_updates_button"
+            android:text="@string/updates_button" />
+
         <TextView
             android:id="@+id/media_note"
             android:layout_width="match_parent"

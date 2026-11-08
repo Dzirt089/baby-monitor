@@ -10,10 +10,10 @@
     <DebugType>portable</DebugType>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
 
-    <!-- Единый источник версии (сейчас 0.4.7). Релизный workflow передаёт значения из SemVer-тега. -->
+    <!-- Единый источник версии (сейчас 0.5.0). Релизный workflow передаёт значения из SemVer-тега. -->
     <BabyMonitorVersionMajor>0</BabyMonitorVersionMajor>
-    <BabyMonitorVersionMinor>4</BabyMonitorVersionMinor>
-    <BabyMonitorVersionPatch>7</BabyMonitorVersionPatch>
+    <BabyMonitorVersionMinor>5</BabyMonitorVersionMinor>
+    <BabyMonitorVersionPatch>0</BabyMonitorVersionPatch>
     <VersionPrefix>$(BabyMonitorVersionMajor).$(BabyMonitorVersionMinor).$(BabyMonitorVersionPatch)</VersionPrefix>
     <BabyMonitorVersionCode>$([MSBuild]::Add($([MSBuild]::Add($([MSBuild]::Multiply($(BabyMonitorVersionMajor), 10000)), $([MSBuild]::Multiply($(BabyMonitorVersionMinor), 100)))), $(BabyMonitorVersionPatch)))</BabyMonitorVersionCode>
 

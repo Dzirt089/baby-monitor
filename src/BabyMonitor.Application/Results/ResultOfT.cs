@@ -35,6 +35,15 @@ public sealed class Result<T> : Result
         return new(true, value, null);
     }
 
+    /// <summary>
+    /// Создаёт успешный результат, для которого <see langword="null"/> — допустимое значение
+    /// (например, <c>Result&lt;AppUpdateInfo?&gt;</c>, где null означает «обновление не требуется»).
+    /// Обычные контракты обязаны использовать <see cref="Success"/>, запрещающий null.
+    /// </summary>
+    /// <param name="value">Полезное значение; <see langword="null"/> допустим.</param>
+    /// <returns>Успешный результат.</returns>
+    public static Result<T> SuccessNullable(T? value) => new(true, value, null);
+
     /// <summary>Создаёт неуспешный результат с типизированной ошибкой.</summary>
     /// <param name="error">Причина неуспеха.</param>
     /// <returns>Неуспешный результат.</returns>
