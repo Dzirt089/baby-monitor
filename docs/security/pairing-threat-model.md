@@ -1,6 +1,6 @@
 # Pairing Threat Model (004)
 
-**Статус**: draft (004 phase 1) | **Дата**: 2026-11-07
+**Статус**: living document (004 + 006 phase 2 + 005 phase 2 signaling/media) | **Дата**: 2026-11-08
 
 ## Assets
 
@@ -108,3 +108,58 @@
 - Реальный QR-обмен камера↔камера на двух устройствах, различные OEM/камеры, яркость/размер экрана
   и TalkBack не проверены: **BLOCKED: нет реальных устройств**.
 - Скриншоты/OS-level malware и компрометация процесса — вне scope 006 (007/008 hardening).
+
+## 005 phase 2: signaling и media (ADR-0007 Accepted, вариант A)
+
+Сетевой signaling и передача звука включаются после первичного сопряжения. Локальная LAN
+недоверенная; доверие к peer определяется только сохранённой identity из trusted store (004/006),
+а не IP/mDNS-именем.
+
+### Схема (кратко)
+
+- Child публикует NSD-сервис и слушает TCP-порт signaling; Parent находит сервис через NSD и
+  подключается.
+- Signaling — TLS 1.2+ с mutual authentication; сертификат peer принимается только при совпадении
+  SHA-256(SubjectPublicKeyInfo) с fingerprint доверенного устройства (pinning); глобальное
+  отключение TLS validation запрещено. Fallback, если Keystore-key нельзя использовать в TLS:
+  эфемерный TLS-сертификат + ECDSA identity assertion, подписанный Keystore identity, с тем же
+  pinning; ослабление аутентификации не допускается.
+- Media — WebRTC audio-only (SIPSorcery), Opus, DTLS-SRTP; ICE — только host candidates в LAN.
+- Медиа и аудиобуферы не записываются, не логируются и не отправляются никуда, кроме peer.
+
+### Угрозы и митигации (signaling/media)
+
+| Угроза | Митигация | Тест |
+|---|---|---|
+| MITM/подмена peer при подключении | TLS + pinning identity из trusted store; недоверенный peer отклоняется до SDP | contract tests: неверный fingerprint, чужой сертификат |
+| Replay/повтор соединения | TLS session bind + nonce/session id; одноразовый handshake; повторный не даёт нового доверия | replay tests |
+| Downgrade протокола | строгая версия signaling/media; unsupported_version → typed error, соединение не устанавливается | version tests |
+| Cleartext signaling | запрещён; только TLS; architecture test на отсутствие cleartext-сокетов/HTTP | grep/arch test, review |
+| Отключение TLS validation | запрещено; pinning-проверка явная, без DangerousAcceptAnyServerCertificateValidator | architecture/security test |
+| Перехват/запись media | DTLS-SRTP (шифрование), без custom crypto; аудио не пишется на диск и не логируется | review + architecture test (нет File/Socket кроме adapter), no-audio-log test |
+| DoS/flood в LAN | ограниченные очереди/буферы, таймауты handshake, drop-oldest для audio, лимиты размера signaling | unit tests bounds/timeout |
+| Потеря control-канала | heartbeat независимо от media; ParentLossAlarm локально; reconnect policy | unit tests (005 phase 1) + integration |
+| Media path без звука | media health (packets/duration) отдельно от transport connected; typed degraded/stalled | health tests + device test владельцем |
+| AP isolation/guest Wi-Fi | typed error без утечки секретов; device-проверка 007 | device BLOCKED |
+| Компрометация trusted store | вне scope 005; integrity/rollback — 008 | residual |
+| Утечка SDP/приватных IP в production logs | логирование только counters/типов; SDP не логируется | secret-log architecture test |
+
+### Failure modes
+
+- TLS/pinning failure → соединение отклонено, typed error (unauthorized_peer/tls_failure), trust не
+  меняется; секреты не логируются.
+- Signaling timeout/peer недоступен → typed error, reconnect по policy.
+- DTLS/media не поднялись → control может быть Connected, media = Stalled; UI показывает
+  «нет звука», ParentLossAlarm срабатывает по локальному таймауту.
+- Ручной Stop → reconnect loop отменяется, ресурсы (TLS, WebRTC, audio) освобождаются.
+- Потеря сети/смена IP → network callback отменяет старые попытки; discovery/resolve заново.
+
+### Residual risks (005 phase 2)
+
+- Реальная слышимость, задержка, echo/focus/route и поведение на OEM проверяются владельцем на двух
+  устройствах после v0.3.0; до подтверждения приложение не считается работающей радионяней.
+- ICE host-only: сети с client isolation/разными VLAN не поддерживаются (typed error; 007).
+- Jitter buffer/Opus параметры — стартовые измеряемые настройки, не финальные; пересмотр по device
+  метрикам.
+- Если SIPSorcery не пройдёт device matrix — замена адаптера на libwebrtc (ADR-0005), Domain/
+  Application не меняются.

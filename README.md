@@ -7,11 +7,11 @@ Android-приложение, которое соединяет два теле�
 > Bootstrap, 001–006 merged в `main`: audio-transport контракт, NSD discovery, foreground service,
 > pairing-протокол (Android Keystore identity + trusted store), session-reliability политики и UI
 > pairing (офлайн QR-обмен, verification code, trusted devices, camera scan, diagnostics).
-> Передача аудио/media, сетевой signaling и автоматическое переподключение runtime-сессии не
-> реализованы (005 phase 2 — следующий этап: signaling/media/audio; design и Application-порты
-> готовятся в PR 005 phase 2, ADR-0007 вариант A — к принятию в этом PR). Приложение пока не
-> выполняет функции радионяни. У владельца есть два физических Android-устройства для
-> device-прогона v0.2.0; emulator device-тесты не заменяет.
+> v0.3.0: signaling/media/audio реализованы в коде (mutual TLS + pinning, SIPSorcery WebRTC
+> DTLS-SRTP/Opus, AudioRecord/AudioTrack, reconnect). **Слышимость ещё не подтверждена владельцем на
+> двух устройствах**, поэтому приложение пока не объявляется рабочей радионяней. У владельца
+> два Android-устройства (Huawei nova 13 Pro, Huawei nova Y90) для device-прогонов; emulator
+> device-тесты не заменяет.
 
 ## Зачем
 

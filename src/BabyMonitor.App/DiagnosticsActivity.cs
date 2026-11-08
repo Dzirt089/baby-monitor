@@ -9,6 +9,7 @@ using BabyMonitor.App.Composition;
 using BabyMonitor.App.Presentation;
 using BabyMonitor.Application.Abstractions.Monitoring;
 using BabyMonitor.Application.Diagnostics;
+using BabyMonitor.Application.Media;
 using BabyMonitor.Application.Pairing;
 using BabyMonitor.Domain.Devices;
 using BabyMonitor.Platform.Android.ForegroundServices;
@@ -36,6 +37,7 @@ public sealed class DiagnosticsActivity : PermissionActivity
 
     private TextView? _roleText;
     private TextView? _foregroundText;
+    private TextView? _mediaText;
     private TextView? _lastErrorText;
     private TextView? _appVersionText;
     private TextView? _errorText;
@@ -73,6 +75,7 @@ public sealed class DiagnosticsActivity : PermissionActivity
 
         _roleText = FindViewById<TextView>(Resource.Id.diagnostics_role);
         _foregroundText = FindViewById<TextView>(Resource.Id.diagnostics_foreground);
+        _mediaText = FindViewById<TextView>(Resource.Id.diagnostics_media);
         _lastErrorText = FindViewById<TextView>(Resource.Id.diagnostics_last_error);
         _appVersionText = FindViewById<TextView>(Resource.Id.diagnostics_app_version);
         _errorText = FindViewById<TextView>(Resource.Id.diagnostics_error);

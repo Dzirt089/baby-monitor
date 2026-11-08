@@ -269,9 +269,73 @@ Copyright (c) Michael Jahn and ZXing.Net contributors.
    See the License for the specific language governing permissions and
    limitations under the License.
 
+## Media-зависимости SIPSorcery (транзитивные, 005 phase 2)
+
+Пакет SIPSorcery 10.0.17 подключается в BabyMonitor.Infrastructure (ADR-0005, ADR-0007) и
+приносит следующие транзитивные зависимости. Все они проверены по метаданным NuGet/upstream,
+уязвимостей не обнаружено (dotnet list package --vulnerable --include-transitive — чисто).
+
+| Пакет | Версия | Лицензия | Upstream |
+|---|---|---|---|
+| SIPSorceryMedia.Abstractions | 10.0.17 | BSD-3-Clause + Additional Use Restriction (те же условия, что у SIPSorcery; текст раздела 1 выше) | <https://github.com/sipsorcery-org/sipsorcery> |
+| Concentus (Opus) | 2.2.2 | BSD-3-Clause | <https://github.com/lostromb/concentus> |
+| BouncyCastle.Cryptography | 2.7.0 | MIT | <https://www.bouncycastle.org/stable/nuget/csharp/website> |
+| DnsClient | 1.8.0 | Apache-2.0 (полный текст Apache-2.0 приведён выше в разделе ZXing.Net) | <http://dnsclient.michaco.net/> |
+| Makaretu.Dns.Multicast | 0.27.0 | MIT | <https://github.com/richardschneider/net-mdns> |
+| SIPSorcery.WebSocketSharp | 0.0.1 | MIT | <https://github.com/sipsorcery/websocket-sharp> |
+| Microsoft.Extensions.Logging.Abstractions | 10.0.11 | MIT | <https://github.com/dotnet/runtime> |
+
+### Concentus — BSD 3-Clause
+
+Copyright (c) by various holding parties, including (but not limited to): Skype Limited,
+Xiph.Org Foundation, CSIRO, Microsoft Corporation, Jean-Marc Valin, Gregory Maxwell,
+Mark Borgerding, Timothy B. Terriberry, Logan Stromberg. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted
+provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions
+   and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions
+   and the following disclaimer in the documentation and/or other materials provided with the
+   distribution.
+3. Neither the name of the copyright holder nor the names of its contributors may be used to
+   endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+### MIT (BouncyCastle.Cryptography, Makaretu.Dns.Multicast, SIPSorcery.WebSocketSharp, Microsoft.Extensions.Logging.Abstractions)
+
+Copyright (c) 2000-2026 The Legion of the Bouncy Castle Inc.
+Copyright (c) 2018 Richard Schneider
+Copyright (c) 2010-2025 WebSocketSharp contributors
+Copyright (c) .NET Foundation and Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or
+substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
+OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 ## Прочие зависимости
 
 - Тестовые пакеты (xUnit, Microsoft.NET.Test.Sdk, coverlet.collector, xunit.runner.visualstudio)
   используются только в тестовых сборках и не входят в APK; их лицензии — MIT/Apache-2.0
-  согласно метаданным NuGet. Проверка транзитивных лицензий media-зависимостей (BouncyCastle,
-  Concentus и др.) выполняется при добавлении SIPSorcery в проект (phase 003/005).
+  согласно метаданным NuGet.
+- Транзитивные media-зависимости SIPSorcery перечислены в разделе выше (005 phase 2).

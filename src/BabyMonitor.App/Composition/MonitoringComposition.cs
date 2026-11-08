@@ -20,6 +20,7 @@ internal static class MonitoringComposition
             activity,
             new AndroidNotificationPermission(activity, activity),
             new AndroidMicrophonePermission(activity, activity),
+            new AndroidLocalNetworkPermission(activity, activity),
             activity);
         return (host, new MonitoringScreenModel(host, role));
     }

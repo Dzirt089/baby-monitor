@@ -38,6 +38,9 @@ public sealed class SessionHealthMonitor
         }
     }
 
+    /// <summary>Порог остановки media flow (например, ожидания первого аудиокадра).</summary>
+    public TimeSpan MediaTimeout => _mediaTimeout;
+
     /// <summary>Отмечает полученный control heartbeat.</summary>
     public void MarkHeartbeat()
     {

@@ -25,6 +25,13 @@
             android:textSize="16sp" />
 
         <TextView
+            android:id="@+id/diagnostics_media"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textSize="16sp" />
+
+        <TextView
             android:id="@+id/diagnostics_last_error"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

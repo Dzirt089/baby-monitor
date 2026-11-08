@@ -1,45 +1,78 @@
-# Implementation Plan: 005-session-reliability
+# Implementation Plan: 005-session-reliability (phase 2)
 
-**Spec**: [spec.md](./spec.md) | **Status**: In Progress | **Created**: 2026-11-07
+**Spec**: [spec.md](./spec.md) | **ADR**: [ADR-0007](../../../docs/architecture/adr/0007-local-security-signaling-pairing.md) Accepted (2026-11-08, вариант A), [ADR-0005](../../../docs/architecture/adr/0005-media-transport-library.md) (SIPSorcery >= 10.0.17)
+**Status**: Phase 1 merged (PR #12); phase 2 in progress | **Created**: 2026-11-07 (обновлён 2026-11-08)
 
 ## Phases
 
-1. **Phase 1 (этот PR)**: Domain MonitoringSession/State/Health/DisconnectReason; Application
-   ReconnectPolicy, SessionHealthMonitor, ParentLossAlarm; unit-тесты с fake TimeProvider; 005 docs.
-2. **Phase 2**: SIPSorcery media adapter за IRealtimeTransport в Infrastructure (PackageReference
-   >= 10.0.17, ADR-0005) + contract suite; Android AudioCapture/AudioPlayback adapters
-   (AudioRecord/AudioTrack, bounded buffers, role invariants); use case wiring/reconnect loop с
-   IConnectivityMonitor/telemetry.
-3. **Проверки**: local gates; emulator install/launch; device matrix (100 циклов, 8h soak, Wi-Fi loss,
-   звонки, audio focus) — **BLOCKED: нет реальных устройств**.
+1. **Phase 1 (merged, PR #12)**: Domain MonitoringSession/State/Health/DisconnectReason; Application
+   ReconnectPolicy, SessionHealthMonitor, ParentLossAlarm; unit-тесты.
+2. **Phase 2a — signaling/TLS/pinning** (этот PR): Application-порты для listener/audio; Infrastructure
+   signaling (TCP + TLS 1.2+, mutual auth, pinning identity из trusted store, versioned hello/nonce,
+   SDP exchange); contract/security tests (недоверенный peer, replay, version mismatch, cleartext
+   отсутствует).
+3. **Phase 2b — media (SIPSorcery)**: WebRTC audio-only, Opus, DTLS-SRTP за IRealtimeTransport;
+   contract suite; ICE host-only; telemetry counters; no audio in logs/disk.
+4. **Phase 2c — Android audio**: AudioRecord (Child capture), AudioTrack (Parent playback), audio
+   focus/route для Parent, bounded channels, role invariants; platform adapters за Application-портами.
+5. **Phase 2d — Application orchestration**: use case/coordinator, связывающий discovery → TLS →
+   media → audio в foreground service; reconnect loop с ReconnectPolicy/IConnectivityMonitor; Stop
+   освобождает ресурсы; telemetry wiring.
+6. **Phase 2e — проверки и релиз**: unit/contract/arch tests, build/format/vuln, независимое ревью,
+   PR → CI → merge → тег v0.3.0 → GitHub Release; чек-лист device-тестов владельцу.
+7. **Phase 3 — device-прогоны владельца**: 2 устройства (слышимость, выключенный экран, потеря
+   Wi-Fi/reconnect, звонок/focus, route change, battery) — результаты фиксируются; расширенная
+   OEM-матрица/8h soak — 007.
 
-## Technical Notes
+## Технические решения (phase 2)
 
-- КА: один switch на переходы; нарушения → InvalidSessionTransitionException; terminal Failed/Idle
-  (stopped) не перезапускается.
-- Backoff: delay = min(initial * factor^(attempt-1), max) * (1 + (unit(attempt)*2-1)*jitter);
-  unit — детерминированный hash номера попытки (без Random), sleep — вызывающий слой.
-- Health: control Connected/Degraded/Lost по heartbeatTimeout; media Flowing/Stalled по mediaTimeout;
-  IsUserHearingAudio требует оба.
-- ParentLossAlarm: локальный порог; до первого ReportPeerAlive не поднимается (fail-safe против
-  ложной тревоги до старта media).
-- SIPSorcery adapter — только Infrastructure; Application видит IRealtimeTransport; contract suite
-  обязателен; adapter добавлен в phase 2.
-- Android audio: bounded PCM buffers, drop-oldest; никакой записи на диск; Parent без AudioRecord,
-  Child без AudioTrack.
+- **Порты Application** (новые, presentation-agnostic):
+  - IRealtimeTransport (есть, 001) — initiator (Parent); ConnectAsync(endpoint).
+  - IRealtimeTransportListener — Child: StartAsync(port) → ожидание одного доверенного peer;
+    возвращает IRealtimeTransportSession. Contract suite расширяется на listener.
+  - IAudioCapture — Child: старт захвата, IAsyncEnumerable/событие кадров PCM (bounded), Stop/Dispose.
+  - IAudioPlayback — Parent: старт воспроизведения, WriteAsync(PCM) (bounded), Stop/Dispose.
+  - IConnectivityMonitor — network callbacks → отмена устаревших попыток/reconnect.
+- **Composition root**: адаптер IRealtimeTransport/Listener создаётся с ожидаемой identity peer
+  (fingerprint из trusted store) и IPairingKeyStore/identity; endpoint — только адрес. Application
+  не видит SIPSorcery/Android.
+- **TLS**: mutual TLS 1.2+, pinning SHA-256(SPKI) peer-сертификата к trusted fingerprint; hostname
+  verification заменена pinning (только paired self-signed peer); никакого глобального отключения
+  TLS validation. Fallback при невозможности использовать Keystore key в SslStream: эфемерный
+  TLS-сертификат + ECDSA identity assertion (nonce/transcript) с тем же pinning; фиксируется в
+  ADR-0007 и тестах.
+- **Signaling**: версионированный протокол поверх TLS (hello/session nonce/identity assertion,
+  offer/answer, control ping/pong, close); unknown version/peer → typed error до SDP; таймауты
+  handshake; лимиты размера сообщений.
+- **Media**: SIPSorcery WebRTC audio-only (Opus 48 kHz mono, 20 ms); DTLS-SRTP; ICE host-only;
+  jitter buffer — в стеке; drop-oldest для очередей; audio frames не логируются/не сохраняются.
+- **Opus codec**: определить при реализации: возможности SIPSorcery 10.0.17 / Concentus /
+  Android MediaCodec; выбор зафиксировать (пакет — только после ADR/license/vuln). Кодирование/
+  декодирование не в Application.
+- **Android audio**: AudioRecord VOICE_COMMUNICATION/MIC по умолчанию — измеряемая настройка;
+  Parent — AudioTrack, audio focus (AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK? для радионяни — gain),
+  routing (speaker/headset/BT) и обработка focus loss (пауза/тревога) — по device-тестам.
+- **Foreground service**: сеанс живёт в MonitoringForegroundService (003); Activity только
+  отображает снимки; Stop освобождает TLS/WebRTC/Audio и отменяет reconnect loop.
+- **Reliability**: heartbeat control + media health независимо; SessionHealth/ParentLossAlarm
+  (phase 1) используются; network callback отменяет старые попытки; correlation ids в логах.
 
-## Risks
+## Риски
 
 | Риск | Митигация |
 |---|---|
-| Reconnect storm | exponential backoff + jitter + cap + max attempts; manual stop отменяет |
-| Ложная/поздняя тревога | локальный TimeProvider, порог, независимость от Child, тесты |
-| Health не отражает слышимость | IsUserHearingAudio только control+media; device BLOCKED |
-| SIPSorcery утечёт в Application | port + architecture tests + contract suite |
-| Аудио в логах | запрет payload/секретов, только counters (phase 2) |
-| Device-поведение не проверено | честный BLOCKED, 007 device hardening |
+| TLS/pinning ошибка → ложный отказ подключения | contract/security tests: верный/неверный fingerprint, fallback identity assertion; device smoke |
+| Android Keystore key нельзя использовать в SslStream | заранее проверить spike; fallback по ADR-0007 с тем же pinning |
+| SIPSorcery не тянет WebRTC/DTLS-SRTP на Android | contract suite + emulator/device smoke; при провале — libwebrtc binding (ADR-0005), Domain/Application не меняются |
+| Opus codec недоступен/лицензии | проверить SIPSorcery/Concentus/MediaCodec; пакеты — ADR/license/vuln; запасной вариант MediaCodec |
+| Эхо/задержка/audio focus | device-тесты владельца; настройки измеряемые, не скрытые |
+| Аудио в логах/на диске | architecture tests, review, no-audio-log checks |
+| Утечка секретов/SDP | typed errors, counters only; secret-log tests |
+| Android 14+ FGS ограничения для media/mic | использовать типы microphone/mediaPlayback, permission flows (003), device-прогон владельца |
+| AP/client isolation | typed error; 007 |
 
 ## Gate
 
-Phase 2 (media/audio) не считается device-проверенной без реальных устройств; end-to-end и soak —
-BLOCKED.
+Код/тесты/CI green и независимое ревью — обязательны для merge. Реальная слышимость и device-AC —
+только после прогона владельца на двух устройствах по чек-листу v0.3.0; до этого приложение не
+объявляется работающей радионяней. Полная OEM-матрица/8h soak — 007.
