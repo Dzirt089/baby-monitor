@@ -1,6 +1,7 @@
 name: Release
 
-# Релиз создаётся только по SemVer-тегу vMAJOR.MINOR.PATCH, который создаёт человек.
+# Релиз создаётся только по SemVer-тегу vMAJOR.MINOR.PATCH: тег создаёт владелец или делегированный
+# агент для тестовых сборок v0.x (docs/operations/release-runbook.md); теги не двигаются.
 # Workflow никогда не создаёт и не двигает теги. Подпись возможна только при наличии
 # signing secrets в GitHub Environment "release" (manual approval — только на планах GitHub
 # с protection rules; см. docs/operations/release-runbook.md).
