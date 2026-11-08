@@ -51,6 +51,8 @@ route/TalkBack, 8h soak) и 008-release-readiness; device-подтвержден
   (детект по transport state + media watchdog/first-frame timeout); telemetry counters (FR-022)
   не выделены — 007.
 - OEM/Doze/8h soak/battery, TalkBack, Bluetooth/headset matrix — 007.
+- LAN-availability: одиночный TCP connect+close или rogue mDNS-реклама могут временно помешать
+  старту сеанса (typed Failed; trust/pinning не обходится); bounded retry/rate-limit — 007 (H5).
 - Приложение не является медицинским изделием.
 
 ## [0.2.0] - 2026-11-08

@@ -56,7 +56,12 @@
       bind signaling/ICE кандидатов к Wi-Fi/Ethernet интерфейсу (LOW-9).
 - [ ] H4: прямые тесты ветвей TlsPeerCertificateValidator (CA/expired/EKU/RSA), клиентский
       unsupported-version ack, SDP 256 KiB лимит (LOW-6); semantic arch-test для SslStream/Tcp
-      (LOW-5). → GitHub Release (подписанный APK + SHA-256) + чек-лист слышимости/reconnect/battery владельцу
+      (LOW-5).
+- [ ] H5: LAN availability hardening: bounded retry Accept после peer-level отказов (Child) и
+      перебор discovered candidates (Parent) вместо terminal FailStartup; rate-limit/backoff
+      неудачных handshake на listener. Сейчас одиночный TCP connect+close/rogue mDNS может
+      временно не дать запустить сеанс (trust/pinning не обходится) — зафиксировано в
+      CHANGELOG Known limitations; 007. → GitHub Release (подписанный APK + SHA-256) + чек-лист слышимости/reconnect/battery владельцу
 
 ## Phase 3 — Device-проверки владельца (2 устройства)
 
@@ -71,5 +76,6 @@
 |---|---|---|
 | 2026-11-07 | Phase 1 build/tests | Domain 38/38, Application 147/147, Architecture 45/45, Infrastructure 63/63; build 0 warnings; format OK |
 | 2026-11-08 | ADR-0007 Accepted + spec/plan/tasks phase 2 | threat model обновлён; SIPSorcery разрешён; v0.2.0 (pairing UI) подготовлена для device-прогона владельцем |
+| 2026-11-08 | Security review fixes (a9661d3) | MEDIUM-1/2/3 + LOW-1/2/4/7/8 закрыты; first-frame watchdog + regression tests; 474/474 (Domain 38, Application 247, Infrastructure 132, Architecture 57); Debug/Release 0 warnings; format clean; re-review APPROVE (security) |
 | 2026-11-08 | Phase 2 implementation (commits 9ed4082..a381986) | signaling/TLS/pinning + SIPSorcery media + Opus codec + Android audio/connectivity + Application coordinator + FGS/UI интеграция; build Debug/Release 0 warnings, format clean, tests 471/471 (Domain 38, Application 245, Infrastructure 131, Architecture 57), vuln scan чистый; media loopback Child→Parent в Infrastructure tests (Opus кадр принят и декодирован); device-проверки — владелец (Huawei nova 13 Pro + Huawei nova Y90, adb недоступен) |
 | 2026-11-08 | Phase 2 design/contracts (commit 9ed4082, cbe7bdd) | ADR-0007 Accepted; Application ports (listener/audio/codec/connectivity); SIPSorcery 10.0.17 + транзитивные лицензии; vuln scan чистый; Application build 0 warnings; параллельно: Infrastructure signaling/media/codec, Android audio/connectivity, Application coordinator — в работе |
