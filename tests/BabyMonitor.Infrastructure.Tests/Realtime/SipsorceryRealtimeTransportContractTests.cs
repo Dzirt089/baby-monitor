@@ -82,8 +82,14 @@ internal sealed class LoopbackContractTransport : IRealtimeTransport
 
                 await listenerSession.DisposeAsync();
                 peers.Dispose();
-                return Result<IRealtimeTransportSession>.Failure(
-                    parentResult.IsSuccess ? childResult.Error! : parentResult.Error!);
+
+                // Loopback-пара должна подниматься в тестовом окружении; отказ — дефект harness-а,
+                // а не проверяемого контракта, поэтому сообщаем коды для диагностики.
+                throw new InvalidOperationException(
+                    "Loopback media harness не поднял сессию: parent=" +
+                    (parentResult.IsSuccess ? "ok" : parentResult.Error!.Code) +
+                    ", child=" +
+                    (childResult.IsSuccess ? "ok" : childResult.Error!.Code));
             }
 
             return Result<IRealtimeTransportSession>.Success(
@@ -133,6 +139,13 @@ internal sealed class LoopbackContractSession : IRealtimeTransportSession
     {
         add => _parentSession.StateChanged += value;
         remove => _parentSession.StateChanged -= value;
+    }
+
+    /// <inheritdoc />
+    public event EventHandler? HeartbeatReceived
+    {
+        add => _parentSession.HeartbeatReceived += value;
+        remove => _parentSession.HeartbeatReceived -= value;
     }
 
     /// <inheritdoc />

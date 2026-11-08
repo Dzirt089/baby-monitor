@@ -82,6 +82,9 @@ internal sealed class FakeRealtimeTransportSession : IRealtimeTransportSession
     /// <inheritdoc />
     public event EventHandler<RealtimeTransportStateChangedEventArgs>? StateChanged;
 
+    /// <inheritdoc />
+    public event EventHandler? HeartbeatReceived;
+
     /// <summary>Кадры, переданные через <see cref="SendAudioAsync"/> с момента создания сессии.</summary>
     public IReadOnlyList<byte[]> SentFrames => _sentFrames;
 
@@ -140,6 +143,20 @@ internal sealed class FakeRealtimeTransportSession : IRealtimeTransportSession
     public async ValueTask DisposeAsync()
     {
         await CloseAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Симулировать подтверждённый pong: событие поднимается только в Connected (fake-specific
+    /// проверка семантики контракта, реальный цикл — в SIPSorcery-адаптере).
+    /// </summary>
+    public void SimulateHeartbeat()
+    {
+        if (State is not RealtimeTransportState.Connected)
+        {
+            return;
+        }
+
+        HeartbeatReceived?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Перевести сессию в Failed с типизированной ошибкой (для проверки failure-контракта).</summary>

@@ -38,6 +38,7 @@ public sealed class DiagnosticsActivity : PermissionActivity
     private TextView? _roleText;
     private TextView? _foregroundText;
     private TextView? _mediaText;
+    private TextView? _telemetryText;
     private TextView? _lastErrorText;
     private TextView? _appVersionText;
     private TextView? _errorText;
@@ -76,6 +77,7 @@ public sealed class DiagnosticsActivity : PermissionActivity
         _roleText = FindViewById<TextView>(Resource.Id.diagnostics_role);
         _foregroundText = FindViewById<TextView>(Resource.Id.diagnostics_foreground);
         _mediaText = FindViewById<TextView>(Resource.Id.diagnostics_media);
+        _telemetryText = FindViewById<TextView>(Resource.Id.diagnostics_telemetry);
         _lastErrorText = FindViewById<TextView>(Resource.Id.diagnostics_last_error);
         _appVersionText = FindViewById<TextView>(Resource.Id.diagnostics_app_version);
         _errorText = FindViewById<TextView>(Resource.Id.diagnostics_error);
@@ -206,6 +208,17 @@ public sealed class DiagnosticsActivity : PermissionActivity
                 ? GetString(Resource.String.diagnostics_foreground_none)
                 : GetString(MapForegroundState(foreground.State)));
 
+        var telemetry = foreground?.Media?.Telemetry;
+        _telemetryText!.Text = telemetry is null
+            ? GetString(Resource.String.diagnostics_telemetry_none)
+            : string.Format(
+                CultureInfo.InvariantCulture,
+                GetString(Resource.String.diagnostics_telemetry_format),
+                telemetry.SentFrames,
+                telemetry.ReceivedFrames,
+                telemetry.ReconnectAttempts,
+                FormatUptime(telemetry.Uptime));
+
         _lastErrorText!.Text = string.Format(
             CultureInfo.CurrentCulture,
             GetString(Resource.String.diagnostics_last_error_format),
@@ -266,6 +279,23 @@ public sealed class DiagnosticsActivity : PermissionActivity
         {
             return "?";
         }
+    }
+
+    /// <summary>Форматирует uptime как чч:мм:сс; не падает на больших/отрицательных значениях.</summary>
+    private static string FormatUptime(TimeSpan uptime)
+    {
+        if (uptime < TimeSpan.Zero)
+        {
+            uptime = TimeSpan.Zero;
+        }
+
+        var totalHours = (long)uptime.TotalHours;
+        return string.Format(
+            CultureInfo.InvariantCulture,
+            "{0:00}:{1:00}:{2:00}",
+            totalHours,
+            uptime.Minutes,
+            uptime.Seconds);
     }
 
     private static int MapForegroundState(MonitoringForegroundState state) => state switch

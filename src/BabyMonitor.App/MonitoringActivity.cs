@@ -161,7 +161,9 @@ public sealed class MonitoringActivity : PermissionActivity
         var media = snapshot?.Media;
         if (_status is not null)
         {
-            _status.Text = media is null
+            _status.Text = media is { ParentAlarmActive: true }
+                ? GetString(Resource.String.monitoring_state_parent_alarm)
+                : media is null
                 ? GetString(state switch
                 {
                     MonitoringForegroundState.Starting => Resource.String.monitoring_state_starting,

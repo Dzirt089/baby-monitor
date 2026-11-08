@@ -27,6 +27,7 @@
     <string name="monitoring_state_media_flowing">Мониторинг активен · звук передаётся</string>
     <string name="monitoring_state_reconnecting">Переподключение…</string>
     <string name="monitoring_state_media_degraded">Связь ухудшилась…</string>
+    <string name="monitoring_state_parent_alarm">Связь потеряна!</string>
     <string name="monitoring_role_child">Ребёнок</string>
     <string name="monitoring_role_parent">Родитель</string>
     <string name="monitoring_diagnostics_format">Роль: {0} · Состояние: {1} · Media: {2}</string>
@@ -102,6 +103,8 @@
     <string name="diagnostics_last_error_none">нет</string>
     <string name="diagnostics_media_format">Media: {0}</string>
     <string name="diagnostics_media_state_idle">не запущена</string>
+    <string name="diagnostics_telemetry_format">Метрики: кадры ↑{0} ↓{1} · reconnect {2} · uptime {3}</string>
+    <string name="diagnostics_telemetry_none">Метрики: н/д</string>
     <string name="diagnostics_app_version_format">Версия приложения: {0}</string>
     <string name="diagnostics_trusted_title">Доверенные устройства</string>
     <string name="diagnostics_trusted_empty">Нет доверенных устройств</string>

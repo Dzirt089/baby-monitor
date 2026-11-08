@@ -37,6 +37,10 @@ internal static class SignalingErrors
         RealtimeTransportErrorCodes.MediaFlowLost,
         "Аудиопоток прерван.");
 
+    internal static Error HeartbeatMissed() => new(
+        RealtimeTransportErrorCodes.HeartbeatMissed,
+        "Нет control heartbeat от peer дольше допустимого времени.");
+
     internal static Error NetworkUnavailable() => new(
         RealtimeTransportErrorCodes.NetworkUnavailable,
         "Сеть недоступна или изменилась.");

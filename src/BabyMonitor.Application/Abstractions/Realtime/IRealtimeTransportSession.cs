@@ -25,6 +25,9 @@ public interface IRealtimeTransportSession : IAsyncDisposable
     /// </summary>
     event EventHandler<RealtimeTransportStateChangedEventArgs>? StateChanged;
 
+    /// <summary>Уведомление о полученном control heartbeat (pong) от peer. Обработчики не должны блокировать поток транспорта.</summary>
+    event EventHandler? HeartbeatReceived;
+
     /// <summary>
     /// Ставит закодированный аудиокадр в ограниченную очередь отправки.
     /// </summary>

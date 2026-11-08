@@ -3,6 +3,7 @@ using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.Graphics.Drawables;
+using Android.Media;
 using Android.OS;
 using Android.Util;
 using BabyMonitor.Application.Abstractions.Monitoring;
@@ -52,6 +53,14 @@ public sealed class MonitoringForegroundService : Service
     private const string TextStopped = "Мониторинг остановлен";
     private const string ActionStopLabel = "Остановить";
     private const string MediaFailureMessage = "Media-сеанс завершился ошибкой.";
+    private const string TextParentAlarm = "Связь потеряна!";
+    private const string AlarmChannelId = "babymonitor_parent_alarm";
+    private const string AlarmChannelName = "Тревога связи";
+    private const string AlarmChannelDescription = "Локальная тревога при потере связи с детским устройством";
+    private const string AlarmTitle = "Радионяня: связь потеряна";
+    private const string AlarmText = "Нет связи с детским устройством. Проверьте соединение.";
+    private const int AlarmNotificationId = 1004;
+    private const int AlarmOpenRequestCode = 1005;
 
     private readonly object _sync = new();
     private readonly LocalBinder _binder;
@@ -60,6 +69,7 @@ public sealed class MonitoringForegroundService : Service
     private CancellationTokenSource? _mediaCts;
     private Task? _mediaLifetime;
     private int _mediaGeneration;
+    private bool _parentAlarmActive;
 
     /// <summary>Создаёт сервис; Android создаёт его без зависимостей приложения.</summary>
     public MonitoringForegroundService()
@@ -93,6 +103,8 @@ public sealed class MonitoringForegroundService : Service
         {
             CreateNotificationChannelApi26();
         }
+
+        CreateAlarmNotificationChannel();
     }
 
     /// <inheritdoc />
@@ -129,6 +141,7 @@ public sealed class MonitoringForegroundService : Service
         }
 
         PublishTerminalIfNeeded();
+        CancelParentAlarmNotification();
         StopMediaSession();
         base.OnDestroy();
     }
@@ -326,6 +339,7 @@ public sealed class MonitoringForegroundService : Service
         }
 
         PublishTerminalIfNeeded();
+        CancelParentAlarmNotification();
         StopMediaSession();
         StopSelf();
     }
@@ -402,6 +416,7 @@ public sealed class MonitoringForegroundService : Service
             UpdateNotification(snapshot);
         }
 
+        UpdateParentLossAlarm(snapshot);
         SnapshotChanged?.Invoke(this, snapshot);
     }
 
@@ -434,6 +449,182 @@ public sealed class MonitoringForegroundService : Service
         };
         channel.SetShowBadge(false);
         manager.CreateNotificationChannel(channel);
+    }
+
+    /// <summary>
+    /// Создаёт отдельный high-importance канал тревоги (звук/вибрация по умолчанию). Best-effort:
+    /// отсутствие права на звук/вибрацию не должно ломать foreground service.
+    /// </summary>
+    private void CreateAlarmNotificationChannel()
+    {
+        if (!OperatingSystem.IsAndroidVersionAtLeast(26))
+        {
+            return;
+        }
+
+        try
+        {
+            CreateAlarmNotificationChannelApi26();
+        }
+        catch (Exception exception)
+        {
+            Log.Warn(LogTag, "Alarm channel creation failed: " + exception.GetType().Name);
+        }
+    }
+
+    [SupportedOSPlatform("android26.0")]
+    private void CreateAlarmNotificationChannelApi26()
+    {
+        var manager = (NotificationManager?)GetSystemService(NotificationService);
+        if (manager is null)
+        {
+            return;
+        }
+
+        var channel = new NotificationChannel(
+            AlarmChannelId,
+            AlarmChannelName,
+            NotificationImportance.High)
+        {
+            Description = AlarmChannelDescription
+        };
+        channel.EnableVibration(true);
+        channel.SetShowBadge(true);
+
+        var sound = RingtoneManager.GetDefaultUri(RingtoneType.Notification);
+        if (sound is not null)
+        {
+            var attributesBuilder = new AudioAttributes.Builder();
+            attributesBuilder.SetUsage(AudioUsageKind.Notification);
+            attributesBuilder.SetContentType(AudioContentType.Sonification);
+            var attributes = attributesBuilder.Build();
+            if (attributes is not null)
+            {
+                channel.SetSound(sound, attributes);
+                attributes.Dispose();
+            }
+
+            attributesBuilder.Dispose();
+        }
+
+        manager.CreateNotificationChannel(channel);
+    }
+
+    /// <summary>
+    /// Transition-based тревога Parent: high-importance уведомление поднимается только на
+    /// false→true и снимается на true→false/остановке; каждый SnapshotChanged не спамит.
+    /// </summary>
+    private void UpdateParentLossAlarm(ForegroundSessionSnapshot snapshot)
+    {
+        var isActive = snapshot.Role is DeviceRole.Parent
+            && snapshot.State is MonitoringForegroundState.Running
+            && snapshot.Media?.ParentAlarmActive is true;
+
+        bool raise;
+        bool cancel;
+        lock (_sync)
+        {
+            if (isActive == _parentAlarmActive)
+            {
+                raise = false;
+                cancel = false;
+            }
+            else
+            {
+                _parentAlarmActive = isActive;
+                raise = isActive;
+                cancel = !isActive;
+            }
+        }
+
+        if (raise)
+        {
+            ShowParentAlarmNotification();
+        }
+        else if (cancel)
+        {
+            CancelParentAlarmNotification();
+        }
+    }
+
+    /// <summary>Показывает alarm-уведомление best-effort: отказ в notifications/звуке не роняет сервис.</summary>
+    private void ShowParentAlarmNotification()
+    {
+        try
+        {
+            var manager = (NotificationManager?)GetSystemService(NotificationService);
+            manager?.Notify(AlarmNotificationId, BuildParentAlarmNotification());
+        }
+        catch (Exception exception)
+        {
+            Log.Warn(LogTag, "Parent alarm notification failed: " + exception.GetType().Name);
+        }
+    }
+
+    /// <summary>Снимает alarm-уведомление; идемпотентно.</summary>
+    private void CancelParentAlarmNotification()
+    {
+        lock (_sync)
+        {
+            _parentAlarmActive = false;
+        }
+
+        try
+        {
+            var manager = (NotificationManager?)GetSystemService(NotificationService);
+            manager?.Cancel(AlarmNotificationId);
+        }
+        catch (Exception exception)
+        {
+            Log.Warn(LogTag, "Parent alarm cancel failed: " + exception.GetType().Name);
+        }
+    }
+
+    private Notification BuildParentAlarmNotification()
+    {
+        if (OperatingSystem.IsAndroidVersionAtLeast(26))
+        {
+            return BuildParentAlarmNotificationApi26();
+        }
+
+        return BuildParentAlarmNotificationLegacy();
+    }
+
+    [SupportedOSPlatform("android26.0")]
+    private Notification BuildParentAlarmNotificationApi26() =>
+        PopulateParentAlarmNotification(new Notification.Builder(this, AlarmChannelId));
+
+    private Notification BuildParentAlarmNotificationLegacy()
+    {
+#pragma warning disable CA1422 // Legacy builder нужен для API 24–25 (minSdk 24).
+        var builder = new Notification.Builder(this);
+        builder.SetDefaults(NotificationDefaults.Sound | NotificationDefaults.Vibrate);
+        builder.SetPriority((int)NotificationPriority.High);
+#pragma warning restore CA1422
+        return PopulateParentAlarmNotification(builder);
+    }
+
+    private Notification PopulateParentAlarmNotification(Notification.Builder builder)
+    {
+        var openAppIntent = PackageManager?.GetLaunchIntentForPackage(PackageName ?? string.Empty);
+        if (openAppIntent is not null)
+        {
+            builder.SetContentIntent(PendingIntent.GetActivity(
+                this,
+                AlarmOpenRequestCode,
+                openAppIntent,
+                PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent));
+        }
+
+        builder
+            .SetContentTitle(AlarmTitle)
+            .SetContentText(AlarmText)
+            .SetSmallIcon(global::Android.Resource.Drawable.IcDialogAlert)
+            .SetAutoCancel(true)
+            .SetOngoing(false)
+            .SetCategory(Notification.CategoryError);
+
+        return builder.Build();
     }
 
     private Notification BuildNotification(
@@ -470,6 +661,11 @@ public sealed class MonitoringForegroundService : Service
     {
         if (media is not null)
         {
+            if (media.Role is DeviceRole.Parent && media.ParentAlarmActive)
+            {
+                return TextParentAlarm;
+            }
+
             return media.State switch
             {
                 MediaSessionState.MediaFlowing => TextMediaFlowing,

@@ -41,6 +41,12 @@ public sealed class SessionHealthMonitor
     /// <summary>Порог остановки media flow (например, ожидания первого аудиокадра).</summary>
     public TimeSpan MediaTimeout => _mediaTimeout;
 
+    /// <summary>
+    /// Порог потери control heartbeat. Используется heartbeat watchdog-ом координатора:
+    /// отсутствие heartbeat дольше порога — отдельная typed-причина, а не media stall.
+    /// </summary>
+    public TimeSpan HeartbeatTimeout => _heartbeatTimeout;
+
     /// <summary>Отмечает полученный control heartbeat.</summary>
     public void MarkHeartbeat()
     {

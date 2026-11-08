@@ -9,10 +9,12 @@ namespace BabyMonitor.Infrastructure.Realtime;
 
 /// <summary>
 /// Активная WebRTC audio-only сессия SIPSorcery за <see cref="IRealtimeTransportSession"/>.
-/// Signaling-канал (TLS + identity assertion) остаётся открытым для ping/pong/bye, media-поток —
-/// DTLS-SRTP/Opus. Send/Receive используют bounded-очереди с drop-oldest: при перегрузке старые
-/// кадры отбрасываются, latency не растёт безгранично, а потоки сети не блокируются. Аудио не
-/// логируется и не сохраняется.
+/// Signaling-канал (TLS + identity assertion) остаётся открытым для control heartbeat (ping/pong),
+/// bye и media-потока DTLS-SRTP/Opus. Heartbeat идёт периодически по <see cref="SipsorceryTransportOptions.HeartbeatInterval"/>;
+/// отсутствие pong дольше <see cref="SipsorceryTransportOptions.HeartbeatTimeout"/> переводит сессию
+/// в Failed с realtime.heartbeat_missed (независимо от media flow). Send/Receive используют
+/// bounded-очереди с drop-oldest: при перегрузке старые кадры отбрасываются, latency не растёт
+/// безгранично, а потоки сети не блокируются. Аудио не логируется и не сохраняется.
 /// </summary>
 public sealed class SipsorceryRealtimeTransportSession : IRealtimeTransportSession
 {
@@ -26,8 +28,13 @@ public sealed class SipsorceryRealtimeTransportSession : IRealtimeTransportSessi
     private readonly Channel<byte[]> _sendQueue;
     private readonly Channel<ReceivedAudioFrame> _receiveQueue;
     private readonly CancellationTokenSource _lifetimeCts = new();
+    private readonly TimeProvider _timeProvider;
+    private readonly TimeSpan _heartbeatInterval;
+    private readonly TimeSpan _heartbeatTimeout;
     private readonly Task _sendPumpTask;
     private readonly Task _controlPumpTask;
+    private readonly Task _heartbeatPumpTask;
+    private long _lastPongTimestamp;
     private int _state = (int)RealtimeTransportState.Connected;
     private int _closing;
     private Error? _lastError;
@@ -44,6 +51,11 @@ public sealed class SipsorceryRealtimeTransportSession : IRealtimeTransportSessi
 
         _signalingConnection = signalingConnection;
         _peerConnection = peerConnection;
+        _timeProvider = options.Signaling.TimeProvider;
+        _heartbeatInterval = options.HeartbeatInterval;
+        _heartbeatTimeout = options.HeartbeatTimeout;
+        _lastPongTimestamp = _timeProvider.GetTimestamp();
+
         _sendQueue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(options.SendQueueCapacity)
         {
             FullMode = BoundedChannelFullMode.DropOldest,
@@ -61,6 +73,7 @@ public sealed class SipsorceryRealtimeTransportSession : IRealtimeTransportSessi
         _peerConnection.onconnectionstatechange += OnConnectionStateChanged;
         _sendPumpTask = SendPumpAsync();
         _controlPumpTask = ControlPumpAsync();
+        _heartbeatPumpTask = HeartbeatPumpAsync();
     }
 
     /// <inheritdoc />
@@ -80,6 +93,9 @@ public sealed class SipsorceryRealtimeTransportSession : IRealtimeTransportSessi
 
     /// <inheritdoc />
     public event EventHandler<RealtimeTransportStateChangedEventArgs>? StateChanged;
+
+    /// <inheritdoc />
+    public event EventHandler? HeartbeatReceived;
 
     /// <inheritdoc />
     public ValueTask SendAudioAsync(ReadOnlyMemory<byte> encodedAudioFrame, CancellationToken cancellationToken)
@@ -169,6 +185,7 @@ public sealed class SipsorceryRealtimeTransportSession : IRealtimeTransportSessi
                             .ConfigureAwait(false);
                         break;
                     case SignalingMessageKind.Pong:
+                        OnPongReceived();
                         break;
                     case SignalingMessageKind.Bye:
                         FailSession(SignalingErrors.MediaFlowLost());
@@ -199,6 +216,65 @@ public sealed class SipsorceryRealtimeTransportSession : IRealtimeTransportSessi
         {
             FailSession(SignalingErrors.MediaFlowLost());
         }
+    }
+
+    private async Task HeartbeatPumpAsync()
+    {
+        try
+        {
+            while (!_lifetimeCts.IsCancellationRequested)
+            {
+                await Task.Delay(_heartbeatInterval, _timeProvider, _lifetimeCts.Token).ConfigureAwait(false);
+                if (Volatile.Read(ref _closing) != 0 || State is not RealtimeTransportState.Connected)
+                {
+                    return;
+                }
+
+                // Порог считается от последнего подтверждённого pong; пока peer отвечает, elapsed мал.
+                if (_timeProvider.GetElapsedTime(Volatile.Read(ref _lastPongTimestamp)) > _heartbeatTimeout)
+                {
+                    FailSession(SignalingErrors.HeartbeatMissed());
+                    return;
+                }
+
+                try
+                {
+                    // Пустой control payload: ping не содержит данных/SDP/секретов, pong эхом возвращает его.
+                    await _signalingConnection
+                        .SendPingAsync(ReadOnlyMemory<byte>.Empty, _lifetimeCts.Token)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception exception) when (exception is SignalingConnectionClosedException or SignalingProtocolException or IOException)
+                {
+                    // Control-канал потерян: media-flow мог не заметить этого сразу, поэтому typed отказ.
+                    FailSession(SignalingErrors.MediaFlowLost());
+                    return;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Lifetime отменён при локальном закрытии/отказе: цикл и таймер освобождены.
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            FailSession(SignalingErrors.MediaFlowLost());
+        }
+    }
+
+    private void OnPongReceived()
+    {
+        Interlocked.Exchange(ref _lastPongTimestamp, _timeProvider.GetTimestamp());
+        if (Volatile.Read(ref _closing) != 0 || State is not RealtimeTransportState.Connected)
+        {
+            return;
+        }
+
+        HeartbeatReceived?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnRtpPacketReceived(IPEndPoint remoteEndPoint, SDPMediaTypesEnum mediaType, RTPPacket rtpPacket)
@@ -247,6 +323,7 @@ public sealed class SipsorceryRealtimeTransportSession : IRealtimeTransportSessi
         }
 
         _receiveQueue.Writer.TryComplete();
+        _sendQueue.Writer.TryComplete();
         _lifetimeCts.Cancel();
         StateChanged?.Invoke(this, new RealtimeTransportStateChangedEventArgs(RealtimeTransportState.Failed, error));
     }
@@ -265,6 +342,7 @@ public sealed class SipsorceryRealtimeTransportSession : IRealtimeTransportSessi
         await SendByeWithinGraceAsync(cancellationToken).ConfigureAwait(false);
         await AwaitPumpAsync(_sendPumpTask).ConfigureAwait(false);
         await AwaitPumpAsync(_controlPumpTask).ConfigureAwait(false);
+        await AwaitPumpAsync(_heartbeatPumpTask).ConfigureAwait(false);
 
         _peerConnection.OnRtpPacketReceived -= OnRtpPacketReceived;
         _peerConnection.onconnectionstatechange -= OnConnectionStateChanged;
