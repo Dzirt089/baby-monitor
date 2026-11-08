@@ -28,12 +28,14 @@ versionName. Git-теги имеют формат vMAJOR.MINOR.PATCH; release wo
 - verify-job проверяет SemVer-тег и раздел CHANGELOG и заново собирает/тестирует commit;
   release-job после валидации environment release повторно проверяет тег и собирает подписанный
   APK с версией из тега (manual approval — только при доступном плане GitHub).
-- Bootstrap-фаза: 0.1.0 → versionCode 100 (значения по умолчанию в Directory.Build.props).
+- Текущие значения по умолчанию в Directory.Build.props — 0.2.0 → versionCode 200; исторический
+  bootstrap-пример 0.1.0 → 100. Release workflow перекрывает значения из SemVer-тега.
 - Диапазоны MINOR/PATCH и лимит Android проверяются дважды: в Directory.Build.props (любая
   сборка с некорректной версией падает) и в release workflow (понятная ошибка до публикации).
 - CHANGELOG.md обязан содержать раздел "## [X.Y.Z]" для выпускаемой версии; workflow падает
   до публикации, если раздела нет.
-- Workflow никогда не создаёт/не двигает теги; тег создаётся человеком по инструкции README.
+- Workflow никогда не создаёт/не двигает теги; тег создаёт владелец или делегированный агент для
+  тестовых сборок v0.x (по docs/operations/release-runbook.md), теги не двигаются.
 
 Примеры: 0.1.0 → 100; 1.0.0 → 10000; 1.2.3 → 10203.
 

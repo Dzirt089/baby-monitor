@@ -8,9 +8,10 @@ Android-приложение, которое соединяет два теле�
 > pairing-протокол (Android Keystore identity + trusted store), session-reliability политики и UI
 > pairing (офлайн QR-обмен, verification code, trusted devices, camera scan, diagnostics).
 > Передача аудио/media, сетевой signaling и автоматическое переподключение runtime-сессии не
-> реализованы (005 phase 2 BLOCKED: ADR-0007 Proposed + нет устройств) — приложение пока не
-> выполняет функции радионяни. Device-проверки BLOCKED: нет реальных устройств (emulator не
-> заменяет device-тесты).
+> реализованы (005 phase 2 — следующий этап: signaling/media/audio; design и Application-порты
+> готовятся в PR 005 phase 2, ADR-0007 вариант A — к принятию в этом PR). Приложение пока не
+> выполняет функции радионяни. У владельца есть два физических Android-устройства для
+> device-прогона v0.2.0; emulator device-тесты не заменяет.
 
 ## Зачем
 
@@ -104,7 +105,8 @@ architecture tests и собирает debug APK, который публику�
 ## Release
 
 Релиз собирается [.github/workflows/release.yml](.github/workflows/release.yml) только по
-SemVer-тегу `vMAJOR.MINOR.PATCH`, который создаёт человек. Workflow:
+SemVer-тегу `vMAJOR.MINOR.PATCH`. Тег создаёт владелец или делегированный агент для тестовых
+сборок v0.x (см. [release-runbook](docs/operations/release-runbook.md)); теги не двигаются. Workflow:
 
 1. проверяет формат тега и наличие раздела версии в `CHANGELOG.md`;
 2. заново выполняет restore/build/test;
@@ -162,7 +164,7 @@ Keystore, пароли и signing secrets **запрещено** хранить 
 
 Media-библиотека **SIPSorcery** принята владельцем в [ADR-0005](docs/architecture/adr/0005-media-transport-library.md):
 BSD-3-Clause + Additional Use Restriction; версия зафиксирована `>= 10.0.17` в `Directory.Packages.props`.
-Пакет подключается к Infrastructure при реализации media-адаптера в 005 phase 2 (ADR-0007 Accepted).
+Пакет подключается к Infrastructure при реализации media-адаптера в 005 phase 2 (ADR-0007, вариант A, принимается в 005 phase 2).
 
 ## Лицензия
 
