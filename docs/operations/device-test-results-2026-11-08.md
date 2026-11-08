@@ -82,7 +82,7 @@
 | 8 | 20/100 Wi-Fi reconnect циклов с новой методикой | NOT RUN (тестовая методика дорабатывается) |
 
 **v0.4.4 rogue/flood single-device (nova Y90, no Parent, 2026-11-08):** versionCode 404 install PASS;
-Child Advertising/Media Connecting, listener 0.0.0.0:47800. Host (192.168.3.5) сделал 3 rogue TCP
+Child Advertising/Media Connecting, listener 0.0.0.0:47800. Host (192.168.3.x) сделал 3 rogue TCP
 connect+close → Child остался Connecting (retry Accept/cooldown), notification «Подключение…», crash
 buffer пуст. После 5 суммарных rogue-подключений (bounded attempts exhausted) — terminal Failed
 `realtime.tls_failure`, последующие TCP connect time-out (сервис остановлен). Это подтверждает bounded
