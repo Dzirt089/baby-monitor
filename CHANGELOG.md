@@ -14,6 +14,34 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 фоновой сессии на экране выбора роли) и 008 (release readiness, owner-gated публикация/лицензия/
 дистрибуция).
 
+## [0.4.1] - 2026-11-08
+
+### Fixed
+
+- **Diagnostics telemetry «замирала»**: снимок с telemetry/uptime/health обновлялся только при смене
+  состояния сеанса (device smoke v0.4.0). Coordinator теперь публикует live-refresh snapshot каждую
+  секунду во время run (State/Error не меняются); после Stop/Dispose таймер останавливается.
+  Device-retest v0.4.1 (live counters) — pending.
+- **Бесконечный Reconnecting при исчезнувшем peer**: повторные попытки discovery/connect ждали peer
+  без таймаута, MaxAttempts не исчерпывался. Добавлен reconnectAttemptTimeout (default 20 s, только
+  для retry-попыток): timeout → typed realtime.signaling_timeout → retry → после MaxAttempts
+  terminal Failed. Первичная попытка не ограничена. Device-retest v0.4.1 (terminal Failed + alarm)
+  — pending (до фикса Parent висел в Reconnecting >60 s).
+- **Parent alarm scoping**: terminal Failed Parent поднимает loss-тревогу только для loss-кодов
+  (peer_unavailable/signaling_timeout/heartbeat_missed/media_flow_lost/media_path_absent/
+  network_unavailable/tls_failure); локальные ошибки (unauthorized_peer/unsupported_version/audio.*/
+  media.adapter_failure) больше не показывают «Связь потеряна!».
+
+### Device smoke v0.4.0 (pre-fix) и статус v0.4.1
+
+На v0.4.0 (Huawei nova Y90 + nova 13 Pro, Android 12) было проверено: install/launch, старт
+Child+Parent, MediaFlowing, alarm при Wi-Fi Child off (Parent ≤3 s: «Связь потеряна!», high-importance
+notification), Child typed Failed discovery.wifi_unavailable, crash buffer пуст. Device smoke выявил
+дефекты, исправленные в v0.4.1 (stale telemetry, бесконечный Reconnecting, alarm scoping).
+**Device-retest v0.4.1 (live counters, terminal Failed standalone alarm, sound/vibration/DND,
+media-only alarm) — pending (T040); до него эти фичи на устройстве не заявляются проверенными.**
+Подробности: docs/operations/device-test-results-2026-11-08.md.
+
 ## [0.4.0] - 2026-11-08
 
 ### Added

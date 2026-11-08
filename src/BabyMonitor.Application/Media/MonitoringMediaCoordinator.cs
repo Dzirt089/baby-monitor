@@ -55,6 +55,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
 
     private static readonly TimeSpan MediaWatchdogPeriod = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan AlarmWatchdogPeriod = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan LiveSnapshotRefreshPeriod = TimeSpan.FromSeconds(1);
 
     private readonly object _sync = new();
     private readonly DeviceRole _role;
@@ -67,6 +68,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     private readonly IAudioCodec _codec;
     private readonly IConnectivityMonitor _connectivity;
     private readonly ReconnectPolicy _reconnectPolicy;
+    private readonly TimeSpan _reconnectAttemptTimeout;
     private readonly TimeProvider _timeProvider;
     private readonly SessionHealthMonitor _healthMonitor;
     private readonly ParentLossAlarm _parentLossAlarm;
@@ -118,6 +120,13 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     /// Порог локальной тревоги Parent по отсутствию heartbeat/media. null — default
     /// <see cref="ParentLossAlarm"/> (15 s).
     /// </param>
+    /// <param name="reconnectAttemptTimeout">
+    /// Таймаут setup-фазы попыток переподключения (retryIndex &gt; 0): discovery/accept/connect.
+    /// null — 20 s. По истечении попытка завершается typed
+    /// <see cref="RealtimeTransportErrorCodes.SignalingTimeout"/>, чтобы MaxAttempts исчерпывался и
+    /// сеанс уходил в terminal Failed. Первичная попытка (retryIndex = 0) этим таймаутом не
+    /// ограничивается: пользователь может искать Child долго.
+    /// </param>
     /// <exception cref="ArgumentException">Роль Unknown/неизвестна или fingerprint некорректен.</exception>
     /// <exception cref="ArgumentNullException">Любой обязательный порт/политика/время равны null.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Пороги heartbeat/alarm не положительны.</exception>
@@ -135,7 +144,8 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         TimeProvider timeProvider,
         string? peerFingerprintSha256 = null,
         TimeSpan? heartbeatTimeout = null,
-        TimeSpan? parentAlarmThreshold = null)
+        TimeSpan? parentAlarmThreshold = null,
+        TimeSpan? reconnectAttemptTimeout = null)
     {
         if (role is not (DeviceRole.Child or DeviceRole.Parent))
         {
@@ -152,6 +162,13 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         ArgumentNullException.ThrowIfNull(connectivity);
         ArgumentNullException.ThrowIfNull(reconnectPolicy);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        if (reconnectAttemptTimeout is { } attemptTimeout && attemptTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(reconnectAttemptTimeout),
+                attemptTimeout,
+                "Таймаут попытки переподключения должен быть больше нуля.");
+        }
 
         if (peerFingerprintSha256 is not null)
         {
@@ -175,6 +192,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         _codec = codec;
         _connectivity = connectivity;
         _reconnectPolicy = reconnectPolicy;
+        _reconnectAttemptTimeout = reconnectAttemptTimeout ?? TimeSpan.FromSeconds(20);
         _timeProvider = timeProvider;
         _healthMonitor = new SessionHealthMonitor(timeProvider, heartbeatTimeout: heartbeatTimeout);
         _parentLossAlarm = new ParentLossAlarm(timeProvider, parentAlarmThreshold);
@@ -452,6 +470,14 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                 AlarmWatchdogPeriod);
         }
 
+        // Live-refresh снимка: telemetry/uptime/alarm меняются и без смены State, поэтому
+        // диагностика должна получать актуальные counters, не дожидаясь transition (device-test v0.4.0).
+        var liveRefreshTimer = _timeProvider.CreateTimer(
+            _ => PublishLiveRefresh(),
+            null,
+            LiveSnapshotRefreshPeriod,
+            LiveSnapshotRefreshPeriod);
+
         try
         {
             await RunSessionAsync(runToken);
@@ -467,6 +493,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         finally
         {
             alarmTimer?.Dispose();
+            liveRefreshTimer.Dispose();
             await FinalizeRunAsync(unexpected);
         }
     }
@@ -557,17 +584,33 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         IAudioCaptureSession? capture = null;
         var heartbeatSeen = new bool[1];
         EventHandler? heartbeatHandler = null;
+        var setupTimedOut = new bool[1];
+        using CancellationTokenSource? setupTimeoutCts = initial
+            ? null
+            : CancellationTokenSource.CreateLinkedTokenSource(ct);
+        using ITimer? setupTimeoutTimer = setupTimeoutCts is null
+            ? null
+            : _timeProvider.CreateTimer(
+                _ =>
+                {
+                    Volatile.Write(ref setupTimedOut[0], true);
+                    CancelQuietly(setupTimeoutCts);
+                },
+                null,
+                _reconnectAttemptTimeout,
+                Timeout.InfiniteTimeSpan);
+        var setupToken = setupTimeoutCts?.Token ?? ct;
 
         try
         {
-            var listenerResult = await _listener.StartAsync(PeerDiscoveryConstants.ProvisionalTransportPort, ct);
+            var listenerResult = await _listener.StartAsync(PeerDiscoveryConstants.ProvisionalTransportPort, setupToken);
             if (!listenerResult.IsSuccess)
             {
                 return AttemptOutcome.SetupFailure(listenerResult.Error!);
             }
 
             listener = listenerResult.Value;
-            ct.ThrowIfCancellationRequested();
+            setupToken.ThrowIfCancellationRequested();
 
             if (listener.BoundPort != PeerDiscoveryConstants.ProvisionalTransportPort)
             {
@@ -578,7 +621,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
 
             var advertiserResult = await _advertiser.StartAsync(
                 new PeerAdvertisement(DeviceRole.Child, PeerDiscoveryConstants.CurrentProtocolVersion),
-                ct);
+                setupToken);
             if (!advertiserResult.IsSuccess)
             {
                 return AttemptOutcome.SetupFailure(advertiserResult.Error!);
@@ -589,7 +632,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             SignalStarted();
             PublishChildConnecting();
 
-            var accepted = await listener.AcceptAsync(ct);
+            var accepted = await listener.AcceptAsync(setupToken);
             if (!accepted.IsSuccess)
             {
                 return AttemptOutcome.SetupFailure(accepted.Error!);
@@ -612,6 +655,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
 
             capture = captureResult.Value;
             SetCaptureActive(true);
+            setupTimeoutTimer?.Dispose();
 
             return await RunChildMediaLoopAsync(transport, capture, runToken, ct, heartbeatSeen, attemptGeneration);
         }
@@ -621,7 +665,9 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
-            return AttemptOutcome.Stale;
+            return Volatile.Read(ref setupTimedOut[0])
+                ? AttemptOutcome.SetupFailure(CreateReconnectTimeoutError())
+                : AttemptOutcome.Stale;
         }
         catch (Exception exception)
         {
@@ -655,10 +701,26 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         IAudioPlaybackSession? playback = null;
         var heartbeatSeen = new bool[1];
         EventHandler? heartbeatHandler = null;
+        var setupTimedOut = new bool[1];
+        using CancellationTokenSource? setupTimeoutCts = initial
+            ? null
+            : CancellationTokenSource.CreateLinkedTokenSource(ct);
+        using ITimer? setupTimeoutTimer = setupTimeoutCts is null
+            ? null
+            : _timeProvider.CreateTimer(
+                _ =>
+                {
+                    Volatile.Write(ref setupTimedOut[0], true);
+                    CancelQuietly(setupTimeoutCts);
+                },
+                null,
+                _reconnectAttemptTimeout,
+                Timeout.InfiniteTimeSpan);
+        var setupToken = setupTimeoutCts?.Token ?? ct;
 
         try
         {
-            var discoveryResult = await _discovery.StartAsync(ct);
+            var discoveryResult = await _discovery.StartAsync(setupToken);
             if (!discoveryResult.IsSuccess)
             {
                 return AttemptOutcome.SetupFailure(discoveryResult.Error!);
@@ -682,7 +744,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             discoverySession.StateChanged += discoveryHandler;
             try
             {
-                await foreach (var candidate in discoverySession.DiscoverPeersAsync(ct))
+                await foreach (var candidate in discoverySession.DiscoverPeersAsync(setupToken))
                 {
                     peer = candidate;
                     break;
@@ -691,6 +753,10 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             catch (OperationCanceledException) when (runToken.IsCancellationRequested)
             {
                 throw;
+            }
+            catch (OperationCanceledException) when (Volatile.Read(ref setupTimedOut[0]))
+            {
+                return AttemptOutcome.SetupFailure(CreateReconnectTimeoutError());
             }
             catch (OperationCanceledException)
             {
@@ -719,7 +785,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
 
             PublishParentConnecting();
 
-            var connectResult = await _transport.ConnectAsync(peer.Endpoint, ct);
+            var connectResult = await _transport.ConnectAsync(peer.Endpoint, setupToken);
             if (!connectResult.IsSuccess)
             {
                 return AttemptOutcome.SetupFailure(connectResult.Error!);
@@ -742,6 +808,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
 
             playback = playbackResult.Value;
             SetPlaybackActive(true);
+            setupTimeoutTimer?.Dispose();
 
             return await RunParentMediaLoopAsync(transport, playback, runToken, ct, heartbeatSeen, attemptGeneration);
         }
@@ -751,7 +818,9 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
-            return AttemptOutcome.Stale;
+            return Volatile.Read(ref setupTimedOut[0])
+                ? AttemptOutcome.SetupFailure(CreateReconnectTimeoutError())
+                : AttemptOutcome.Stale;
         }
         catch (Exception exception)
         {
@@ -1434,6 +1503,34 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         }
     }
 
+    private void PublishLiveRefresh()
+    {
+        MediaSessionSnapshot? snapshot = null;
+        EventHandler<MediaSessionSnapshot>? handler = null;
+        lock (_sync)
+        {
+            if (_disposed
+                || _stopRequested
+                || _session is null
+                || _snapshot is not { } current
+                || current.IsTerminal)
+            {
+                return;
+            }
+
+            // State/Error не меняются: обновляются только live-производные (telemetry, uptime,
+            // health, ParentAlarmActive). Формирование снимка под _sync даёт консистентный набор.
+            snapshot = CreateSnapshotLocked(current.State, current.Error);
+            _snapshot = snapshot;
+            handler = SnapshotChanged;
+        }
+
+        if (snapshot is not null)
+        {
+            handler?.Invoke(this, snapshot);
+        }
+    }
+
     private ITimer StartMediaWatchdog(
         TaskCompletionSource<Error> failure,
         bool[] mediaFlowing,
@@ -1805,12 +1902,14 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             health,
             _session?.Id,
             _session is null ? null : BuildTelemetryLocked(),
-            IsParentAlarmActiveLocked(state));
+            IsParentAlarmActiveLocked(state, error));
     }
 
-    private bool IsParentAlarmActiveLocked(MediaSessionState state) =>
+    private bool IsParentAlarmActiveLocked(MediaSessionState state, Error? error) =>
         _role is DeviceRole.Parent
-        && (state is MediaSessionState.Failed || _parentLossAlarm.IsRaised || _mediaAlarmActive);
+        && (_parentLossAlarm.IsRaised
+            || _mediaAlarmActive
+            || (state is MediaSessionState.Failed && error is not null && IsLossError(error)));
 
     private MediaSessionTelemetry BuildTelemetryLocked()
     {
@@ -1912,6 +2011,29 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     private static Error CreateHeartbeatMissedError() => new(
         RealtimeTransportErrorCodes.HeartbeatMissed,
         "Control heartbeat не поступает: связь с peer потеряна.");
+
+    private static Error CreateReconnectTimeoutError() => new(
+        RealtimeTransportErrorCodes.SignalingTimeout,
+        "Повторное подключение не завершилось за отведённое время.");
+
+    /// <summary>
+    /// Коды, при которых terminal Failed Parent означает потерю peer-а (тревога уместна).
+    /// Включает transport/signaling-потери, потери на retry-фазе discovery (Wi-Fi off, resolve,
+    /// service_not_found) и закрытие сессии. Отказ доверия (unauthorized_peer/unsupported_version),
+    /// локальные audio-сбои и adapter_failure не являются потерей связи и не включают loss-тревогу.
+    /// </summary>
+    private static bool IsLossError(Error error) =>
+        error.Code is RealtimeTransportErrorCodes.PeerUnavailable
+            or RealtimeTransportErrorCodes.SignalingTimeout
+            or RealtimeTransportErrorCodes.HeartbeatMissed
+            or RealtimeTransportErrorCodes.MediaFlowLost
+            or RealtimeTransportErrorCodes.MediaPathAbsent
+            or RealtimeTransportErrorCodes.NetworkUnavailable
+            or RealtimeTransportErrorCodes.TlsFailure
+            or RealtimeTransportErrorCodes.SessionClosed
+            or DiscoveryErrorCodes.WifiUnavailable
+            or DiscoveryErrorCodes.ResolveFailed
+            or DiscoveryErrorCodes.ServiceNotFound;
 
     private static bool IsDeviceAudioFailure(Error error) =>
         error.Code is AudioErrorCodes.CaptureUnavailable

@@ -82,15 +82,25 @@
 
 ## Phase 7 — device-проверка v0.4.0
 
-- [-] T040 Проверить на 2 устройствах: heartbeat/pong, срабатывание ParentLossAlarm «Связь потеряна!»
+- [-] T040 (v0.4.1 retest pending) Проверить на 2 устройствах: heartbeat/pong, срабатывание ParentLossAlarm «Связь потеряна!»
   (heartbeat loss и media-only loss), звук/вибрация/DND alarm-канала, terminal Failed Parent alarm,
   телеметрия в Diagnostics. — **BLOCKED: adb nova 13 Pro пропал после reboot (нужно подтвердить
   USB-отладку); после восстановления выполнить.**
+
+## Phase 8 — follow-ups после v0.4.1
+
+- [ ] T042 Live-refresh 1/s переопубликовывает SnapshotChanged → FGS Notify и UI Render каждую секунду;
+  оптимизировать (обновлять уведомление только при изменении текста/флага; UI — при изменении
+  отображаемых полей), измерить battery/CPU во время 8h soak.
+- [ ] T043 Device-retest v0.4.1 (T040): live counters, terminal Failed standalone alarm, media-only alarm,
+  звук/вибрация/DND alarm-канала после восстановления adb.
 
 ## Verification Log
 
 | Дата | Проверка | Результат |
 |---|---|---|
+| 2026-11-08 | v0.4.1 gates | 513/513 (Domain 38, Application 273, Infrastructure 145, Architecture 57); Debug/Release 0 warnings; format clean; vuln OK |
+| 2026-11-08 | v0.4.1 device smoke findings (v0.4.0) | Huawei pair: install/start/MediaFlowing PASS; alarm при Wi-Fi off PASS (≤3 s, high-importance notification); найдены дефекты: stale telemetry snapshot, бесконечный Reconnecting при исчезнувшем peer, alarm для локальных ошибок → исправлено в v0.4.1 (live refresh/reconnectAttemptTimeout/alarm scoping); device-retest v0.4.1 — T040 |
 | 2026-11-08 | v0.4.0 reliability code gates | heartbeat/ParentLossAlarm/telemetry реализованы+тесты: 502/502 (Domain 38, Application 262, Infrastructure 145, Architecture 57); Debug/Release 0 warnings; format clean; vuln OK |
 | 2026-11-08 | Автоматизированный 100-цикловый Wi-Fi reconnect на v0.3.1 | 8 циклов PASS (~27-28 s восстановление), затем harness/Wi-Fi OEM деградация → typed Failed после исчерпания policy; тест остановлен, НЕ заявляется пройденным (нужна новая методика/состояние сети) |
 | 2026-11-08 | Device pass v0.3.1 на Huawei nova Y90 + nova 13 Pro (Android 12) | pairing/PASS, audibility owner-confirmed/PASS, MediaFlowing/PASS, reconnect/PASS, screen-off 12s/PASS, Stop/PASS; battery/BT/calls/TalkBack/OEM — NOT RUN/BLOCKED; см. docs/operations/device-test-results-2026-11-08.md |
