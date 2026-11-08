@@ -14,6 +14,43 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 фоновой сессии на экране выбора роли) и 008 (release readiness, owner-gated публикация/лицензия/
 дистрибуция).
 
+## [0.4.6] - 2026-11-08
+
+### Fixed / hardened
+
+(Содержит изменения, подготовленные для v0.4.5; релиз v0.4.5 не опубликован — см. примечание ниже.)
+
+- **Строгий порядок Starting/Stopping (T048)**: StartAsync публикует Starting до запуска RunAsync;
+  StopAsync дожидается публикации Starting (bounded watchdog 5 s через TimeProvider), terminal-публикация
+  сериализована с Stopping; stale Stopping после terminal не публикуется; regression strict-order,
+  no-events-after-terminal, 100-итерационный stress, bounded Stop при блокирующем подписчике.
+  XML-doc SnapshotChanged: handlers не блокируют и не бросают.
+- **Parent discovery walk cleanup (T051)**: non-OCE pending MoveNext не маскирует typed ошибку и не мешает
+  Dispose; cleanup best-effort.
+- **Semantic architecture test (T049)**: Socket/UdpClient/TcpListener/TcpClient/SslStream/Ssl*Options/
+  HttpClient/HttpMessageHandler/WebRequest только Infrastructure/Signaling|Realtime; Socket word-boundary,
+  комментарии вырезаются.
+- **T007a/T007b (v0.4.4)**: LAN peer resilience (Child Accept retry, Parent candidate enumeration,
+  async-iterator fix) и failed-handshake cooldown; **T042/T006/T046 (v0.4.2)**: churn optimization,
+  TLS/signaling tests, Child waits for Parent.
+
+### Verification
+
+- Debug/Release build 0 warnings; format clean; vuln scan чистый; тесты **555/555**
+  (Domain 38, Application 286, Infrastructure 172, Architecture 59); независимое review APPROVE;
+  CI зелёный (PR #26).
+- Device v0.4.4 two-device (T040/T043 partial): live telemetry PASS, alarm ≤5 s + terminal Failed
+  standalone alarm (id=1004, importance HIGH) PASS, screen-off 90 s PASS, recovery manual PASS;
+  **T053 auto-reconnect 10 s flap FAIL** — известный дефект, исправление в работе.
+  Sound/vibration/DND/calls/BT/TalkBack/100 cycles/8h soak — NOT RUN.
+
+### Примечание о теге v0.4.5
+
+Тег **v0.4.5** был ошибочно создан на pre-release main (77879c8) из-за неудавшегося merge PR #26;
+release workflow v0.4.5 завершился failure (в CHANGELOG на том коммите нет [0.4.5]), поэтому
+**GitHub Release v0.4.5 не опубликован**. Тег не двигается и не удаляется без явного решения владельца;
+v0.4.6 — корректный релиз. После явного подтверждения владельца orphan-тег v0.4.5 можно удалить.
+
 ## [0.4.5] - 2026-11-08
 
 ### Fixed / hardened

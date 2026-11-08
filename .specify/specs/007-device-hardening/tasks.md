@@ -126,6 +126,7 @@
 | Дата | Проверка | Результат |
 |---|---|---|
 | 2026-11-08 | v0.4.4 device rogue/flood (single nova Y90) | 3 rogue TCP connect+close → Child Connecting (retry/cooldown), 5 → terminal FailStartup tls_failure (bounded, residual DoS H3/T052); crash buffer пуст; rate-limit cooldown device-observation PASS-partial |
+| 2026-11-08 | v0.4.6 gates | 555/555 (Domain 38, Application 286, Infrastructure 172, Architecture 59); Debug/Release 0 warnings; format clean; vuln OK; T048 A/B; v0.4.5 tag orphan (Release failed) — v0.4.6 actual |
 | 2026-11-08 | v0.4.5 gates | 552/552 (Domain 38, Application 283, Infrastructure 172, Architecture 59); Debug/Release 0 warnings; format clean; vuln OK; T048/T049/T051 |
 | 2026-11-08 | v0.4.4 two-device T040/T043 (Huawei pair) | MediaFlowing PASS; live telemetry LIVE (↑14775/↓14827, uptime 5:00/5:12); Wi-Fi off → alarm ≤5 s, terminal Failed signaling_timeout + standalone alarm id1004 importance HIGH category err PASS; screen-off 90 s PASS; recovery после ручного рестарта PASS; **T053 auto-reconnect 10 s flap FAIL** (both terminal Failed за 139 s); sound/vibration/DND/calls/BT/TalkBack/100 cycles/8h — NOT RUN |
 | 2026-11-08 | v0.4.4 gates | 549/549 (Domain 38, Application 281, Infrastructure 172, Architecture 58); Debug/Release 0 warnings; format clean; vuln OK; T007a/T007b |
