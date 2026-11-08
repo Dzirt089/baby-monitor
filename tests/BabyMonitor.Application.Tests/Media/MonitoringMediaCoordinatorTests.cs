@@ -483,6 +483,69 @@ public sealed class MonitoringMediaCoordinatorTests
     }
 
     [Fact]
+    public async Task Starting_публикуется_до_остальных_состояний_даже_при_медленном_подписчике()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+        var states = new ConcurrentQueue<MediaSessionState>();
+        using var advertisingPublished = new ManualResetEventSlim(false);
+        coordinator.SnapshotChanged += (_, snapshot) =>
+        {
+            if (snapshot.State is MediaSessionState.Starting)
+            {
+                // Старая реализация стартовала RunAsync до публикации Starting: даём ему шанс
+                // опубликовать Advertising и зафиксировать инверсию порядка (T047).
+                advertisingPublished.Wait(TimeSpan.FromMilliseconds(200));
+            }
+            else if (snapshot.State is MediaSessionState.Advertising)
+            {
+                advertisingPublished.Set();
+            }
+
+            states.Enqueue(snapshot.State);
+        };
+
+        var start = await coordinator.StartAsync(CancellationToken.None);
+        Assert.True(start.IsSuccess);
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+
+        Assert.True(states.TryPeek(out var first));
+        Assert.Equal(MediaSessionState.Starting, first);
+    }
+
+    [Fact]
+    public async Task Stop_во_время_публикации_Starting_не_зависает_из_за_гейта()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+        using var handlerEntered = new ManualResetEventSlim(false);
+        using var releaseHandler = new ManualResetEventSlim(false);
+        coordinator.SnapshotChanged += (_, snapshot) =>
+        {
+            if (snapshot.State is MediaSessionState.Starting)
+            {
+                handlerEntered.Set();
+                releaseHandler.Wait(TimeSpan.FromSeconds(5));
+            }
+        };
+
+        var startTask = Task.Run(() => coordinator.StartAsync(CancellationToken.None));
+        Assert.True(handlerEntered.Wait(TimeSpan.FromSeconds(5)));
+        var stopTask = coordinator.StopAsync(CancellationToken.None);
+        releaseHandler.Set();
+
+        var stop = await stopTask.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(stop.IsSuccess);
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+
+        var start = await startTask.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(start.IsSuccess);
+    }
+
+    [Fact]
     public async Task DisposeAsync_идемпотентен_и_после_него_Start_Stop_дают_invalid_state()
     {
         var harness = new Harness();

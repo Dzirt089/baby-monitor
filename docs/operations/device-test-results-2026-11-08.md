@@ -81,6 +81,12 @@
 | 7 | Media-only loss alarm (control жив, кадры стоят) | NOT RUN |
 | 8 | 20/100 Wi-Fi reconnect циклов с новой методикой | NOT RUN (тестовая методика дорабатывается) |
 
+**T046 retest v0.4.2 (single-device, nova Y90, no Parent, 2026-11-08):** install versionCode 402 PASS;
+Child-сеанс без Parent остаётся Running/Media Connecting >40 s (10 замеров по 4 s), terminal
+signaling_timeout не наступает; notification «Радионяня: ребёнок»; crash buffer пуст; Stop PASS.
+Это подтверждает device-фикс T046; двухдевайсовые сценарии (live counters, terminal standalone alarm,
+media-only, sound/vibration/DND) — T040/T043 после возвращения Parent.
+
 **Найденные дефекты (fix → v0.4.1):** (a) telemetry snapshot не обновляется периодически — исправлено
 live-refresh 1 s; (b) reconnect attempt в discovery/connect без таймаута → бесконечный Reconnecting при
 исчезнувшем peer — исправлено reconnectAttemptTimeout 20 s (retry) → terminal Failed; (c) alarm для

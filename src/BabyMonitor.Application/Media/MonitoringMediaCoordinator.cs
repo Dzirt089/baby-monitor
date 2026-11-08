@@ -234,6 +234,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         TaskCompletionSource<Result<MediaSessionSnapshot>> startTcs;
         MediaSessionSnapshot? startingSnapshot = null;
         EventHandler<MediaSessionSnapshot>? startingHandler = null;
+        TaskCompletionSource? startGate = null;
 
         lock (_sync)
         {
@@ -285,13 +286,33 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                 var runToken = _runCts.Token;
                 startingSnapshot = SetSnapshotLocked(MediaSessionState.Starting, null);
                 startingHandler = SnapshotChanged;
-                _runTask = Task.Run(() => RunAsync(runToken), CancellationToken.None);
+
+                // RunAsync не должен успеть опубликовать Advertising/Connected раньше события
+                // Starting: Task.Run стартует только после публикации первого снимка (T047).
+                startGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var gate = startGate;
+                _runTask = Task.Run(
+                    async () =>
+                    {
+                        await gate.Task.ConfigureAwait(false);
+                        await RunAsync(runToken).ConfigureAwait(false);
+                    },
+                    CancellationToken.None);
             }
         }
 
-        if (startingSnapshot is not null)
+        try
         {
-            startingHandler?.Invoke(this, startingSnapshot);
+            if (startingSnapshot is not null)
+            {
+                startingHandler?.Invoke(this, startingSnapshot);
+            }
+        }
+        finally
+        {
+            // Гейт открывается всегда: даже если подписчик SnapshotChanged бросил исключение,
+            // принадлежащий координатору RunAsync не должен зависнуть (T047).
+            startGate?.TrySetResult();
         }
 
         try
