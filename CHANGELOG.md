@@ -36,9 +36,10 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 
 - Debug/Release build 0 warnings; format clean; vuln scan чистый; тесты **549/549**
   (Domain 38, Application 281, Infrastructure 172, Architecture 58); независимое review — после PR.
-- Device: v0.4.4 retest pending; v0.4.3 single-device sanity PASS. Rogue/flood device-сценарий —
-  после установки v0.4.4 (host TCP connect к listener) и двухдевайсовые T040/T043 — после возвращения
-  Parent-телефона.
+- Device: v0.4.4 rogue/flood single-device PASS-partial — 3 rogue TCP connect+close → Child остаётся
+  Connecting (retry/cooldown), 5 суммарных → terminal FailStartup tls_failure (bounded DoS residual
+  H3/T052, trust не обходится); crash buffer пуст. Двухдевайсовые T040/T043 — после возвращения
+  Parent-телефона; v0.4.3 single-device sanity PASS.
 
 ## [0.4.3] - 2026-11-08
 
