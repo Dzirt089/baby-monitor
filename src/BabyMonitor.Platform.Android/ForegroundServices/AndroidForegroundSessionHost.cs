@@ -3,6 +3,7 @@ using Android.App;
 using Android.Content;
 using Android.OS;
 using Android.Util;
+using BabyMonitor.Application.Abstractions.Discovery;
 using BabyMonitor.Application.Abstractions.Monitoring;
 using BabyMonitor.Application.Results;
 using BabyMonitor.Domain.Devices;
@@ -25,6 +26,7 @@ public sealed class AndroidForegroundSessionHost : IForegroundSessionHost, IDisp
     private readonly Context _context;
     private readonly INotificationPermission _notificationPermission;
     private readonly IMicrophonePermission _microphonePermission;
+    private readonly ILocalNetworkPermission _localNetworkPermission;
     private readonly IActivityVisibility _activityVisibility;
     private readonly object _sync = new();
     private readonly ServiceConnection _connection;
@@ -38,20 +40,24 @@ public sealed class AndroidForegroundSessionHost : IForegroundSessionHost, IDisp
     /// <param name="context">Android context приложения.</param>
     /// <param name="notificationPermission">Порт разрешения на уведомления.</param>
     /// <param name="microphonePermission">Порт разрешения на микрофон (используется только Child).</param>
+    /// <param name="localNetworkPermission">Порт разрешения на локальную сеть (Android 16+).</param>
     /// <param name="activityVisibility">Провайдер видимости Activity.</param>
     public AndroidForegroundSessionHost(
         Context context,
         INotificationPermission notificationPermission,
         IMicrophonePermission microphonePermission,
+        ILocalNetworkPermission localNetworkPermission,
         IActivityVisibility activityVisibility)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(notificationPermission);
         ArgumentNullException.ThrowIfNull(microphonePermission);
+        ArgumentNullException.ThrowIfNull(localNetworkPermission);
         ArgumentNullException.ThrowIfNull(activityVisibility);
         _context = context.ApplicationContext ?? context;
         _notificationPermission = notificationPermission;
         _microphonePermission = microphonePermission;
+        _localNetworkPermission = localNetworkPermission;
         _activityVisibility = activityVisibility;
         _connection = new ServiceConnection(this);
     }
@@ -103,6 +109,14 @@ public sealed class AndroidForegroundSessionHost : IForegroundSessionHost, IDisp
             {
                 return Result<ForegroundSessionSnapshot>.Failure(microphone.Error!);
             }
+        }
+
+        // Media-сеанс использует локальную сеть (discovery/signaling): на Android 16+ нужно
+        // ACCESS_LOCAL_NETWORK. Запрос выполняет Activity, здесь проверяется выдача.
+        var localNetwork = await _localNetworkPermission.EnsureGrantedAsync(cancellationToken);
+        if (!localNetwork.IsSuccess)
+        {
+            return Result<ForegroundSessionSnapshot>.Failure(localNetwork.Error!);
         }
 
         var bound = await EnsureBoundAsync(cancellationToken);

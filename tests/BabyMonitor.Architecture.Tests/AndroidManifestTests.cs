@@ -98,19 +98,19 @@ public sealed class AndroidManifestTests
     }
 
     [Fact]
-    // Временный тест 003: в 005 заменить проверкой AudioCapture/AudioPlayback.
-    public void Код_не_открывает_микрофон_или_playback_до_005()
+    public void Android_audio_apis_используются_только_в_Platform_Android_Audio()
     {
-        var sources = Directory.GetFiles(
-            ArchitectureTestSupport.GetPathFromRoot("src"),
-            "*.cs",
-            SearchOption.AllDirectories);
+        // 005 phase 2: AudioRecord/AudioTrack разрешены только в platform-адаптерах Audio;
+        // Application/Domain/App их не видят (порты IAudioCapture/IAudioPlayback).
+        var allowedDirectory = ArchitectureTestSupport.NormalizePath(
+            ArchitectureTestSupport.GetPathFromRoot("src/BabyMonitor.Platform.Android/Audio"));
+        var violations = new List<string>();
 
-        foreach (var source in sources)
+        foreach (var filePath in ArchitectureTestSupport.FindCSharpFiles(ArchitectureTestSupport.GetPathFromRoot("src")))
         {
             var code = string.Join(
                 '\n',
-                File.ReadAllLines(source).Where(line =>
+                File.ReadAllLines(filePath).Where(line =>
                 {
                     var trimmed = line.TrimStart();
                     return !trimmed.StartsWith("//", StringComparison.Ordinal)
@@ -118,9 +118,23 @@ public sealed class AndroidManifestTests
                         && !trimmed.StartsWith("/*", StringComparison.Ordinal);
                 }));
 
-            Assert.DoesNotContain("AudioRecord", code, StringComparison.Ordinal);
-            Assert.DoesNotContain("AudioTrack", code, StringComparison.Ordinal);
+            var containsAudioApi = code.Contains("AudioRecord", StringComparison.Ordinal)
+                || code.Contains("AudioTrack", StringComparison.Ordinal);
+            if (!containsAudioApi)
+            {
+                continue;
+            }
+
+            if (!filePath.StartsWith(allowedDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                violations.Add(Path.GetRelativePath(ArchitectureTestSupport.FindRepositoryRoot(), filePath));
+            }
         }
+
+        Assert.True(
+            violations.Count == 0,
+            "AudioRecord/AudioTrack допускаются только в Platform.Android/Audio (порты IAudioCapture/IAudioPlayback): " +
+            ArchitectureTestSupport.FormatList(violations));
     }
 
     [Fact]

@@ -6,6 +6,7 @@ using Android.Widget;
 using BabyMonitor.App.Composition;
 using BabyMonitor.App.Presentation;
 using BabyMonitor.Application.Abstractions.Monitoring;
+using BabyMonitor.Application.Media;
 using BabyMonitor.Application.Monitoring;
 using BabyMonitor.Domain.Devices;
 using BabyMonitor.Platform.Android.ForegroundServices;
@@ -155,18 +156,32 @@ public sealed class MonitoringActivity : PermissionActivity
             return;
         }
 
-        var state = _model.Snapshot?.State;
+        var snapshot = _model.Snapshot;
+        var state = snapshot?.State;
+        var media = snapshot?.Media;
         if (_status is not null)
         {
-            _status.Text = GetString(state switch
-            {
-                MonitoringForegroundState.Starting => Resource.String.monitoring_state_starting,
-                MonitoringForegroundState.Running => Resource.String.monitoring_state_running,
-                MonitoringForegroundState.Stopping => Resource.String.monitoring_state_stopping,
-                MonitoringForegroundState.Stopped => Resource.String.monitoring_state_stopped,
-                MonitoringForegroundState.Failed => Resource.String.monitoring_state_failed,
-                _ => Resource.String.monitoring_state_initial
-            });
+            _status.Text = media is null
+                ? GetString(state switch
+                {
+                    MonitoringForegroundState.Starting => Resource.String.monitoring_state_starting,
+                    MonitoringForegroundState.Running => Resource.String.monitoring_state_running,
+                    MonitoringForegroundState.Stopping => Resource.String.monitoring_state_stopping,
+                    MonitoringForegroundState.Stopped => Resource.String.monitoring_state_stopped,
+                    MonitoringForegroundState.Failed => Resource.String.monitoring_state_failed,
+                    _ => Resource.String.monitoring_state_initial
+                })
+                : GetString(media.State switch
+                {
+                    MediaSessionState.MediaFlowing => Resource.String.monitoring_state_media_flowing,
+                    MediaSessionState.Degraded => Resource.String.monitoring_state_media_degraded,
+                    MediaSessionState.Reconnecting => Resource.String.monitoring_state_reconnecting,
+                    MediaSessionState.Stopping => Resource.String.monitoring_state_stopping,
+                    MediaSessionState.Stopped => Resource.String.monitoring_state_stopped,
+                    MediaSessionState.Failed => Resource.String.monitoring_state_failed,
+                    MediaSessionState.Idle => Resource.String.monitoring_state_initial,
+                    _ => Resource.String.monitoring_state_connecting
+                });
         }
 
         if (_diagnostics is not null)
@@ -175,11 +190,15 @@ public sealed class MonitoringActivity : PermissionActivity
                 ? Resource.String.monitoring_role_child
                 : Resource.String.monitoring_role_parent);
             var stateText = state?.ToString() ?? GetString(Resource.String.monitoring_state_initial);
+            var mediaText = media is null
+                ? GetString(Resource.String.diagnostics_media_state_idle)
+                : media.State.ToString();
             _diagnostics.Text = string.Format(
                 System.Globalization.CultureInfo.InvariantCulture,
                 GetString(Resource.String.monitoring_diagnostics_format),
                 roleText,
-                stateText);
+                stateText,
+                mediaText);
         }
 
         if (_error is not null)
@@ -201,7 +220,6 @@ public sealed class MonitoringActivity : PermissionActivity
             _progress.Visibility = _model.IsBusy ? ViewStates.Visible : ViewStates.Gone;
         }
 
-        var snapshot = _model.Snapshot;
         if (_start is not null)
         {
             _start.Enabled = _model.IsInitialized && !_model.IsBusy && !_model.IsRoleMismatch

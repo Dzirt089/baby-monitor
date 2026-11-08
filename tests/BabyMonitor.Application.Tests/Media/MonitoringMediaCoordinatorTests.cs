@@ -1,0 +1,622 @@
+using System.Collections.Concurrent;
+using BabyMonitor.Application.Abstractions.Audio;
+using BabyMonitor.Application.Abstractions.Discovery;
+using BabyMonitor.Application.Abstractions.Realtime;
+using BabyMonitor.Application.Media;
+using BabyMonitor.Application.Monitoring;
+using BabyMonitor.Application.Results;
+using BabyMonitor.Domain.Devices;
+
+namespace BabyMonitor.Application.Tests.Media;
+
+/// <summary>
+/// Тесты presentation-agnostic координатора media-сеанса: роли Child/Parent, media pipeline,
+/// reconnect по ReconnectPolicy через fake TimeProvider, network callbacks, typed errors,
+/// SnapshotChanged и Dispose. Все адаптеры — hand-written fakes, реального времени и sleep нет.
+/// </summary>
+public sealed class MonitoringMediaCoordinatorTests
+{
+    private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
+
+    private sealed class Harness
+    {
+        public ManualTimeProvider Time { get; } = new();
+
+        public FakePeerDiscovery Discovery { get; } = new();
+
+        public FakePeerAdvertiser Advertiser { get; } = new();
+
+        public FakeRealtimeTransport Transport { get; } = new();
+
+        public FakeRealtimeTransportListener Listener { get; } = new();
+
+        public FakeAudioCapture Capture { get; } = new();
+
+        public FakeAudioPlayback Playback { get; } = new();
+
+        public FakeAudioCodec Codec { get; } = new();
+
+        public FakeConnectivityMonitor Connectivity { get; } = new();
+
+        public MonitoringMediaCoordinator Create(
+            DeviceRole role,
+            ReconnectPolicy? policy = null,
+            string? peerFingerprintSha256 = null) =>
+            new(
+                role,
+                Discovery,
+                Advertiser,
+                Transport,
+                Listener,
+                Capture,
+                Playback,
+                Codec,
+                Connectivity,
+                policy ?? CreatePolicy(),
+                Time,
+                peerFingerprintSha256);
+
+        public static ReconnectPolicy CreatePolicy(int maxAttempts = 3) => new(
+            maxAttempts: maxAttempts,
+            initialDelay: TimeSpan.FromMilliseconds(10),
+            maxDelay: TimeSpan.FromMilliseconds(50),
+            jitterRatio: 0);
+    }
+
+    [Fact]
+    public async Task Child_запускает_listener_и_публикует_advertisement()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+
+        var result = await coordinator.StartAsync(CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(MediaSessionState.Advertising, result.Value.State);
+        Assert.Equal(DeviceRole.Child, result.Value.Role);
+        Assert.True(result.Value.IsRunning);
+        Assert.Single(harness.Listener.RequestedPorts);
+        Assert.Equal(PeerDiscoveryConstants.ProvisionalTransportPort, harness.Listener.RequestedPorts[0]);
+        Assert.Equal(1, harness.Advertiser.StartCalls);
+        Assert.NotNull(harness.Advertiser.LastAdvertisement);
+        Assert.Equal(DeviceRole.Child, harness.Advertiser.LastAdvertisement!.Role);
+        Assert.Equal(PeerDiscoveryConstants.CurrentProtocolVersion, harness.Advertiser.LastAdvertisement.ProtocolVersion);
+        Assert.Equal(0, harness.Playback.StartCalls);
+    }
+
+    [Fact]
+    public async Task Child_кодирует_PCM_кадрами_20мс_и_отправляет_в_transport()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+
+        var (transport, _) = await StartFlowingChildAsync(harness, coordinator);
+
+        Assert.Equal(new[] { AudioFormat.Default.Frame20MsBytes, AudioFormat.Default.Frame20MsBytes }, harness.Codec.GetEncodedPcmLengths());
+        var sent = transport.GetSentFrames();
+        Assert.Equal(2, sent.Count);
+        Assert.All(sent, frame => Assert.Equal(harness.Codec.EncodedPayload, frame));
+
+        var snapshot = coordinator.Snapshot!;
+        Assert.Equal(MediaSessionState.MediaFlowing, snapshot.State);
+        Assert.True(snapshot.Health!.CaptureActive);
+        Assert.False(snapshot.Health.PlaybackActive);
+        Assert.True(snapshot.Health.IsUserHearingAudio);
+        Assert.Equal(0, harness.Playback.StartCalls);
+    }
+
+    [Fact]
+    public async Task Child_Stop_останавливает_media_цикл_и_освобождает_ресурсы()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+        var (transport, capture) = await StartFlowingChildAsync(harness, coordinator);
+        var listenerSession = Assert.Single(harness.Listener.Sessions);
+        var advertiserSession = harness.Advertiser.LastSession!;
+
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+
+        Assert.True(stop.IsSuccess);
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+        Assert.False(stop.Value.IsRunning);
+        Assert.True(stop.Value.IsTerminal);
+        Assert.Equal(1, capture.StopCalls);
+        Assert.Equal(1, capture.DisposeCalls);
+        Assert.Equal(1, transport.CloseCalls);
+        Assert.Equal(1, transport.DisposeCalls);
+        Assert.Equal(1, listenerSession.DisposeCalls);
+        Assert.Equal(1, advertiserSession.StopCalls);
+        Assert.Equal(1, advertiserSession.DisposeCalls);
+
+        var secondStop = await coordinator.StopAsync(CancellationToken.None);
+        Assert.True(secondStop.IsSuccess);
+        Assert.Equal(MediaSessionState.Stopped, secondStop.Value.State);
+    }
+
+    [Fact]
+    public async Task Child_capture_unavailable_даёт_Failed_с_типизированным_кодом()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        harness.Capture.StartError = new Error(AudioErrorCodes.CaptureUnavailable, "Микрофон занят другим приложением.");
+        await using var coordinator = harness.Create(DeviceRole.Child);
+
+        await coordinator.StartAsync(CancellationToken.None);
+        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+
+        Assert.Equal(AudioErrorCodes.CaptureUnavailable, failed.Error!.Code);
+        Assert.Equal(MediaSessionState.Failed, coordinator.Snapshot!.State);
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+        Assert.True(stop.IsSuccess);
+        Assert.Equal(MediaSessionState.Failed, stop.Value.State);
+    }
+
+    [Fact]
+    public async Task Child_несовпадение_BoundPort_даёт_Failed_без_ложного_advertisement()
+    {
+        var harness = new Harness();
+        harness.Listener.BoundPort = 12345;
+        await using var coordinator = harness.Create(DeviceRole.Child);
+
+        var result = await coordinator.StartAsync(CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(MediaSessionErrorCodes.InvalidState, result.Error!.Code);
+        Assert.Equal(0, harness.Advertiser.StartCalls);
+        Assert.Equal(MediaSessionState.Failed, coordinator.Snapshot!.State);
+    }
+
+    [Fact]
+    public async Task Child_потеря_transport_переходит_Degraded_Reconnecting_и_повторяет_попытку()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        var states = new ConcurrentQueue<MediaSessionState>();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+        coordinator.SnapshotChanged += (_, snapshot) => states.Enqueue(snapshot.State);
+        var (transport, _) = await StartFlowingChildAsync(harness, coordinator);
+
+        transport.Fail(new Error(RealtimeTransportErrorCodes.MediaFlowLost, "Media-поток потерян."));
+        await WaitForStateAsync(coordinator, MediaSessionState.Reconnecting);
+
+        Assert.Contains(MediaSessionState.Degraded, states);
+        Assert.Contains(MediaSessionState.Reconnecting, states);
+
+        await AdvanceUntilAsync(harness.Time, () => harness.Listener.StartCalls >= 2, "повторная попытка подключения");
+        await WaitForStateAsync(coordinator, MediaSessionState.Connected);
+        Assert.Equal(2, harness.Listener.StartCalls);
+
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+    }
+
+    [Fact]
+    public async Task Child_исчерпание_попыток_переподключения_даёт_Failed_по_policy()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        await using var coordinator = harness.Create(DeviceRole.Child, Harness.CreatePolicy(maxAttempts: 2));
+        var (transport, _) = await StartFlowingChildAsync(harness, coordinator);
+
+        transport.Fail(new Error(RealtimeTransportErrorCodes.PeerUnavailable, "Peer недоступен."));
+        await WaitForStateAsync(coordinator, MediaSessionState.Reconnecting);
+
+        harness.Listener.EnqueueStartFailure(new Error(RealtimeTransportErrorCodes.PeerUnavailable, "Повтор 1 не удался."));
+        await AdvanceUntilAsync(harness.Time, () => harness.Listener.StartCalls >= 2, "вторая попытка");
+        await harness.Listener.WaitForStartAsync(2);
+
+        harness.Listener.EnqueueStartFailure(new Error(RealtimeTransportErrorCodes.PeerUnavailable, "Повтор 2 не удался."));
+        await AdvanceUntilAsync(harness.Time, () => harness.Listener.StartCalls >= 3, "третья попытка");
+        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+
+        Assert.Equal(RealtimeTransportErrorCodes.PeerUnavailable, failed.Error!.Code);
+        Assert.Equal(3, harness.Listener.StartCalls);
+    }
+
+    [Fact]
+    public async Task Ручной_Stop_во_время_переподключения_отменяет_loop()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+        var (transport, _) = await StartFlowingChildAsync(harness, coordinator);
+
+        transport.Fail(new Error(RealtimeTransportErrorCodes.MediaFlowLost, "Media-поток потерян."));
+        await WaitForStateAsync(coordinator, MediaSessionState.Reconnecting);
+
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+
+        var startCallsAfterStop = harness.Listener.StartCalls;
+        harness.Time.Advance(TimeSpan.FromSeconds(60));
+        await Task.Delay(20);
+        Assert.Equal(startCallsAfterStop, harness.Listener.StartCalls);
+        Assert.Equal(MediaSessionState.Stopped, coordinator.Snapshot!.State);
+    }
+
+    [Fact]
+    public async Task Parent_запускает_discovery_и_подключается_к_найденному_child()
+    {
+        var harness = new Harness();
+        var transport = new FakeRealtimeTransportSession();
+        harness.Transport.ConnectHandler = _ =>
+            Task.FromResult(Result<IRealtimeTransportSession>.Success(transport));
+        await using var coordinator = harness.Create(DeviceRole.Parent);
+
+        var start = await coordinator.StartAsync(CancellationToken.None);
+        Assert.True(start.IsSuccess);
+        Assert.Equal(MediaSessionState.Discovering, start.Value.State);
+        Assert.Equal(1, harness.Discovery.StartCalls);
+
+        var peer = CreatePeer();
+        harness.Discovery.LastSession!.AddPeer(peer);
+
+        await WaitForStateAsync(coordinator, MediaSessionState.Connected);
+        Assert.Equal(1, harness.Transport.ConnectCalls);
+        Assert.Equal(peer.Endpoint, harness.Transport.Endpoints[0]);
+        await WaitUntilAsync(() => harness.Playback.LastSession is not null, "playback стартовал");
+
+        transport.PushEncodedFrame(new byte[] { 1, 2, 3 });
+        var flowing = await WaitForStateAsync(coordinator, MediaSessionState.MediaFlowing);
+
+        var written = harness.Playback.LastSession!.GetWrittenPcm();
+        Assert.Single(written);
+        Assert.Equal(AudioFormat.Default.Frame20MsBytes, written[0].Length);
+        Assert.Equal(new[] { 3 }, harness.Codec.GetDecodedFrameLengths());
+        Assert.Equal(0, harness.Capture.StartCalls);
+        Assert.True(flowing.Health!.PlaybackActive);
+        Assert.False(flowing.Health.CaptureActive);
+
+        var playbackSession = harness.Playback.LastSession!;
+        var discoverySession = Assert.Single(harness.Discovery.Sessions);
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+        Assert.Equal(1, playbackSession.StopCalls);
+        Assert.Equal(1, playbackSession.DisposeCalls);
+        Assert.Equal(1, transport.CloseCalls);
+        Assert.Equal(1, transport.DisposeCalls);
+        Assert.Equal(1, discoverySession.StopCalls);
+        Assert.Equal(1, discoverySession.DisposeCalls);
+    }
+
+    [Fact]
+    public async Task Parent_peer_unavailable_даёт_Failed_с_typed_ошибкой()
+    {
+        var harness = new Harness();
+        harness.Transport.ConnectHandler = _ => Task.FromResult(Result<IRealtimeTransportSession>.Failure(
+            new Error(RealtimeTransportErrorCodes.PeerUnavailable, "Endpoint детского устройства недоступен.")));
+        await using var coordinator = harness.Create(DeviceRole.Parent);
+        await coordinator.StartAsync(CancellationToken.None);
+
+        harness.Discovery.LastSession!.AddPeer(CreatePeer());
+        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+
+        Assert.Equal(RealtimeTransportErrorCodes.PeerUnavailable, failed.Error!.Code);
+        Assert.Equal(1, harness.Transport.ConnectCalls);
+    }
+
+    [Fact]
+    public async Task Parent_unauthorized_peer_даёт_Failed_с_typed_ошибкой()
+    {
+        var harness = new Harness();
+        harness.Transport.ConnectHandler = _ => Task.FromResult(Result<IRealtimeTransportSession>.Failure(
+            new Error(RealtimeTransportErrorCodes.UnauthorizedPeer, "Peer не найден в trusted store.")));
+        await using var coordinator = harness.Create(DeviceRole.Parent);
+        await coordinator.StartAsync(CancellationToken.None);
+
+        harness.Discovery.LastSession!.AddPeer(CreatePeer());
+        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+
+        Assert.Equal(RealtimeTransportErrorCodes.UnauthorizedPeer, failed.Error!.Code);
+    }
+
+    [Fact]
+    public async Task Parent_playback_unavailable_даёт_Failed_с_typed_ошибкой()
+    {
+        var harness = new Harness();
+        harness.Transport.ConnectHandler = _ =>
+            Task.FromResult(Result<IRealtimeTransportSession>.Success(new FakeRealtimeTransportSession()));
+        harness.Playback.StartError = new Error(AudioErrorCodes.PlaybackUnavailable, "Нет audio focus.");
+        await using var coordinator = harness.Create(DeviceRole.Parent);
+        await coordinator.StartAsync(CancellationToken.None);
+
+        harness.Discovery.LastSession!.AddPeer(CreatePeer());
+        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+
+        Assert.Equal(AudioErrorCodes.PlaybackUnavailable, failed.Error!.Code);
+        Assert.Equal(0, harness.Capture.StartCalls);
+    }
+
+    [Fact]
+    public async Task Parent_смена_сети_перезапускает_discovery()
+    {
+        var harness = new Harness();
+        await using var coordinator = harness.Create(DeviceRole.Parent);
+        await coordinator.StartAsync(CancellationToken.None);
+        Assert.Equal(1, harness.Discovery.StartCalls);
+
+        harness.Connectivity.RaiseNetworkChanged();
+
+        await harness.Discovery.WaitForStartAsync(2);
+        Assert.Equal(2, harness.Discovery.StartCalls);
+        Assert.Equal(MediaSessionState.Discovering, coordinator.Snapshot!.State);
+        Assert.Equal(1, harness.Discovery.Sessions[0].StopCalls);
+    }
+
+    [Fact]
+    public async Task Parent_смена_сети_во_время_media_flow_деградирует_сеанс()
+    {
+        var harness = new Harness();
+        var transport = new FakeRealtimeTransportSession();
+        harness.Transport.ConnectHandler = _ =>
+            Task.FromResult(Result<IRealtimeTransportSession>.Success(transport));
+        await using var coordinator = harness.Create(DeviceRole.Parent);
+        await coordinator.StartAsync(CancellationToken.None);
+        harness.Discovery.LastSession!.AddPeer(CreatePeer());
+        await WaitForStateAsync(coordinator, MediaSessionState.Connected);
+        await WaitUntilAsync(() => harness.Playback.LastSession is not null, "playback стартовал");
+        transport.PushEncodedFrame(new byte[] { 7 });
+        await WaitForStateAsync(coordinator, MediaSessionState.MediaFlowing);
+
+        harness.Connectivity.RaiseNetworkChanged();
+        await WaitForStateAsync(coordinator, MediaSessionState.Reconnecting);
+
+        await AdvanceUntilAsync(harness.Time, () => harness.Discovery.StartCalls >= 2, "discovery перезапущен");
+        Assert.Equal(2, harness.Discovery.StartCalls);
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+    }
+
+    [Fact]
+    public async Task Child_runtime_ошибка_захвата_маппится_в_CaptureUnavailable()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        // Контракт Android-адаптера: runtime device error приходит как IOException.
+        harness.Capture.ReadException = new IOException("AudioRecord device error.");
+        await using var coordinator = harness.Create(DeviceRole.Child);
+
+        await coordinator.StartAsync(CancellationToken.None);
+        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+
+        Assert.Equal(AudioErrorCodes.CaptureUnavailable, failed.Error!.Code);
+        Assert.Equal(MediaSessionState.Failed, coordinator.Snapshot!.State);
+    }
+
+    [Fact]
+    public async Task Parent_runtime_ошибка_воспроизведения_маппится_в_PlaybackUnavailable()
+    {
+        var harness = new Harness();
+        var transport = new FakeRealtimeTransportSession();
+        harness.Transport.ConnectHandler = _ =>
+            Task.FromResult(Result<IRealtimeTransportSession>.Success(transport));
+        // Контракт Android-адаптера: runtime device error приходит как IOException.
+        harness.Playback.WriteException = new IOException("AudioTrack device error.");
+        await using var coordinator = harness.Create(DeviceRole.Parent);
+        await coordinator.StartAsync(CancellationToken.None);
+        harness.Discovery.LastSession!.AddPeer(CreatePeer());
+        await WaitForStateAsync(coordinator, MediaSessionState.Connected);
+
+        transport.PushEncodedFrame(new byte[] { 9 });
+        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+
+        Assert.Equal(AudioErrorCodes.PlaybackUnavailable, failed.Error!.Code);
+        Assert.Equal(0, harness.Capture.StartCalls);
+    }
+
+    [Fact]
+    public async Task Child_окончание_потока_захвата_переводит_сеанс_в_Degraded()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+        var (_, capture) = await StartFlowingChildAsync(harness, coordinator);
+
+        capture.CompleteStream();
+        await WaitForStateAsync(coordinator, MediaSessionState.Degraded);
+
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+    }
+
+    [Fact]
+    public async Task Child_после_долгого_backoff_не_считает_старый_media_кадр_stall()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        var policy = new ReconnectPolicy(
+            maxAttempts: 3,
+            initialDelay: TimeSpan.FromMilliseconds(2500),
+            maxDelay: TimeSpan.FromSeconds(3),
+            jitterRatio: 0);
+        await using var coordinator = harness.Create(DeviceRole.Child, policy);
+        var (transport, _) = await StartFlowingChildAsync(harness, coordinator);
+
+        transport.Fail(new Error(RealtimeTransportErrorCodes.MediaFlowLost, "Media-поток потерян."));
+        await WaitForStateAsync(coordinator, MediaSessionState.Reconnecting);
+
+        // Backoff (2.5 с) больше media timeout (2 с): health monitor не должен унаследовать
+        // последний кадр предыдущей попытки и объявить stall на новом соединении.
+        await AdvanceUntilAsync(harness.Time, () => harness.Listener.StartCalls >= 2, "повторная попытка");
+        await WaitForStateAsync(coordinator, MediaSessionState.Connected);
+        await WaitUntilAsync(() => harness.Time.PendingTimerCount > 0, "watchdog media health");
+
+        harness.Time.Advance(TimeSpan.FromSeconds(5));
+        await Task.Delay(50);
+
+        Assert.Equal(MediaSessionState.Connected, coordinator.Snapshot!.State);
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+    }
+
+    [Fact]
+    public async Task SnapshotChanged_публикует_последовательность_и_не_поднимается_после_Dispose()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        var states = new ConcurrentQueue<MediaSessionState>();
+        var coordinator = harness.Create(DeviceRole.Child);
+        coordinator.SnapshotChanged += (_, snapshot) => states.Enqueue(snapshot.State);
+
+        await StartFlowingChildAsync(harness, coordinator);
+        await coordinator.StopAsync(CancellationToken.None);
+        var eventsBeforeDispose = states.Count;
+        await coordinator.DisposeAsync();
+
+        Assert.Equal(MediaSessionState.Starting, states.First());
+        Assert.Equal(MediaSessionState.Stopped, states.Last());
+        Assert.Contains(MediaSessionState.Advertising, states);
+        Assert.Contains(MediaSessionState.Connected, states);
+        Assert.Contains(MediaSessionState.MediaFlowing, states);
+        Assert.Contains(MediaSessionState.Stopping, states);
+        Assert.Equal(eventsBeforeDispose, states.Count);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_идемпотентен_и_после_него_Start_Stop_дают_invalid_state()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        var coordinator = harness.Create(DeviceRole.Child);
+        await coordinator.StartAsync(CancellationToken.None);
+        var listenerSession = Assert.Single(harness.Listener.Sessions);
+
+        await coordinator.DisposeAsync();
+        await coordinator.DisposeAsync();
+
+        Assert.Equal(MediaSessionState.Stopped, coordinator.Snapshot!.State);
+        Assert.Equal(1, listenerSession.DisposeCalls);
+
+        var start = await coordinator.StartAsync(CancellationToken.None);
+        Assert.False(start.IsSuccess);
+        Assert.Equal(MediaSessionErrorCodes.InvalidState, start.Error!.Code);
+
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+        Assert.False(stop.IsSuccess);
+        Assert.Equal(MediaSessionErrorCodes.InvalidState, stop.Error!.Code);
+    }
+
+    [Fact]
+    public async Task Stop_до_запуска_даёт_invalid_state()
+    {
+        var harness = new Harness();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+
+        Assert.False(stop.IsSuccess);
+        Assert.Equal(MediaSessionErrorCodes.InvalidState, stop.Error!.Code);
+        Assert.Null(coordinator.Snapshot);
+    }
+
+    [Fact]
+    public async Task Snapshot_хранит_только_короткий_fingerprint_peer()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        var fingerprint = new string('a', 64);
+        await using var coordinator = harness.Create(DeviceRole.Child, peerFingerprintSha256: fingerprint);
+
+        var start = await coordinator.StartAsync(CancellationToken.None);
+
+        Assert.True(start.IsSuccess);
+        Assert.Equal(fingerprint[..8], start.Value.PeerFingerprintShort);
+        Assert.DoesNotContain(fingerprint, start.Value.ToString());
+        Assert.NotNull(start.Value.SessionId);
+    }
+
+    [Fact]
+    public void Конструктор_отклоняет_некорректный_fingerprint_peer()
+    {
+        var harness = new Harness();
+
+        Assert.Throws<ArgumentException>(() => harness.Create(DeviceRole.Child, peerFingerprintSha256: "not-a-sha256"));
+        Assert.Throws<ArgumentException>(() => harness.Create(DeviceRole.Unknown));
+    }
+
+    private static DiscoveredPeer CreatePeer() => new(
+        "child-discovery-id",
+        new TransportEndpoint("192.168.1.10", PeerDiscoveryConstants.ProvisionalTransportPort),
+        DeviceRole.Child,
+        PeerDiscoveryConstants.CurrentProtocolVersion);
+
+    private static async Task<(FakeRealtimeTransportSession Transport, FakeAudioCaptureSession Capture)> StartFlowingChildAsync(
+        Harness harness,
+        MonitoringMediaCoordinator coordinator)
+    {
+        var start = await coordinator.StartAsync(CancellationToken.None);
+        Assert.True(start.IsSuccess);
+
+        var transport = await harness.Listener.WaitForAcceptAsync(1);
+        await WaitForStateAsync(coordinator, MediaSessionState.Connected);
+        await WaitUntilAsync(() => harness.Capture.LastSession is not null, "capture стартовал");
+
+        var capture = harness.Capture.LastSession!;
+        var frame = new byte[AudioFormat.Default.Frame20MsBytes];
+        capture.PushPcm(frame, frame);
+        await WaitForStateAsync(coordinator, MediaSessionState.MediaFlowing);
+        return (transport, capture);
+    }
+
+    private static async Task<MediaSessionSnapshot> WaitForStateAsync(
+        MonitoringMediaCoordinator coordinator,
+        MediaSessionState state)
+    {
+        var signal = new TaskCompletionSource<MediaSessionSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Handler(object? sender, MediaSessionSnapshot snapshot)
+        {
+            if (snapshot.State == state)
+            {
+                signal.TrySetResult(snapshot);
+            }
+        }
+
+        coordinator.SnapshotChanged += Handler;
+        try
+        {
+            if (coordinator.Snapshot is { } current && current.State == state)
+            {
+                return current;
+            }
+
+            return await signal.Task.WaitAsync(TestTimeout);
+        }
+        finally
+        {
+            coordinator.SnapshotChanged -= Handler;
+        }
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, string description)
+    {
+        var deadline = DateTime.UtcNow + TestTimeout;
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("Не дождались: " + description);
+            }
+
+            await Task.Delay(5);
+        }
+    }
+
+    private static async Task AdvanceUntilAsync(ManualTimeProvider time, Func<bool> condition, string description)
+    {
+        var deadline = DateTime.UtcNow + TestTimeout;
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("Не дождались: " + description);
+            }
+
+            time.Advance(TimeSpan.FromMilliseconds(50));
+            await Task.Delay(5);
+        }
+    }
+}

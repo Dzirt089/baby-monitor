@@ -25,6 +25,7 @@ internal static class DiagnosticsComposition
             activity,
             new AndroidNotificationPermission(activity, activity),
             new AndroidMicrophonePermission(activity, activity),
+            new AndroidLocalNetworkPermission(activity, activity),
             activity);
         var store = new AndroidTrustedDeviceStore(activity);
         return (host, new DiagnosticsScreenModel(host, store, role));

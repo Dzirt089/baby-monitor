@@ -13,8 +13,8 @@
 
 ## Phase 2a — Signaling/TLS/pinning (unblocked: ADR-0007 Accepted)
 
-- [ ] T007 ADR-0007 Accepted (вариант A) + threat model signaling/media + SIPSorcery в Directory.Packages.props
-- [ ] T008 Application: порты IRealtimeTransportListener, IAudioCapture, IAudioPlayback, IConnectivityMonitor (+ immutable contracts, XML-docs)
+- [x] T007 ADR-0007 Accepted (вариант A) + threat model signaling/media + SIPSorcery PackageReference и транзитивные лицензии (THIRD-PARTY-NOTICES)
+- [x] T008 Application: порты IRealtimeTransportListener, IAudioCapture, IAudioPlayback, IConnectivityMonitor, IAudioCodec (+ immutable contracts, XML-docs), DeviceIdentityPublicKey.VerifySignature
 - [ ] T009 Infrastructure: TLS signaling (TCP, TLS 1.2+, mutual auth, pinning identity из trusted store, versioned hello/nonce, SDP exchange)
 - [ ] T010 Contract/security tests signaling: недоверенный peer, replay, version mismatch, timeout, отсутствие cleartext/отключения TLS validation
 - [ ] T011 Keystore-in-TLS spike: проверить, можно ли использовать non-exportable Keystore key в SslStream On Android; при невозможности — fallback identity assertion по ADR-0007 + тесты
@@ -59,3 +59,4 @@
 |---|---|---|
 | 2026-11-07 | Phase 1 build/tests | Domain 38/38, Application 147/147, Architecture 45/45, Infrastructure 63/63; build 0 warnings; format OK |
 | 2026-11-08 | ADR-0007 Accepted + spec/plan/tasks phase 2 | threat model обновлён; SIPSorcery разрешён; v0.2.0 (pairing UI) подготовлена для device-прогона владельцем |
+| 2026-11-08 | Phase 2 design/contracts (commit 9ed4082, cbe7bdd) | ADR-0007 Accepted; Application ports (listener/audio/codec/connectivity); SIPSorcery 10.0.17 + транзитивные лицензии; vuln scan чистый; Application build 0 warnings; параллельно: Infrastructure signaling/media/codec, Android audio/connectivity, Application coordinator — в работе |

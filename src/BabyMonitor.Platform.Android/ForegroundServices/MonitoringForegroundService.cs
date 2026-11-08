@@ -6,15 +6,19 @@ using Android.Graphics.Drawables;
 using Android.OS;
 using Android.Util;
 using BabyMonitor.Application.Abstractions.Monitoring;
+using BabyMonitor.Application.Media;
 using BabyMonitor.Application.Results;
 using BabyMonitor.Domain.Devices;
+using OperationCanceledException = System.OperationCanceledException;
 
 namespace BabyMonitor.Platform.Android.ForegroundServices;
 
 /// <summary>
 /// Foreground service мониторинга: постоянное уведомление с ролью, состоянием и действием Stop.
-/// Child объявляет тип microphone, Parent — mediaPlayback; в 003 аудио ещё не открывается
-/// (media pipeline появится в 005). Service не хранит ссылок на Activity/View/ViewModel.
+/// Child объявляет тип microphone (AudioRecord), Parent — mediaPlayback (AudioTrack); с 005 phase 2
+/// service владеет media-сеансом через Application-координатор и обновляет уведомление по его
+/// состоянию (подключение/звук/переподключение/ошибка). Service не хранит ссылок на
+/// Activity/View/ViewModel.
 /// </summary>
 [Service(
     Exported = false,
@@ -41,12 +45,21 @@ public sealed class MonitoringForegroundService : Service
     private const string TitleChild = "Радионяня: ребёнок";
     private const string TitleParent = "Радионяня: родитель";
     private const string TextRunning = "Мониторинг активен";
+    private const string TextConnecting = "Подключение…";
+    private const string TextMediaFlowing = "Звук передаётся";
+    private const string TextDegraded = "Связь ухудшилась…";
+    private const string TextReconnecting = "Переподключение…";
     private const string TextStopped = "Мониторинг остановлен";
     private const string ActionStopLabel = "Остановить";
+    private const string MediaFailureMessage = "Media-сеанс завершился ошибкой.";
 
     private readonly object _sync = new();
     private readonly LocalBinder _binder;
     private ForegroundSessionSnapshot? _snapshot;
+    private MonitoringMediaSession? _mediaSession;
+    private CancellationTokenSource? _mediaCts;
+    private Task? _mediaLifetime;
+    private int _mediaGeneration;
 
     /// <summary>Создаёт сервис; Android создаёт его без зависимостей приложения.</summary>
     public MonitoringForegroundService()
@@ -116,6 +129,7 @@ public sealed class MonitoringForegroundService : Service
         }
 
         PublishTerminalIfNeeded();
+        StopMediaSession();
         base.OnDestroy();
     }
 
@@ -138,7 +152,7 @@ public sealed class MonitoringForegroundService : Service
 
         try
         {
-            var notification = BuildNotification(role, MonitoringForegroundState.Running);
+            var notification = BuildNotification(role, MonitoringForegroundState.Running, media: null);
             if (OperatingSystem.IsAndroidVersionAtLeast(30))
             {
                 StartForegroundApi30(notification, role);
@@ -153,6 +167,7 @@ public sealed class MonitoringForegroundService : Service
             }
 
             Publish(new ForegroundSessionSnapshot(role, MonitoringForegroundState.Running));
+            StartMediaSession(role);
         }
         catch (Exception exception)
         {
@@ -163,6 +178,116 @@ public sealed class MonitoringForegroundService : Service
                 new Error(ForegroundSessionErrorCodes.ServiceUnavailable, "Не удалось запустить foreground service.")));
             StopSelf();
         }
+    }
+
+    private void StartMediaSession(DeviceRole role)
+    {
+        if (Application is not IMonitoringMediaSessionFactoryProvider provider)
+        {
+            PublishMediaFailure(role, new Error(
+                MediaSessionErrorCodes.AdapterFailure,
+                "Media-сеанс недоступен: composition root не инициализирован."));
+            return;
+        }
+
+        var generation = Interlocked.Increment(ref _mediaGeneration);
+        var cts = new CancellationTokenSource();
+        lock (_sync)
+        {
+            _mediaCts = cts;
+        }
+
+        _mediaLifetime = RunMediaSessionAsync(provider, role, generation, cts.Token);
+    }
+
+    private async Task RunMediaSessionAsync(
+        IMonitoringMediaSessionFactoryProvider provider,
+        DeviceRole role,
+        int generation,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var created = await provider.MediaSessions.CreateAsync(role, cancellationToken).ConfigureAwait(false);
+            if (!created.IsSuccess)
+            {
+                PublishMediaFailure(role, created.Error!);
+                return;
+            }
+
+            var session = created.Value;
+            bool stale;
+            lock (_sync)
+            {
+                stale = generation != _mediaGeneration;
+                if (!stale)
+                {
+                    _mediaSession = session;
+                }
+            }
+
+            if (stale)
+            {
+                // Сеанс остановлен/перезапущен, пока шло создание: освобождаем результат.
+                await DisposeMediaSessionAsync(session).ConfigureAwait(false);
+                return;
+            }
+
+            session.Coordinator.SnapshotChanged += OnMediaSnapshotChanged;
+            var started = await session.Coordinator.StartAsync(cancellationToken).ConfigureAwait(false);
+            if (!started.IsSuccess)
+            {
+                PublishMediaFailure(role, started.Error!);
+                return;
+            }
+
+            PublishComposed(role, MonitoringForegroundState.Running, error: null, started.Value);
+        }
+        catch (OperationCanceledException)
+        {
+            // Штатная остановка сервиса/сеанса.
+        }
+        catch (Exception exception)
+        {
+            Log.Warn(LogTag, "Media session start failed: " + exception.GetType().Name);
+            PublishMediaFailure(role, new Error(MediaSessionErrorCodes.AdapterFailure, MediaFailureMessage));
+        }
+    }
+
+    private void OnMediaSnapshotChanged(object? sender, MediaSessionSnapshot media)
+    {
+        try
+        {
+            if (media.State is MediaSessionState.Failed)
+            {
+                PublishMediaFailure(media.Role, media.Error ?? new Error(
+                    MediaSessionErrorCodes.AdapterFailure,
+                    MediaFailureMessage));
+                return;
+            }
+
+            PublishComposed(media.Role, MonitoringForegroundState.Running, error: null, media);
+        }
+        catch (Exception exception)
+        {
+            Log.Warn(LogTag, "Media snapshot handling failed: " + exception.GetType().Name);
+        }
+    }
+
+    private void PublishComposed(
+        DeviceRole role,
+        MonitoringForegroundState state,
+        Error? error,
+        MediaSessionSnapshot? media)
+    {
+        var snapshot = new ForegroundSessionSnapshot(role, state, error, media);
+        Publish(snapshot);
+    }
+
+    private void PublishMediaFailure(DeviceRole role, Error error)
+    {
+        Publish(new ForegroundSessionSnapshot(role, MonitoringForegroundState.Failed, error));
+        StopSession();
     }
 
     [SupportedOSPlatform("android30.0")]
@@ -192,7 +317,57 @@ public sealed class MonitoringForegroundService : Service
         }
 
         PublishTerminalIfNeeded();
+        StopMediaSession();
         StopSelf();
+    }
+
+    private void StopMediaSession()
+    {
+        MonitoringMediaSession? session;
+        CancellationTokenSource? cts;
+        lock (_sync)
+        {
+            Interlocked.Increment(ref _mediaGeneration);
+            session = _mediaSession;
+            _mediaSession = null;
+            cts = _mediaCts;
+            _mediaCts = null;
+        }
+
+        if (session is not null)
+        {
+            session.Coordinator.SnapshotChanged -= OnMediaSnapshotChanged;
+            _mediaLifetime = DisposeMediaSessionAsync(session);
+        }
+
+        try
+        {
+            cts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Уже отменён/освобождён — штатно.
+        }
+        finally
+        {
+            cts?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Освобождает media-сеанс best-effort: сбой Dispose не должен подменять исход сеанса и
+    /// блокировать освобождение остальных ресурсов (Application без logging).
+    /// </summary>
+    private static async Task DisposeMediaSessionAsync(MonitoringMediaSession session)
+    {
+        try
+        {
+            await session.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Best effort: см. XML-doc.
+        }
     }
 
     private void PublishTerminalIfNeeded()
@@ -213,7 +388,26 @@ public sealed class MonitoringForegroundService : Service
             _snapshot = snapshot;
         }
 
+        if (snapshot.State is MonitoringForegroundState.Running)
+        {
+            UpdateNotification(snapshot);
+        }
+
         SnapshotChanged?.Invoke(this, snapshot);
+    }
+
+    private void UpdateNotification(ForegroundSessionSnapshot snapshot)
+    {
+        try
+        {
+            var notification = BuildNotification(snapshot.Role, snapshot.State, snapshot.Media);
+            var manager = (NotificationManager?)GetSystemService(NotificationService);
+            manager?.Notify(NotificationId, notification);
+        }
+        catch (Exception exception)
+        {
+            Log.Warn(LogTag, "Notification update failed: " + exception.GetType().Name);
+        }
     }
 
     [SupportedOSPlatform("android26.0")]
@@ -233,31 +427,60 @@ public sealed class MonitoringForegroundService : Service
         manager.CreateNotificationChannel(channel);
     }
 
-    private Notification BuildNotification(DeviceRole role, MonitoringForegroundState state)
+    private Notification BuildNotification(
+        DeviceRole role,
+        MonitoringForegroundState state,
+        MediaSessionSnapshot? media)
     {
         if (OperatingSystem.IsAndroidVersionAtLeast(26))
         {
-            return BuildNotificationApi26(role, state);
+            return BuildNotificationApi26(role, state, media);
         }
 
-        return BuildNotificationLegacy(role, state);
+        return BuildNotificationLegacy(role, state, media);
     }
 
     [SupportedOSPlatform("android26.0")]
-    private Notification BuildNotificationApi26(DeviceRole role, MonitoringForegroundState state) =>
-        PopulateNotification(new Notification.Builder(this, ChannelId), role, state);
+    private Notification BuildNotificationApi26(
+        DeviceRole role,
+        MonitoringForegroundState state,
+        MediaSessionSnapshot? media) =>
+        PopulateNotification(new Notification.Builder(this, ChannelId), role, state, media);
 
-    private Notification BuildNotificationLegacy(DeviceRole role, MonitoringForegroundState state)
+    private Notification BuildNotificationLegacy(
+        DeviceRole role,
+        MonitoringForegroundState state,
+        MediaSessionSnapshot? media)
     {
 #pragma warning disable CA1422 // Legacy builder нужен для API 24–25 (minSdk 24).
-        return PopulateNotification(new Notification.Builder(this), role, state);
+        return PopulateNotification(new Notification.Builder(this), role, state, media);
 #pragma warning restore CA1422
+    }
+
+    private static string GetNotificationText(MonitoringForegroundState state, MediaSessionSnapshot? media)
+    {
+        if (media is not null)
+        {
+            return media.State switch
+            {
+                MediaSessionState.MediaFlowing => TextMediaFlowing,
+                MediaSessionState.Degraded => TextDegraded,
+                MediaSessionState.Reconnecting => TextReconnecting,
+                MediaSessionState.Failed => TextStopped,
+                MediaSessionState.Stopped => TextStopped,
+                MediaSessionState.Idle => state is MonitoringForegroundState.Running ? TextRunning : TextStopped,
+                _ => TextConnecting
+            };
+        }
+
+        return state is MonitoringForegroundState.Running ? TextRunning : TextStopped;
     }
 
     private Notification PopulateNotification(
         Notification.Builder builder,
         DeviceRole role,
-        MonitoringForegroundState state)
+        MonitoringForegroundState state,
+        MediaSessionSnapshot? media)
     {
         var openAppIntent = PackageManager?.GetLaunchIntentForPackage(PackageName ?? string.Empty);
         if (openAppIntent is not null)
@@ -278,7 +501,7 @@ public sealed class MonitoringForegroundService : Service
 
         builder
             .SetContentTitle(role is DeviceRole.Child ? TitleChild : TitleParent)
-            .SetContentText(state is MonitoringForegroundState.Running ? TextRunning : TextStopped)
+            .SetContentText(GetNotificationText(state, media))
             .SetSmallIcon(global::Android.Resource.Drawable.IcDialogInfo)
             .SetOngoing(state is MonitoringForegroundState.Running)
             .SetOnlyAlertOnce(true)
