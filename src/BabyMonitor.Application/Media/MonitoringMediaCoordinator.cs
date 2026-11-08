@@ -53,9 +53,14 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     private const int ShortFingerprintLength = 8;
     private const int Sha256HexLength = 64;
 
+    private const int MaxPeerAcceptAttempts = 5;
+    private const int MaxPeerConnectCandidates = 5;
+
     private static readonly TimeSpan MediaWatchdogPeriod = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan AlarmWatchdogPeriod = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan LiveSnapshotRefreshPeriod = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan PeerRetryPause = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan PeerCandidateWaitTimeout = TimeSpan.FromMilliseconds(250);
 
     private readonly object _sync = new();
     private readonly DeviceRole _role;
@@ -653,7 +658,10 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             SignalStarted();
             PublishChildConnecting();
 
-            var accepted = await listener.AcceptAsync(setupToken);
+            // Rogue/silent TCP-peer на initial attempt: peer-level отказ не должен терминально
+            // срывать старт. Listener-сессия пригодна для повтора (см. adapter contract), поэтому
+            // повторяем Accept ограниченное число раз с короткой паузой (T007a).
+            var accepted = await AcceptPeerWithRetriesAsync(listener, setupToken);
             if (!accepted.IsSuccess)
             {
                 return AttemptOutcome.SetupFailure(accepted.Error!);
@@ -761,14 +769,87 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                 }
             };
 
-            DiscoveredPeer? peer = null;
+            // Rogue/silent mDNS candidate не должен терминально срывать старт: перебираем
+            // discovered peers ограниченное число раз, держа discovery-сессию до конца перебора
+            // (T007a). Число попыток bounded; иначе — SetupFailure с последней typed ошибкой.
+            IRealtimeTransportSession? connectedTransport = null;
+            Error? lastConnectError = null;
+            var attemptedCandidates = 0;
+            using var discoveryWalkCts = CancellationTokenSource.CreateLinkedTokenSource(setupToken);
+            var peers = discoverySession.DiscoverPeersAsync(discoveryWalkCts.Token)
+                .GetAsyncEnumerator(discoveryWalkCts.Token);
+            Task<bool>? pendingMove = null;
             discoverySession.StateChanged += discoveryHandler;
             try
             {
-                await foreach (var candidate in discoverySession.DiscoverPeersAsync(setupToken))
+                while (true)
                 {
-                    peer = candidate;
-                    break;
+                    bool hasNext;
+                    if (lastConnectError is null)
+                    {
+                        hasNext = await peers.MoveNextAsync();
+                    }
+                    else
+                    {
+                        // После transient connect-отказа ждём следующий candidate ограниченное время;
+                        // если его нет, terminal SetupFailure с последней typed ошибкой.
+                        using var peerWaitCts = CancellationTokenSource.CreateLinkedTokenSource(discoveryWalkCts.Token);
+                        var moveTask = peers.MoveNextAsync().AsTask();
+                        pendingMove = moveTask;
+                        var waitTask = Task.Delay(PeerCandidateWaitTimeout, _timeProvider, peerWaitCts.Token);
+                        if (await Task.WhenAny(moveTask, waitTask) == waitTask)
+                        {
+                            peerWaitCts.Cancel();
+                            await waitTask;
+                            // Async iterator нельзя Dispose-ить с незавершённым MoveNext: отменяем
+                            // walk-токен и дожидаемся отмены перед выходом из перебора.
+                            await discoveryWalkCts.CancelAsync();
+                            try
+                            {
+                                await moveTask;
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                // Ожидание следующего candidate отменено нами.
+                            }
+
+                            pendingMove = null;
+                            return AttemptOutcome.SetupFailure(lastConnectError);
+                        }
+
+                        peerWaitCts.Cancel();
+                        hasNext = await moveTask;
+                        pendingMove = null;
+                    }
+
+                    if (!hasNext)
+                    {
+                        return AttemptOutcome.SetupFailure(lastConnectError
+                            ?? discoveryFailure
+                            ?? new Error(
+                                DiscoveryErrorCodes.ServiceNotFound,
+                                "Детское устройство не найдено в локальной сети."));
+                    }
+
+                    attemptedCandidates++;
+                    PublishParentConnecting();
+                    var connectResult = await _transport.ConnectAsync(peers.Current.Endpoint, setupToken);
+                    if (connectResult.IsSuccess)
+                    {
+                        connectedTransport = connectResult.Value;
+                        break;
+                    }
+
+                    lastConnectError = connectResult.Error!;
+                    if (!IsTransientConnectRejection(lastConnectError))
+                    {
+                        return AttemptOutcome.SetupFailure(lastConnectError);
+                    }
+
+                    if (attemptedCandidates >= MaxPeerConnectCandidates)
+                    {
+                        return AttemptOutcome.SetupFailure(lastConnectError);
+                    }
                 }
             }
             catch (OperationCanceledException) when (runToken.IsCancellationRequested)
@@ -786,33 +867,41 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             finally
             {
                 discoverySession.StateChanged -= discoveryHandler;
+                await discoveryWalkCts.CancelAsync();
+                if (pendingMove is { } pending)
+                {
+                    try
+                    {
+                        await pending;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Pending MoveNextAsync отменён вместе с walk-токеном перед Dispose.
+                    }
+                }
+
+                try
+                {
+                    await peers.DisposeAsync();
+                }
+                catch (OperationCanceledException)
+                {
+                    // Best effort: перечисление уже отменено, исход попытки определён выше.
+                }
             }
 
-            if (discoveryFailure is not null)
+            if (connectedTransport is null)
             {
-                return AttemptOutcome.SetupFailure(discoveryFailure);
-            }
-
-            if (peer is null)
-            {
-                return AttemptOutcome.SetupFailure(new Error(
+                return AttemptOutcome.SetupFailure(lastConnectError ?? new Error(
                     DiscoveryErrorCodes.ServiceNotFound,
                     "Детское устройство не найдено в локальной сети."));
             }
 
-            // Discovery больше не нужен: освобождаем NSD-ресурсы до установки соединения.
+            // Discovery больше не нужен: освобождаем NSD-ресурсы после успешного connect.
             await ReleaseDiscoveryAsync(discovery);
             discovery = null;
 
-            PublishParentConnecting();
-
-            var connectResult = await _transport.ConnectAsync(peer.Endpoint, setupToken);
-            if (!connectResult.IsSuccess)
-            {
-                return AttemptOutcome.SetupFailure(connectResult.Error!);
-            }
-
-            transport = connectResult.Value;
+            transport = connectedTransport;
             // Heartbeat-подписка сразу после создания transport-сессии и до playback:
             // первый pong не теряется в окне между handshake и запуском media loop (L7).
             _healthMonitor.Reset();
@@ -859,6 +948,31 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
 
             await ReleaseTransportAsync(transport);
             await ReleaseDiscoveryAsync(discovery);
+        }
+    }
+
+    private async Task<Result<IRealtimeTransportSession>> AcceptPeerWithRetriesAsync(
+        IRealtimeTransportListenerSession listener,
+        CancellationToken cancellationToken)
+    {
+        var lastError = new Error(
+            RealtimeTransportErrorCodes.SignalingTimeout,
+            "Доверенный peer не подключился.");
+        for (var attempt = 1; ; attempt++)
+        {
+            var accepted = await listener.AcceptAsync(cancellationToken);
+            if (accepted.IsSuccess)
+            {
+                return accepted;
+            }
+
+            lastError = accepted.Error!;
+            if (!IsTransientPeerRejection(lastError) || attempt >= MaxPeerAcceptAttempts)
+            {
+                return Result<IRealtimeTransportSession>.Failure(lastError);
+            }
+
+            await Task.Delay(PeerRetryPause, _timeProvider, cancellationToken);
         }
     }
 
@@ -2055,6 +2169,27 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             or DiscoveryErrorCodes.WifiUnavailable
             or DiscoveryErrorCodes.ResolveFailed
             or DiscoveryErrorCodes.ServiceNotFound;
+
+    /// <summary>
+    /// Peer-level отказ Accept, после которого listener-сессия остаётся пригодной для повтора:
+    /// недоверенный peer, TLS/malformed handshake, таймаут ожидания (T007a).
+    /// </summary>
+    private static bool IsTransientPeerRejection(Error error) =>
+        error.Code is RealtimeTransportErrorCodes.UnauthorizedPeer
+            or RealtimeTransportErrorCodes.TlsFailure
+            or RealtimeTransportErrorCodes.SignalingTimeout;
+
+    /// <summary>
+    /// Peer-level отказ connect для discovered candidate: rogue/silent mDNS peer не должен
+    /// терминально срывать старт; пробуем следующий candidate (T007a).
+    /// </summary>
+    private static bool IsTransientConnectRejection(Error error) =>
+        error.Code is RealtimeTransportErrorCodes.PeerUnavailable
+            or RealtimeTransportErrorCodes.TlsFailure
+            or RealtimeTransportErrorCodes.UnauthorizedPeer
+            or RealtimeTransportErrorCodes.SignalingTimeout
+            or RealtimeTransportErrorCodes.MediaPathAbsent
+            or RealtimeTransportErrorCodes.MediaFlowLost;
 
     private static bool IsDeviceAudioFailure(Error error) =>
         error.Code is AudioErrorCodes.CaptureUnavailable

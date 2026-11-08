@@ -18,6 +18,11 @@
   unsupported-version ack, SDP 256 KiB лимит; semantic arch-test SslStream/Tcp.
 - [ ] T007 H5/LOW-9: bounded retry Accept/перебор discovered candidates; rate-limit/backoff
   неудачных handshake; bind signaling/ICE к Wi-Fi/Ethernet; tests.
+  - [x] T007a (v0.4.4) Application peer resilience: Child Accept retry до 5 с паузой 250 ms; Parent
+    candidate enumeration до 5 в одной discovery-сессии; fixed async-iterator dispose bug; tests.
+  - [x] T007b (v0.4.4) Infrastructure failed-handshake cooldown 250 ms (SignalingOptions), успешный
+    accept без задержки, Stop/Dispose/cancel не зависают; 5 tests.
+  - [ ] T007c Bind signaling/ICE к Wi-Fi/Ethernet интерфейсу (Application port + Android adapter + options).
 - [x] T008 Локальные гейты: Debug/Release build 0/0, тесты 498/498, format clean, vuln scan чистый.
 - [ ] T009 Независимое review (security-sensitive: heartbeat/DoS/bind) + findings.
 - [ ] T010 PR → зелёный CI → merge; тег v0.4.0 (minor — новые возможности) или patch.
@@ -100,11 +105,17 @@
   TCP accept; device-retest v0.4.2 на nova Y90 без Parent: Media Connecting >40 s, без Failed, crash buffer пуст.
 - [ ] T045 Product decision: discovery-loss коды дают «Связь потеряна!» и на initial-попытке (ребёнок не
   найден) — решить, нужен ли отдельный текст/без alarm для initial setup.
+- [ ] T048 Строгий порядок Starting при конкурентном Stop (сериализация/ожидание gate) + XML-doc
+  SnapshotChanged «handlers must not block»; тест конкурентного Stop/Starting.
+- [ ] T049 Semantic arch-test расширить на Socket/UdpClient/HttpClient (cleartext вне
+  Infrastructure/Signaling|Realtime) — LOW gap.
 
 ## Verification Log
 
 | Дата | Проверка | Результат |
 |---|---|---|
+| 2026-11-08 | v0.4.4 gates | 549/549 (Domain 38, Application 281, Infrastructure 172, Architecture 58); Debug/Release 0 warnings; format clean; vuln OK; T007a/T007b |
+| 2026-11-08 | v0.4.3 device sanity (single nova Y90) | install versionCode 403 PASS; Child без Parent: Running/Media Connecting >20 s, без Failed/crash, Stop PASS; двухдевайсовые T040/T043 pending |
 | 2026-11-08 | v0.4.3 gates | 538/538 (Domain 38, Application 275, Infrastructure 167, Architecture 58); Debug/Release 0 warnings; format clean; vuln OK; Release-run Application tests 275/275; T047 event order |
 | 2026-11-08 | v0.4.2 gates | 536/536 (Domain 38, Application 273, Infrastructure 167, Architecture 58); Debug/Release 0 warnings; format clean; vuln OK; T042/T006/T046 |
 | 2026-11-08 | v0.4.1 gates | 513/513 (Domain 38, Application 273, Infrastructure 145, Architecture 57); Debug/Release 0 warnings; format clean; vuln OK |

@@ -21,6 +21,7 @@ public sealed class TlsSignalingServerSession : IAsyncDisposable
     private readonly SignalingIdentity _identity;
     private readonly SignalingOptions _options;
     private readonly SemaphoreSlim _acceptLock = new(1, 1);
+    private readonly CancellationTokenSource _lifetimeCts = new();
     private int _accepted;
     private int _disposed;
 
@@ -78,17 +79,24 @@ public sealed class TlsSignalingServerSession : IAsyncDisposable
                 return Result<TlsSignalingConnection>.Failure(SignalingErrors.InvalidState());
             }
 
+            // Dispose/Stop отменяет и ожидание TCP, и cooldown, и handshake: незавершённый Accept
+            // не висит после остановки listener-а.
+            using var lifetimeLinkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                _lifetimeCts.Token);
+            var linkedToken = lifetimeLinkedCts.Token;
+
             TcpClient? tcpClient = null;
             try
             {
                 // Ожидание TCP-подключения не ограничено HandshakeTimeout: Child ждёт Parent в
                 // Advertising-состоянии, пока вызывающий не отменит ожидание или listener не остановят.
-                tcpClient = await _listener.AcceptTcpClientAsync(cancellationToken).ConfigureAwait(false);
+                tcpClient = await _listener.AcceptTcpClientAsync(linkedToken).ConfigureAwait(false);
                 tcpClient.NoDelay = true;
 
                 // HandshakeTimeout применяется только к TLS + hello/identity assertion уже
                 // подключившегося peer-а (TCP accepted).
-                using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(linkedToken);
                 handshakeCts.CancelAfter(_options.HandshakeTimeout);
 
                 Result<TlsSignalingConnection> handshakeResult;
@@ -98,28 +106,41 @@ public sealed class TlsSignalingServerSession : IAsyncDisposable
                         .AcceptAsync(tcpClient, _identity, _options, handshakeCts.Token)
                         .ConfigureAwait(false);
                 }
-                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested
+                                                          && Volatile.Read(ref _disposed) == 0)
                 {
-                    return Result<TlsSignalingConnection>.Failure(SignalingErrors.SignalingTimeout());
+                    // Истёк HandshakeTimeout (TLS+hello не завершились) — typed signaling_timeout.
+                    handshakeResult = Result<TlsSignalingConnection>.Failure(SignalingErrors.SignalingTimeout());
                 }
 
-                if (handshakeResult.IsSuccess)
+                if (!handshakeResult.IsSuccess)
                 {
-                    // Владение сокетом перешло signaling-соединению. Listener «расходуется» либо
-                    // сразу (signaling-контракт), либо вызывающим после полной media-сессии.
-                    tcpClient = null;
-                    if (markAccepted)
-                    {
-                        MarkAccepted();
-                    }
+                    // Rate-limit LAN flood/rogue handshake: пауза перед возвратом ошибки и следующим
+                    // Accept. Caller cancellation пробрасывается как OCE, Dispose паузу прерывает
+                    // (типизированный отказ уже известен и возвращается сразу).
+                    await WaitFailedHandshakeCooldownAsync(linkedToken, cancellationToken).ConfigureAwait(false);
+                    return handshakeResult;
+                }
+
+                // Владение сокетом перешло signaling-соединению. Listener «расходуется» либо
+                // сразу (signaling-контракт), либо вызывающим после полной media-сессии.
+                tcpClient = null;
+                if (markAccepted)
+                {
+                    MarkAccepted();
                 }
 
                 return handshakeResult;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 // Отмена вызывающего токена: контракт AcceptAsync — OperationCanceledException.
                 throw;
+            }
+            catch (OperationCanceledException)
+            {
+                // Dispose/Stop отменил ожидание: typed invalid_state, не signaling_timeout.
+                return Result<TlsSignalingConnection>.Failure(SignalingErrors.InvalidState());
             }
             catch (ObjectDisposedException)
             {
@@ -150,6 +171,25 @@ public sealed class TlsSignalingServerSession : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Пауза после неудачного TLS/handshake. Caller cancellation пробрасывает OCE (без задержки),
+    /// Dispose отменяет паузу через lifetime-токен: известный typed-отказ возвращается сразу.
+    /// </summary>
+    private async Task WaitFailedHandshakeCooldownAsync(
+        CancellationToken linkedToken,
+        CancellationToken callerToken)
+    {
+        try
+        {
+            await Task.Delay(_options.FailedHandshakeCooldown, _options.TimeProvider, linkedToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!callerToken.IsCancellationRequested)
+        {
+            // Dispose/Stop прервал cooldown: возвращаем уже известный типизированный отказ без задержки.
+        }
+    }
+
     /// <summary>Останавливает прослушивание и освобождает порт; безопасно вызывать повторно.</summary>
     public ValueTask DisposeAsync()
     {
@@ -158,6 +198,8 @@ public sealed class TlsSignalingServerSession : IAsyncDisposable
             return ValueTask.CompletedTask;
         }
 
+        // Отмена lifetime будит ожидающий TCP accept / cooldown / handshake: Dispose не ждёт их.
+        _lifetimeCts.Cancel();
         try
         {
             _listener.Stop();
@@ -167,8 +209,9 @@ public sealed class TlsSignalingServerSession : IAsyncDisposable
             // Порт уже освобождён: повторная остановка listener-а не является ошибкой.
         }
 
-        // Семафор сериализации Accept не освобождается: SemaphoreSlim без WaitHandle не требует
-        // Dispose, а его освобождение гонялось бы с уже ожидающим AcceptAsync.
+        // Семафор сериализации Accept и lifetime-источник не освобождаются: SemaphoreSlim без
+        // WaitHandle не требует Dispose, а Dispose CTS гонялся бы с уже ожидающим AcceptAsync
+        // (сам CTS не содержит таймеров и не удерживает ресурсы).
         return ValueTask.CompletedTask;
     }
 }
