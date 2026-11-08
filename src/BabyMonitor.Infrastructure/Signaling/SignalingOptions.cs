@@ -27,7 +27,10 @@ public sealed class SignalingOptions
     /// <summary>Таймаут установки signaling-соединения (TCP + TLS + hello/hello_ack).</summary>
     public TimeSpan HandshakeTimeout { get; }
 
-    /// <summary>Источник времени для проверки срока действия TLS-сертификатов.</summary>
+    /// <summary>
+    /// Источник времени для проверки срока действия TLS-сертификатов и (через
+    /// <see cref="Realtime.SipsorceryTransportOptions"/>) периодического control heartbeat сессии.
+    /// </summary>
     public TimeProvider TimeProvider { get; }
 
     /// <summary>

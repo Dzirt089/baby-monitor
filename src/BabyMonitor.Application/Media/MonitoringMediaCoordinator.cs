@@ -34,11 +34,13 @@ namespace BabyMonitor.Application.Media;
 /// ожидается в StopAsync/DisposeAsync.
 /// </para>
 /// <para>
-/// Ограничения текущей фазы: heartbeat control-канала не выражен отдельным портом
-/// (<see cref="IRealtimeTransportSession"/> отдаёт только StateChanged), поэтому control health
-/// строится по транспортному состоянию, а media health — по <see cref="SessionHealthMonitor"/> и
-/// watchdog-таймеру TimeProvider (stall media flow → Degraded/Reconnecting). ParentLossAlarm
-/// здесь не подключается: для него нужен периодический evaluator в фоновом host-е (phase 2e).
+/// Control и media health проверяются независимо (FR-001/FR-002 007). Heartbeat приходит из
+/// <see cref="IRealtimeTransportSession.HeartbeatReceived"/> (pong) и обновляет
+/// <see cref="SessionHealthMonitor"/>; отсутствие первого heartbeat или потеря контрольного канала
+/// ведут к typed <see cref="RealtimeTransportErrorCodes.HeartbeatMissed"/> и Degraded/Reconnecting.
+/// Media health оценивается watchdog-таймером TimeProvider (stall media flow → Degraded/Reconnecting).
+/// ParentLossAlarm для Parent поднимается локально по TimeProvider (независимо от ответа Child);
+/// её состояние публикуется в <see cref="MediaSessionSnapshot.ParentAlarmActive"/> без смены State.
 /// </para>
 /// <para>
 /// Владение ресурсами: координатор освобождает сессии, которые сам создал (listener, advertiser,
@@ -52,6 +54,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     private const int Sha256HexLength = 64;
 
     private static readonly TimeSpan MediaWatchdogPeriod = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan AlarmWatchdogPeriod = TimeSpan.FromMilliseconds(500);
 
     private readonly object _sync = new();
     private readonly DeviceRole _role;
@@ -66,6 +69,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     private readonly ReconnectPolicy _reconnectPolicy;
     private readonly TimeProvider _timeProvider;
     private readonly SessionHealthMonitor _healthMonitor;
+    private readonly ParentLossAlarm _parentLossAlarm;
     private readonly string? _peerFingerprintShort;
 
     private MediaSessionSnapshot? _snapshot;
@@ -79,6 +83,11 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     private RealtimeTransportState? _transportState;
     private bool _captureActive;
     private bool _playbackActive;
+    private long _sentFrames;
+    private long _receivedFrames;
+    private int _reconnectAttempts;
+    private long _lastMediaFrameAtUnixMilliseconds = -1;
+    private DateTimeOffset _telemetryStartedAt;
 
     /// <summary>Создаёт координатор media-сеанса для одной роли.</summary>
     /// <param name="role">Роль локального устройства: Child или Parent.</param>
@@ -153,6 +162,8 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         _reconnectPolicy = reconnectPolicy;
         _timeProvider = timeProvider;
         _healthMonitor = new SessionHealthMonitor(timeProvider);
+        _parentLossAlarm = new ParentLossAlarm(timeProvider);
+        _parentLossAlarm.AlarmChanged += OnParentAlarmChanged;
         _connectivity.NetworkChanged += OnNetworkChanged;
     }
 
@@ -227,6 +238,11 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                 _transportState = null;
                 _captureActive = false;
                 _playbackActive = false;
+                Interlocked.Exchange(ref _sentFrames, 0);
+                Interlocked.Exchange(ref _receivedFrames, 0);
+                Volatile.Write(ref _reconnectAttempts, 0);
+                Interlocked.Exchange(ref _lastMediaFrameAtUnixMilliseconds, -1);
+                _telemetryStartedAt = _timeProvider.GetUtcNow();
                 _session = MonitoringSession.Create(Guid.NewGuid().ToString("N"), _role, _timeProvider);
                 startTcs = new TaskCompletionSource<Result<MediaSessionSnapshot>>(
                     TaskCreationOptions.RunContinuationsAsynchronously);
@@ -370,6 +386,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                 "Координатор media-сеанса освобождён до готовности запуска.")));
         }
 
+        _parentLossAlarm.AlarmChanged -= OnParentAlarmChanged;
         _connectivity.NetworkChanged -= OnNetworkChanged;
         CancelQuietly(runCts);
     }
@@ -406,6 +423,19 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     private async Task RunAsync(CancellationToken runToken)
     {
         Error? unexpected = null;
+        ITimer? alarmTimer = null;
+        if (_role is DeviceRole.Parent)
+        {
+            // Тревога Parent оценивается локально по TimeProvider независимо от media watchdog:
+            // watchdog работает только внутри media loop, а потеря peer-а должна быть видна и во
+            // время reconnect-попыток (FR-002 007).
+            alarmTimer = _timeProvider.CreateTimer(
+                _ => EvaluateParentAlarm(),
+                null,
+                AlarmWatchdogPeriod,
+                AlarmWatchdogPeriod);
+        }
+
         try
         {
             await RunSessionAsync(runToken);
@@ -420,6 +450,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         }
         finally
         {
+            alarmTimer?.Dispose();
             await FinalizeRunAsync(unexpected);
         }
     }
@@ -435,6 +466,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             if (retryIndex > 0)
             {
                 await Task.Delay(_reconnectPolicy.GetDelay(retryIndex), _timeProvider, runToken);
+                Interlocked.Increment(ref _reconnectAttempts);
             }
 
             var outcome = _role is DeviceRole.Child
@@ -706,6 +738,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     {
         var failure = new TaskCompletionSource<Error>(TaskCreationOptions.RunContinuationsAsynchronously);
         var mediaFlowing = false;
+        var heartbeatSeen = new bool[1];
 
         EventHandler<RealtimeTransportStateChangedEventArgs> transportHandler = (_, args) =>
         {
@@ -715,8 +748,10 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                 failure.TrySetResult(args.Error ?? transport.LastError ?? CreateMediaFlowLostError());
             }
         };
+        EventHandler heartbeatHandler = (_, _) => OnHeartbeat(heartbeatSeen);
 
         transport.StateChanged += transportHandler;
+        transport.HeartbeatReceived += heartbeatHandler;
         try
         {
             UpdateTransportState(transport.State);
@@ -733,7 +768,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             _healthMonitor.Reset();
             using var mediaCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var mediaFlowingFlag = new bool[1];
-            using var watchdog = StartMediaWatchdog(failure, mediaFlowingFlag);
+            using var watchdog = StartMediaWatchdog(failure, mediaFlowingFlag, heartbeatSeen);
             var pcmFrameBytes = _codec.Format.Frame20MsBytes;
             var pcmBuffer = new byte[pcmFrameBytes];
             var encodedBuffer = new byte[_codec.MaxEncodedBytes];
@@ -861,6 +896,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                                 mediaFlowing);
                         }
 
+                        RecordSentFrame();
                         _healthMonitor.MarkMediaFrame();
                         if (!mediaFlowing)
                         {
@@ -898,6 +934,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         finally
         {
             transport.StateChanged -= transportHandler;
+            transport.HeartbeatReceived -= heartbeatHandler;
         }
     }
 
@@ -909,6 +946,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     {
         var failure = new TaskCompletionSource<Error>(TaskCreationOptions.RunContinuationsAsynchronously);
         var mediaFlowing = false;
+        var heartbeatSeen = new bool[1];
 
         EventHandler<RealtimeTransportStateChangedEventArgs> transportHandler = (_, args) =>
         {
@@ -918,8 +956,10 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                 failure.TrySetResult(args.Error ?? transport.LastError ?? CreateMediaFlowLostError());
             }
         };
+        EventHandler heartbeatHandler = (_, _) => OnHeartbeat(heartbeatSeen);
 
         transport.StateChanged += transportHandler;
+        transport.HeartbeatReceived += heartbeatHandler;
         try
         {
             UpdateTransportState(transport.State);
@@ -935,7 +975,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             _healthMonitor.Reset();
             using var mediaCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var mediaFlowingFlag = new bool[1];
-            using var watchdog = StartMediaWatchdog(failure, mediaFlowingFlag);
+            using var watchdog = StartMediaWatchdog(failure, mediaFlowingFlag, heartbeatSeen);
             var pcmBuffer = new byte[_codec.Format.Frame20MsBytes];
             var received = transport.ReceiveAudioAsync(mediaCts.Token).GetAsyncEnumerator(mediaCts.Token);
             try
@@ -995,6 +1035,13 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                         {
                             var error = transport.LastError ?? CreateMediaFlowLostError();
                             return AttemptOutcome.SessionLost(error, ReasonFromError(error), mediaFlowing);
+                        }
+
+                        // Принятый кадр — подтверждение жизни peer-а для ParentLossAlarm и telemetry.
+                        RecordReceivedFrame();
+                        if (_role is DeviceRole.Parent)
+                        {
+                            _parentLossAlarm.ReportPeerAlive();
                         }
 
                         var payload = received.Current.Payload;
@@ -1080,11 +1127,15 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         finally
         {
             transport.StateChanged -= transportHandler;
+            transport.HeartbeatReceived -= heartbeatHandler;
         }
     }
 
     private async Task FinalizeRunAsync(Error? unexpected)
     {
+        // Терминальный Stopped не должен показывать тревогу; для Parent+Failed флаг форсируется
+        // при построении снимка. Reset вне _sync: AlarmChanged-обработчик сам берёт _sync.
+        _parentLossAlarm.Reset();
         CancellationTokenSource? runCts;
         MediaSessionSnapshot? terminalSnapshot = null;
         EventHandler<MediaSessionSnapshot>? handler = null;
@@ -1253,11 +1304,69 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         }
     }
 
-    private ITimer StartMediaWatchdog(TaskCompletionSource<Error> failure, bool[] mediaFlowing)
+    private void OnHeartbeat(bool[] heartbeatSeen)
+    {
+        // Обработчик вызывается потоком транспорта: только короткие неблокирующие обновления.
+        Volatile.Write(ref heartbeatSeen[0], true);
+        _healthMonitor.MarkHeartbeat();
+        _parentLossAlarm.ReportPeerAlive();
+    }
+
+    private void EvaluateParentAlarm()
+    {
+        if (Volatile.Read(ref _disposed) || Volatile.Read(ref _stopRequested))
+        {
+            return;
+        }
+
+        if (_role is DeviceRole.Parent)
+        {
+            _parentLossAlarm.Evaluate();
+        }
+    }
+
+    private void OnParentAlarmChanged(object? sender, bool raised)
+    {
+        MediaSessionSnapshot? snapshot = null;
+        EventHandler<MediaSessionSnapshot>? handler = null;
+        lock (_sync)
+        {
+            if (_disposed
+                || _role is not DeviceRole.Parent
+                || _stopRequested
+                || _session is null
+                || _snapshot is not { } current)
+            {
+                return;
+            }
+
+            // Alarm меняет только флаг в снимке: State/Error/Health остаются прежними, чтобы UI
+            // показывал тревогу в текущем состоянии сеанса (MediaFlowing/Degraded/Reconnecting).
+            var updated = CreateSnapshotLocked(current.State, current.Error);
+            if (updated.ParentAlarmActive == current.ParentAlarmActive)
+            {
+                return;
+            }
+
+            _snapshot = updated;
+            snapshot = updated;
+            handler = SnapshotChanged;
+        }
+
+        if (snapshot is not null)
+        {
+            handler?.Invoke(this, snapshot);
+        }
+    }
+
+    private ITimer StartMediaWatchdog(
+        TaskCompletionSource<Error> failure,
+        bool[] mediaFlowing,
+        bool[] heartbeatSeen)
     {
         var startedAt = _timeProvider.GetUtcNow();
         return _timeProvider.CreateTimer(
-            _ => OnMediaWatchdogTick(failure, mediaFlowing, startedAt),
+            _ => OnMediaWatchdogTick(failure, mediaFlowing, heartbeatSeen, startedAt),
             null,
             MediaWatchdogPeriod,
             MediaWatchdogPeriod);
@@ -1266,11 +1375,36 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     private void OnMediaWatchdogTick(
         TaskCompletionSource<Error> failure,
         bool[] mediaFlowing,
+        bool[] heartbeatSeen,
         DateTimeOffset startedAt)
     {
         if (Volatile.Read(ref _disposed))
         {
             return;
+        }
+
+        var now = _timeProvider.GetUtcNow();
+        var health = _healthMonitor.Evaluate(_role);
+
+        // Control heartbeat проверяется независимо от media flow (FR-001/FR-002 007): сначала
+        // «ни одного heartbeat с начала попытки», затем «heartbeat был, но control-канал потерян».
+        // Typed heartbeat_missed отделён от media stall: это разные причины деградации.
+        if (!Volatile.Read(ref heartbeatSeen[0]))
+        {
+            if (now - startedAt >= _healthMonitor.HeartbeatTimeout)
+            {
+                failure.TrySetResult(CreateHeartbeatMissedError());
+            }
+        }
+        else if (health.Control is SessionChannelState.Lost)
+        {
+            failure.TrySetResult(CreateHeartbeatMissedError());
+        }
+
+        if (_role is DeviceRole.Parent)
+        {
+            // Локальная тревога Parent не зависит от Child: evaluator использует только TimeProvider.
+            _parentLossAlarm.Evaluate();
         }
 
         if (!Volatile.Read(ref mediaFlowing[0]))
@@ -1279,7 +1413,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             // «signaling поднят, звука нет» — Degraded/Reconnecting (FR-018/FR-021). Проверка
             // отдельная от SessionHealthMonitor, потому что при полном отсутствии кадров media
             // оценивается как Inactive, а не Stalled.
-            if (_timeProvider.GetUtcNow() - startedAt >= _healthMonitor.MediaTimeout)
+            if (now - startedAt >= _healthMonitor.MediaTimeout)
             {
                 failure.TrySetResult(new Error(
                     RealtimeTransportErrorCodes.MediaFlowLost,
@@ -1289,7 +1423,6 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             return;
         }
 
-        var health = _healthMonitor.Evaluate(_role);
         if (health.Media is AudioFlowState.Stalled)
         {
             failure.TrySetResult(new Error(
@@ -1427,6 +1560,14 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
 
     private void PublishMediaFlowing()
     {
+        if (_role is DeviceRole.Parent)
+        {
+            // Восстановленный media flow снимает локальную тревогу (FR-002 007) до публикации
+            // MediaFlowing: пользователь снова слышит peer, без промежуточного «тревожного» снимка.
+            // Если peer опять замолчит, тревога поднимется заново.
+            _parentLossAlarm.Reset();
+        }
+
         PublishTransition(MediaSessionState.MediaFlowing, null, session =>
         {
             if (session.State is MonitoringState.Connected or MonitoringState.Degraded)
@@ -1577,20 +1718,70 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             error,
             _peerFingerprintShort,
             health,
-            _session?.Id);
+            _session?.Id,
+            _session is null ? null : BuildTelemetryLocked(),
+            IsParentAlarmActiveLocked(state));
     }
+
+    private bool IsParentAlarmActiveLocked(MediaSessionState state) =>
+        _role is DeviceRole.Parent
+        && (state is MediaSessionState.Failed || _parentLossAlarm.IsRaised);
+
+    private MediaSessionTelemetry BuildTelemetryLocked()
+    {
+        var lastMediaFrameAtMilliseconds = Interlocked.Read(ref _lastMediaFrameAtUnixMilliseconds);
+        DateTimeOffset? lastMediaFrameAt = lastMediaFrameAtMilliseconds >= 0
+            ? DateTimeOffset.FromUnixTimeMilliseconds(lastMediaFrameAtMilliseconds)
+            : null;
+        var uptime = _timeProvider.GetUtcNow() - _telemetryStartedAt;
+        return new MediaSessionTelemetry(
+            Interlocked.Read(ref _sentFrames),
+            Interlocked.Read(ref _receivedFrames),
+            Volatile.Read(ref _reconnectAttempts),
+            uptime < TimeSpan.Zero ? TimeSpan.Zero : uptime,
+            lastMediaFrameAt);
+    }
+
+    private void RecordSentFrame()
+    {
+        Interlocked.Increment(ref _sentFrames);
+        RecordMediaFrameTimestamp();
+    }
+
+    private void RecordReceivedFrame()
+    {
+        Interlocked.Increment(ref _receivedFrames);
+        RecordMediaFrameTimestamp();
+    }
+
+    private void RecordMediaFrameTimestamp() =>
+        Interlocked.Exchange(
+            ref _lastMediaFrameAtUnixMilliseconds,
+            _timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
 
     private SessionHealth BuildHealthLocked()
     {
-        var control = _transportState switch
+        var transportControl = _transportState switch
         {
             RealtimeTransportState.Connected => SessionChannelState.Connected,
             RealtimeTransportState.Failed or RealtimeTransportState.Closed => SessionChannelState.Lost,
             _ => SessionChannelState.Unknown
         };
 
-        var media = _healthMonitor.Evaluate(_role).Media;
-        return new SessionHealth(control, media, _captureActive, _playbackActive);
+        // Control-канал оценивается по heartbeat независимо от media flow: heartbeat Degraded/Lost
+        // ухудшает health, даже если transport ещё формально Connected. Пока heartbeat не измерялся
+        // (Unknown), сохраняется транспортная оценка, чтобы UI не показывал ложную потерю.
+        var heartbeat = _healthMonitor.Evaluate(_role);
+        var control = transportControl is SessionChannelState.Lost
+            ? SessionChannelState.Lost
+            : heartbeat.Control switch
+            {
+                SessionChannelState.Lost => SessionChannelState.Lost,
+                SessionChannelState.Degraded => SessionChannelState.Degraded,
+                _ => transportControl
+            };
+
+        return new SessionHealth(control, heartbeat.Media, _captureActive, _playbackActive);
     }
 
     private void UpdateTransportState(RealtimeTransportState state)
@@ -1632,6 +1823,10 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     private static Error CreateMediaFlowLostError() => new(
         RealtimeTransportErrorCodes.MediaFlowLost,
         "Media flow потерян.");
+
+    private static Error CreateHeartbeatMissedError() => new(
+        RealtimeTransportErrorCodes.HeartbeatMissed,
+        "Control heartbeat не поступает: связь с peer потеряна.");
 
     private static bool IsDeviceAudioFailure(Error error) =>
         error.Code is AudioErrorCodes.CaptureUnavailable
@@ -1695,6 +1890,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     {
         RealtimeTransportErrorCodes.NetworkUnavailable => DisconnectReason.NetworkChanged,
         RealtimeTransportErrorCodes.MediaFlowLost => DisconnectReason.MediaFlowLost,
+        RealtimeTransportErrorCodes.HeartbeatMissed => DisconnectReason.HeartbeatTimeout,
         RealtimeTransportErrorCodes.MediaPathAbsent => DisconnectReason.MediaFlowLost,
         RealtimeTransportErrorCodes.SessionClosed => DisconnectReason.PeerClosed,
         RealtimeTransportErrorCodes.PeerUnavailable => DisconnectReason.ConnectFailed,

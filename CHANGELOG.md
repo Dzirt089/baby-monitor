@@ -14,6 +14,35 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 фоновой сессии на экране выбора роли) и 008 (release readiness, owner-gated публикация/лицензия/
 дистрибуция).
 
+## [0.4.0] - 2026-11-08
+
+### Added
+
+- **Control heartbeat** в signaling-сессии: периодический ping/pong по существующему TLS
+  control-каналу (HeartbeatInterval 5 s, HeartbeatTimeout 15 s; TimeProvider), событие
+  `IRealtimeTransportSession.HeartbeatReceived`, typed `realtime.heartbeat_missed` при потере
+  control-канала (независимо от media flow). Требует обновления обеих сторон.
+- **ParentLossAlarm в media-сеансе**: локальная тревога Parent при потере heartbeat/media
+  (порог 15 s), `MediaSessionSnapshot.ParentAlarmActive`, отдельное high-importance
+  alarm-уведомление «Связь потеряна!» (звук/вибрация) и статус на экране мониторинга;
+  тревога не зависит от ответа Child.
+- **Telemetry counters**: `MediaSessionTelemetry` в снимке сеанса (отправленные/принятые кадры,
+  reconnect-попытки, uptime, последний media frame); строка метрик в экране «Диагностика»
+  (без аудио/секретов).
+- SessionHealthMonitor учитывает heartbeat (Control Degraded/Lost) отдельно от media stall;
+  heartbeat watchdog и first-frame media watchdog дают typed Degraded/Reconnecting.
+
+### Known limitations
+
+- Device-проверка v0.4.0 (heartbeat/pong на реальных устройствах, срабатывание тревоги, звук/
+  вибрация канала, новые метрики) **ещё не выполнена**: после перезагрузки одного из тестовых
+  телефонов пропал adb (нужно подтвердить USB-отладку/подключить кабель). v0.3.1 device pass
+  (звук/owner confirmation) остаётся в силе; эти фичи — 007 phase 2.
+- Автоматизированный 100-цикловый reconnect-тест на v0.3.1 оказался неустойчивым из-за поведения
+  Wi-Fi драйвера Huawei (переассоциация ~25-28 s после toggle; после 8 циклов — typed Failed
+  вследствие исчерпания reconnect-политики). Методика и повтор — 007 (не заявляется пройденным).
+- Пороги heartbeat/alarm — defaults (5/15 s, alarm 15 s); настройка/тюнинг по device-метрикам — 007.
+
 ## [0.3.1] - 2026-11-08
 
 ### Fixed

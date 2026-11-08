@@ -27,6 +27,9 @@ public static class RealtimeTransportErrorCodes
     /// <summary>Активный media stream потерян (stalled/failed).</summary>
     public const string MediaFlowLost = "realtime.media_flow_lost";
 
+    /// <summary>Control heartbeat (ping/pong) не поступает дольше настроенного порога.</summary>
+    public const string HeartbeatMissed = "realtime.heartbeat_missed";
+
     /// <summary>Сеть недоступна/сменилась до завершения операции.</summary>
     public const string NetworkUnavailable = "realtime.network_unavailable";
 

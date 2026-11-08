@@ -18,6 +18,12 @@ public abstract class RealtimeTransportContractTests
     // TEST-NET-1 (RFC 5737): пример адреса, не реальный private IP.
     protected static TransportEndpoint Endpoint => new("192.0.2.10", 50000);
 
+    /// <summary>
+    /// Окно наблюдения за heartbeat-событием после закрытия: реализации не обязаны присылать
+    /// heartbeat немедленно, поэтому проверяется именно отсутствие событий после терминального состояния.
+    /// </summary>
+    protected virtual TimeSpan HeartbeatObservationWindow => TimeSpan.FromMilliseconds(150);
+
     [Fact]
     public async Task ConnectAsync_возвращает_успешную_сессию_в_состоянии_Connected()
     {
@@ -220,6 +226,35 @@ public abstract class RealtimeTransportContractTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             async () => await enumerateTask.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    [Fact]
+    public async Task HeartbeatReceived_после_закрытия_не_поднимается()
+    {
+        var transport = CreateTransport();
+        var session = (await transport.ConnectAsync(Endpoint, CancellationToken.None)).Value;
+        await session.CloseAsync(CancellationToken.None);
+        var heartbeatsAfterClose = 0;
+        session.HeartbeatReceived += (_, _) => Interlocked.Increment(ref heartbeatsAfterClose);
+
+        await Task.Delay(HeartbeatObservationWindow);
+
+        Assert.Equal(0, heartbeatsAfterClose);
+        Assert.Equal(RealtimeTransportState.Closed, session.State);
+    }
+
+    [Fact]
+    public async Task HeartbeatReceived_подписка_и_отписка_безопасны()
+    {
+        var transport = CreateTransport();
+        var session = (await transport.ConnectAsync(Endpoint, CancellationToken.None)).Value;
+        EventHandler handler = (_, _) => { };
+        session.HeartbeatReceived += handler;
+        session.HeartbeatReceived -= handler;
+
+        await session.CloseAsync(CancellationToken.None);
+
+        Assert.Equal(RealtimeTransportState.Closed, session.State);
     }
 
     [Fact]

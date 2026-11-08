@@ -14,8 +14,21 @@ namespace BabyMonitor.Infrastructure.Tests.Realtime;
 /// </summary>
 internal sealed class MediaTestPeers : IDisposable
 {
-    public MediaTestPeers(bool trustEachOther = true)
+    public MediaTestPeers(
+        bool trustEachOther = true,
+        TimeSpan? heartbeatInterval = null,
+        TimeSpan? heartbeatTimeout = null)
     {
+        // Таймауты с запасом: loopback-тесты могут выполняться под нагрузкой параллельных сборок.
+        Options = new SipsorceryTransportOptions(
+            mediaConnectTimeout: TimeSpan.FromSeconds(30),
+            sendQueueCapacity: 8,
+            receiveQueueCapacity: 4,
+            rtpBindAddress: IPAddress.Loopback,
+            signalingOptions: new SignalingOptions(TimeSpan.FromSeconds(15)),
+            heartbeatInterval: heartbeatInterval,
+            heartbeatTimeout: heartbeatTimeout);
+
         if (trustEachOther)
         {
             ParentTrustedStore.Trust(ChildKeyStore, DeviceRole.Parent);
@@ -31,12 +44,7 @@ internal sealed class MediaTestPeers : IDisposable
 
     public InMemoryTrustedDeviceStore ChildTrustedStore { get; } = new();
 
-    public SipsorceryTransportOptions Options { get; } = new(
-        mediaConnectTimeout: TimeSpan.FromSeconds(20),
-        sendQueueCapacity: 8,
-        receiveQueueCapacity: 4,
-        rtpBindAddress: IPAddress.Loopback,
-        signalingOptions: new SignalingOptions(TimeSpan.FromSeconds(10)));
+    public SipsorceryTransportOptions Options { get; }
 
     public SignalingIdentity CreateParentIdentity() =>
         new(ParentKeyStore, ParentTrustedStore, ChildKeyStore.FingerprintSha256);

@@ -112,6 +112,22 @@ public sealed class FakeRealtimeTransportContractTests : RealtimeTransportContra
     }
 
     [Fact]
+    public async Task SimulateHeartbeat_поднимает_событие_только_в_Connected()
+    {
+        var transport = new FakeRealtimeTransport();
+        var session = (FakeRealtimeTransportSession)(await transport.ConnectAsync(Endpoint, CancellationToken.None)).Value;
+        var heartbeats = 0;
+        session.HeartbeatReceived += (_, _) => heartbeats++;
+
+        session.SimulateHeartbeat();
+        Assert.Equal(1, heartbeats);
+
+        await session.CloseAsync(CancellationToken.None);
+        session.SimulateHeartbeat();
+        Assert.Equal(1, heartbeats);
+    }
+
+    [Fact]
     public async Task StateChanged_сообщает_сначала_Failed_затем_Closed()
     {
         var transport = new FakeRealtimeTransport();

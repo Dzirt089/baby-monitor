@@ -388,11 +388,15 @@ internal sealed class FakeRealtimeTransportSession : IRealtimeTransportSession
 
     public event EventHandler<RealtimeTransportStateChangedEventArgs>? StateChanged;
 
+    public event EventHandler? HeartbeatReceived;
+
     public int SendAudioCalls { get; private set; }
 
     public int CloseCalls { get; private set; }
 
     public int DisposeCalls { get; private set; }
+
+    public int HeartbeatCount { get; private set; }
 
     public IReadOnlyList<byte[]> GetSentFrames()
     {
@@ -466,6 +470,13 @@ internal sealed class FakeRealtimeTransportSession : IRealtimeTransportSession
         State = RealtimeTransportState.Failed;
         LastError = error;
         _received.Writer.TryComplete();
+    }
+
+    /// <summary>Имитирует полученный control heartbeat (pong) от peer.</summary>
+    public void RaiseHeartbeat()
+    {
+        HeartbeatCount++;
+        HeartbeatReceived?.Invoke(this, EventArgs.Empty);
     }
 }
 

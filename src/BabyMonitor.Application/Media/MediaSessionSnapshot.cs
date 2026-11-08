@@ -6,9 +6,9 @@ namespace BabyMonitor.Application.Media;
 
 /// <summary>
 /// Immutable снимок media-сеанса для presentation-слоя: роль, состояние, типизированная ошибка,
-/// короткая форма fingerprint peer, health и correlation id сеанса. Не содержит аудиоданных,
-/// полного fingerprint, секретов и платформенных типов; коллекций нет, поэтому defensive copy
-/// не требуется (все вложенные значения immutable).
+/// короткая форма fingerprint peer, health, correlation id, telemetry-агрегаты и локальная
+/// тревога Parent. Не содержит аудиоданных, полного fingerprint, секретов и платформенных типов;
+/// коллекций нет, поэтому defensive copy не требуется (все вложенные значения immutable).
 /// </summary>
 public sealed record MediaSessionSnapshot
 {
@@ -21,7 +21,13 @@ public sealed record MediaSessionSnapshot
     /// <param name="peerFingerprintShort">Первые 8 hex-символов fingerprint peer либо null, если identity неизвестна.</param>
     /// <param name="health">Health-снимок control/media/capture/playback либо null до запуска.</param>
     /// <param name="sessionId">Correlation identifier сеанса либо null до первого запуска.</param>
-    /// <exception cref="ArgumentException">Некорректная роль, ошибка не по состоянию или неверный формат fingerprint.</exception>
+    /// <param name="telemetry">Telemetry-агрегаты сеанса либо null, если телеметрия недоступна.</param>
+    /// <param name="parentAlarmActive">
+    /// Локальная тревога Parent активна; true допустим только для роли Parent.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Некорректная роль, ошибка не по состоянию, неверный формат fingerprint или тревога Parent у Child.
+    /// </exception>
     /// <exception cref="ArgumentNullException">Для состояния Failed не передана ошибка.</exception>
     public MediaSessionSnapshot(
         DeviceRole role,
@@ -29,7 +35,9 @@ public sealed record MediaSessionSnapshot
         Error? error = null,
         string? peerFingerprintShort = null,
         SessionHealth? health = null,
-        string? sessionId = null)
+        string? sessionId = null,
+        MediaSessionTelemetry? telemetry = null,
+        bool parentAlarmActive = false)
     {
         if (role is not (DeviceRole.Child or DeviceRole.Parent))
         {
@@ -61,12 +69,21 @@ public sealed record MediaSessionSnapshot
             ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
         }
 
+        if (parentAlarmActive && role is not DeviceRole.Parent)
+        {
+            throw new ArgumentException(
+                "ParentAlarmActive допустим только для роли Parent.",
+                nameof(parentAlarmActive));
+        }
+
         Role = role;
         State = state;
         Error = error;
         PeerFingerprintShort = peerFingerprintShort;
         Health = health;
         SessionId = sessionId;
+        Telemetry = telemetry;
+        ParentAlarmActive = parentAlarmActive;
     }
 
     /// <summary>Роль локального устройства.</summary>
@@ -86,6 +103,15 @@ public sealed record MediaSessionSnapshot
 
     /// <summary>Correlation identifier сеанса; null до первого запуска.</summary>
     public string? SessionId { get; }
+
+    /// <summary>Telemetry-агрегаты сеанса; null, если снимок создан без телеметрии.</summary>
+    public MediaSessionTelemetry? Telemetry { get; }
+
+    /// <summary>
+    /// Локальная тревога Parent активна: peer не отвечает дольше порога или сеанс завершился
+    /// ошибкой. Для роли Child всегда false.
+    /// </summary>
+    public bool ParentAlarmActive { get; }
 
     /// <summary>Сеанс активен (запуск, работа или остановка).</summary>
     public bool IsRunning => State is MediaSessionState.Starting or MediaSessionState.Advertising

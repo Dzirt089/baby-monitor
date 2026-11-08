@@ -4,20 +4,20 @@
 
 ## Phase 1 — Reliability code (Application/Infrastructure)
 
-- [ ] T001 Heartbeat: periodic ping/pong в signaling-сессии + heartbeat-событие в
-  IRealtimeTransportSession (Application-порт, без Android); SessionHealthMonitor.MarkHeartbeat.
-- [ ] T002 Typed `realtime.heartbeat_missed` отдельно от media stall; интеграция в coordinator
-  (Degraded/Reconnecting), unit-тесты с fake TimeProvider.
-- [ ] T003 ParentLossAlarm: периодический evaluator (TimeProvider), вызов из coordinator/FGS;
-  локальная тревога без зависимости от Child; UI/notification состояние; тесты.
-- [ ] T004 Telemetry: ISessionTelemetry + counters (send/recv/lost, underruns, silence, buffer depth,
-  encode/decode duration, reconnect count/duration, service lifetime); без аудио/SDP/fingerprint/IP.
-- [ ] T005 Диагностика: отображение агрегатов; architecture-тест на отсутствие секретов/аудио.
+- [x] T001 Heartbeat: periodic ping/pong в signaling-сессии + HeartbeatReceived в
+  IRealtimeTransportSession; SessionHealthMonitor.MarkHeartbeat (v0.4.0, 498/498 tests).
+- [x] T002 Typed `realtime.heartbeat_missed` отдельно от media stall + first-heartbeat watchdog;
+  integration в coordinator (Degraded/Reconnecting), unit-тесты с fake TimeProvider.
+- [x] T003 ParentLossAlarm: evaluator (TimeProvider) в coordinator + snapshot.ParentAlarmActive;
+  high-importance alarm-уведомление/статус «Связь потеряна!»; unit-тесты (device-проверка — T027b).
+- [x] T004 Telemetry: MediaSessionTelemetry counters (send/recv кадры, reconnect attempts, uptime,
+  last media frame) в snapshot; без аудио/SDP/fingerprint/IP (underruns/silence — 007 follow-up).
+- [x] T005 Диагностика: строка метрик в Diagnostics screen; arch-тесты на отсутствие секретов/аудио.
 - [ ] T006 H4: прямые тесты TlsPeerCertificateValidator (CA/expired/EKU/RSA), клиентский
   unsupported-version ack, SDP 256 KiB лимит; semantic arch-test SslStream/Tcp.
 - [ ] T007 H5/LOW-9: bounded retry Accept/перебор discovered candidates; rate-limit/backoff
   неудачных handshake; bind signaling/ICE к Wi-Fi/Ethernet; tests.
-- [ ] T008 Локальные гейты: Debug/Release build, все тесты, format, vuln scan.
+- [x] T008 Локальные гейты: Debug/Release build 0/0, тесты 498/498, format clean, vuln scan чистый.
 - [ ] T009 Независимое review (security-sensitive: heartbeat/DoS/bind) + findings.
 - [ ] T010 PR → зелёный CI → merge; тег v0.4.0 (minor — новые возможности) или patch.
 
@@ -83,4 +83,6 @@
 
 | Дата | Проверка | Результат |
 |---|---|---|
+| 2026-11-08 | v0.4.0 reliability code gates | heartbeat/ParentLossAlarm/telemetry реализованы+тесты: 498/498 (Domain 38, Application 258, Infrastructure 145, Architecture 57); Debug/Release 0 warnings; format clean; vuln OK |
+| 2026-11-08 | Автоматизированный 100-цикловый Wi-Fi reconnect на v0.3.1 | 8 циклов PASS (~27-28 s восстановление), затем harness/Wi-Fi OEM деградация → typed Failed после исчерпания policy; тест остановлен, НЕ заявляется пройденным (нужна новая методика/состояние сети) |
 | 2026-11-08 | Device pass v0.3.1 на Huawei nova Y90 + nova 13 Pro (Android 12) | pairing/PASS, audibility owner-confirmed/PASS, MediaFlowing/PASS, reconnect/PASS, screen-off 12s/PASS, Stop/PASS; battery/BT/calls/TalkBack/OEM — NOT RUN/BLOCKED; см. docs/operations/device-test-results-2026-11-08.md |
