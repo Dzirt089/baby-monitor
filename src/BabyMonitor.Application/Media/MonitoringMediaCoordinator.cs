@@ -62,6 +62,9 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     private static readonly TimeSpan PeerRetryPause = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan PeerCandidateWaitTimeout = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>Верхняя граница ожидания публикации Starting в Stop (защита от блокирующего подписчика).</summary>
+    private static readonly TimeSpan StartupPublicationTimeout = TimeSpan.FromSeconds(5);
+
     private readonly object _sync = new();
     private readonly DeviceRole _role;
     private readonly IPeerDiscovery _discovery;
@@ -85,6 +88,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     private CancellationTokenSource? _attemptCts;
     private Task? _runTask;
     private TaskCompletionSource<Result<MediaSessionSnapshot>>? _startTcs;
+    private TaskCompletionSource? _startingPublicationGate;
     private bool _stopRequested;
     private bool _disposed;
     private RealtimeTransportState? _transportState;
@@ -223,7 +227,12 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
         }
     }
 
-    /// <summary>Уведомление об изменении состояния media-сеанса (immutable снимок).</summary>
+    /// <summary>
+    /// Уведомление об изменении состояния media-сеанса (immutable снимок). Подписчики не должны
+    /// блокировать поток публикации и не пропускать исключения наружу: события поднимаются из
+    /// media/reconnect-циклов и таймеров, и заблокированный/бросивший подписчик задерживает
+    /// публикацию состояний и Stop. Порядок событий Start→Stop сериализуется координатором.
+    /// </summary>
     public event EventHandler<MediaSessionSnapshot>? SnapshotChanged;
 
     /// <summary>
@@ -296,6 +305,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
                 // Starting: Task.Run стартует только после публикации первого снимка (T047).
                 startGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 var gate = startGate;
+                _startingPublicationGate = gate;
                 _runTask = Task.Run(
                     async () =>
                     {
@@ -344,6 +354,7 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
     {
         Task? runTask;
         CancellationTokenSource? runCts;
+        TaskCompletionSource? startingGate;
         MediaSessionSnapshot? stoppingSnapshot = null;
         EventHandler<MediaSessionSnapshot>? stoppingHandler = null;
         var alreadyTerminal = false;
@@ -383,16 +394,32 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
 
             runTask = _runTask;
             runCts = _runCts;
-        }
-
-        if (stoppingSnapshot is not null)
-        {
-            stoppingHandler?.Invoke(this, stoppingSnapshot);
+            startingGate = _startingPublicationGate;
         }
 
         if (!alreadyTerminal)
         {
             CancelQuietly(runCts);
+        }
+
+        if (startingGate is not null)
+        {
+            try
+            {
+                // T048: Stopping не должен публиковаться раньше Starting, даже если конкурентный
+                // Stop попал в окно между освобождением _sync и вызовом handler-а Starting.
+                // Таймаут защищает от вечного ожидания, если подписчик нарушил контракт.
+                await startingGate.Task.WaitAsync(StartupPublicationTimeout, cancellationToken);
+            }
+            catch (TimeoutException)
+            {
+                // Подписчик Starting не завершил публикацию; не подвешиваем Stop навсегда.
+            }
+        }
+
+        if (stoppingSnapshot is not null)
+        {
+            stoppingHandler?.Invoke(this, stoppingSnapshot);
         }
 
         if (runTask is not null && !runTask.IsCompleted)
@@ -867,26 +894,33 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             finally
             {
                 discoverySession.StateChanged -= discoveryHandler;
-                await discoveryWalkCts.CancelAsync();
-                if (pendingMove is { } pending)
+                try
+                {
+                    await discoveryWalkCts.CancelAsync();
+                    if (pendingMove is { } pending)
+                    {
+                        try
+                        {
+                            await pending;
+                        }
+                        catch (Exception)
+                        {
+                            // Pending MoveNextAsync мог завершиться non-OCE (malformed discovery):
+                            // исход попытки уже определён выше, cleanup не маскирует его.
+                        }
+                    }
+                }
+                finally
                 {
                     try
                     {
-                        await pending;
+                        await peers.DisposeAsync();
                     }
-                    catch (OperationCanceledException)
+                    catch (Exception)
                     {
-                        // Pending MoveNextAsync отменён вместе с walk-токеном перед Dispose.
+                        // Best effort: Dispose async-iterator не подменяет исходную typed ошибку;
+                        // исключения cleanup не пробрасываем и другие ресурсы не пропускаем.
                     }
-                }
-
-                try
-                {
-                    await peers.DisposeAsync();
-                }
-                catch (OperationCanceledException)
-                {
-                    // Best effort: перечисление уже отменено, исход попытки определён выше.
                 }
             }
 

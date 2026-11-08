@@ -1449,6 +1449,67 @@ public sealed class MonitoringMediaCoordinatorTests
         Assert.Equal(1, harness.Transport.ConnectCalls);
     }
 
+    [Fact]
+    public async Task Конкурентный_Stop_не_публикует_Stopping_раньше_Starting()
+    {
+        var harness = new Harness();
+        harness.Listener.TransportFactory = () => new FakeRealtimeTransportSession();
+        await using var coordinator = harness.Create(DeviceRole.Child);
+        var states = new ConcurrentQueue<MediaSessionState>();
+        using var startingEntered = new ManualResetEventSlim(false);
+        using var releaseStarting = new ManualResetEventSlim(false);
+        coordinator.SnapshotChanged += (_, snapshot) =>
+        {
+            if (snapshot.State is MediaSessionState.Starting)
+            {
+                startingEntered.Set();
+                releaseStarting.Wait(TimeSpan.FromSeconds(5));
+            }
+
+            states.Enqueue(snapshot.State);
+        };
+
+        var startTask = Task.Run(() => coordinator.StartAsync(CancellationToken.None));
+        Assert.True(startingEntered.Wait(TimeSpan.FromSeconds(5)));
+
+        // Stop вызывается в окне, где Starting ещё не опубликован (handler заблокирован): обязан
+        // дождаться публикации Starting, а не публиковать Stopping раньше (T048).
+        var stopTask = coordinator.StopAsync(CancellationToken.None);
+        await Task.Delay(50);
+        Assert.DoesNotContain(MediaSessionState.Stopping, states);
+
+        releaseStarting.Set();
+        var stop = await stopTask.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(MediaSessionState.Stopped, stop.Value.State);
+
+        var start = await startTask.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(start.IsSuccess);
+
+        Assert.True(states.TryPeek(out var first));
+        Assert.Equal(MediaSessionState.Starting, first);
+        Assert.Contains(MediaSessionState.Stopping, states);
+    }
+
+    [Fact]
+    public async Task Parent_walk_non_OCE_ошибка_enumeration_даёт_adapter_failure_и_освобождает_discovery()
+    {
+        var harness = new Harness();
+        harness.Transport.ConnectHandler = _ => Task.FromResult(Result<IRealtimeTransportSession>.Failure(
+            new Error(RealtimeTransportErrorCodes.PeerUnavailable, "Rogue candidate.")));
+        await using var coordinator = harness.Create(DeviceRole.Parent);
+        await coordinator.StartAsync(CancellationToken.None);
+        var discoverySession = harness.Discovery.LastSession!;
+        discoverySession.EnumerationException = new InvalidOperationException("Malformed discovery stream.");
+        discoverySession.AddPeer(CreatePeer("rogue-child", "192.168.1.50"));
+
+        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+
+        // Non-OCE из MoveNextAsync не должен превращаться в NotSupportedException/маскировать
+        // исходную typed-ошибку; cleanup обязан освободить discovery (T051).
+        Assert.Equal(MediaSessionErrorCodes.AdapterFailure, failed.Error!.Code);
+        Assert.Equal(1, discoverySession.DisposeCalls);
+    }
+
     private static DiscoveredPeer CreatePeer(string discoveryId, string host) => new(
         discoveryId,
         new TransportEndpoint(host, PeerDiscoveryConstants.ProvisionalTransportPort),

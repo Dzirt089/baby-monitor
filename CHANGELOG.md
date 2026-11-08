@@ -14,6 +14,28 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 фоновой сессии на экране выбора роли) и 008 (release readiness, owner-gated публикация/лицензия/
 дистрибуция).
 
+## [0.4.5] - 2026-11-08
+
+### Fixed / hardened
+
+- **Строгий порядок Starting при конкурентном Stop (T048)**: StopAsync дожидается публикации
+  Starting (bounded watchdog 5 s) и только затем публикует Stopping; RunAsync по-прежнему стартует
+  только после Starting. XML-doc SnapshotChanged фиксирует контракт: подписчики не блокируют поток
+  публикации и не пропускают исключения.
+- **Parent discovery walk cleanup (T051)**: non-OCE исключение в pending MoveNextAsync больше не
+  маскирует исходную typed ошибку и не мешает Dispose; cleanup best-effort не пробрасывает исключения;
+  regression-тест (InvalidOperationException на MoveNext → typed media.adapter_failure, dispose вызван).
+- **Semantic architecture test (T049)**: запрещены Socket/UdpClient/TcpListener/TcpClient/SslStream/
+  Ssl*Options/HttpClient/HttpMessageHandler/WebRequest вне Infrastructure/Signaling|Realtime; Socket
+  матчится по границам слова, комментарии вырезаются; +тест матчера.
+
+### Verification
+
+- Debug/Release build 0 warnings; format clean; vuln scan чистый; тесты **552/552**
+  (Domain 38, Application 283, Infrastructure 172, Architecture 59); независимое review — после PR.
+- Device: v0.4.5 retest pending; v0.4.4 rogue/flood single-device PASS-partial; двухдевайсовые
+  T040/T043 — после возвращения Parent-телефона.
+
 ## [0.4.4] - 2026-11-08
 
 ### Fixed / hardened

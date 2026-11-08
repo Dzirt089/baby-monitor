@@ -260,6 +260,9 @@ internal sealed class FakePeerDiscoverySession : IPeerDiscoverySession
 
     public int DisposeCalls { get; private set; }
 
+    /// <summary>Исключение, которое enumerator бросает на следующем MoveNext после выдачи peer-а.</summary>
+    public Exception? EnumerationException { get; set; }
+
     public void AddPeer(DiscoveredPeer peer) => _peers.Writer.TryWrite(peer);
 
     public async IAsyncEnumerable<DiscoveredPeer> DiscoverPeersAsync(
@@ -268,6 +271,10 @@ internal sealed class FakePeerDiscoverySession : IPeerDiscoverySession
         await foreach (var peer in _peers.Reader.ReadAllAsync(cancellationToken))
         {
             yield return peer;
+            if (EnumerationException is { } failure)
+            {
+                throw failure;
+            }
         }
     }
 
