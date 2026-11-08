@@ -44,6 +44,8 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 - Автоматизированный 100-цикловый reconnect-тест на v0.3.1 оказался неустойчивым из-за поведения
   Wi-Fi драйвера Huawei (переассоциация ~25-28 s после toggle; после 8 циклов — typed Failed
   вследствие исчерпания reconnect-политики). Методика и повтор — 007 (не заявляется пройденным).
+- На момент 0.4.0 ParentAlarmActive для терминального Failed Parent выставляется при любом терминальном
+  отказе (включая локальные ошибки audio/adapter) — scoping только loss-кодов и текст тревоги — 007 follow-up.
 - Пороги heartbeat/alarm — defaults (5/15 s, alarm 15 s; App composition передаёт 15 s в health);
   настройка/тюнинг по device-метрикам — 007. Смешанные версии: v0.3.x отвечает pong, но сама не
   поднимает heartbeat alarm.
