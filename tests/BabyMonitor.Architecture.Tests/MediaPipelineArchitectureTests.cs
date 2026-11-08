@@ -15,11 +15,11 @@ public sealed class MediaPipelineArchitectureTests
     private static readonly string[] FileWriteTokens = ["FileStream", "WriteAllBytes", "WriteAllText", "File."];
 
     /// <summary>
-    /// Сетевые/HTTP/TLS-API, допустимые только в Infrastructure/Signaling|Realtime: signaling обязан
-    /// быть TLS-only (ADR-0007), cleartext TCP/UDP/HTTP в других слоях запрещён. Токен Socket
-    /// сопоставляется по границам слова (SocketException/WebSocketSharp/System.Net.Sockets — не Socket).
+    /// Сетевые/TLS-API, допустимые только в Infrastructure/Signaling|Realtime: signaling обязан быть
+    /// TLS-only (ADR-0007), cleartext TCP/UDP в других слоях запрещён. Токен Socket сопоставляется по
+    /// границам слова (SocketException/WebSocketSharp/System.Net.Sockets — не Socket).
     /// </summary>
-    private static readonly string[] ForbiddenNetworkTokens =
+    private static readonly string[] StrictNetworkTokens =
     [
         "Socket",
         "UdpClient",
@@ -28,10 +28,24 @@ public sealed class MediaPipelineArchitectureTests
         "SslStream",
         "SslClientAuthenticationOptions",
         "SslServerAuthenticationOptions",
-        "HttpClient",
-        "HttpMessageHandler",
         "WebRequest"
     ];
+
+    /// <summary>
+    /// HTTP-API: дополнительно разрешены в Infrastructure/Updates (009, ADR-0012 — единственный
+    /// HTTPS-канал автообновления) и App/Composition (composition root владеет HttpClient и передаёт
+    /// его адаптерам); cleartext HTTP запрещён (проверяется ниже отдельно).
+    /// </summary>
+    private static readonly string[] HttpNetworkTokens =
+    [
+        "HttpClient",
+        "HttpMessageHandler",
+        "HttpRequestMessage",
+        "HttpResponseMessage"
+    ];
+
+    /// <summary>Префикс HTTPS-URL GitHub Releases, обязательный для update-источника/загрузчика.</summary>
+    private const string RequiredUpdateUrlPrefix = "https://github.com/Dzirt089/baby-monitor/releases/latest/download/";
 
     // Эквивалент \bSocket\b без escape-последовательностей: Socket не внутри слова
     // (SocketException/WebSocketSharp/System.Net.Sockets не считаются типом Socket).
@@ -175,38 +189,77 @@ public sealed class MediaPipelineArchitectureTests
     [Fact]
     public void Сетевые_и_TLS_API_только_в_Infrastructure_Signaling_Realtime()
     {
-        var allowedDirectories = new[]
+        var signalingOrRealtimeDirectories = new[]
         {
             ArchitectureTestSupport.NormalizePath(
                 ArchitectureTestSupport.GetPathFromRoot("src/BabyMonitor.Infrastructure/Signaling")),
             ArchitectureTestSupport.NormalizePath(
                 ArchitectureTestSupport.GetPathFromRoot("src/BabyMonitor.Infrastructure/Realtime")),
         };
+        var updatesDirectory = ArchitectureTestSupport.NormalizePath(
+            ArchitectureTestSupport.GetPathFromRoot("src/BabyMonitor.Infrastructure/Updates"));
+        var compositionDirectory = ArchitectureTestSupport.NormalizePath(
+            ArchitectureTestSupport.GetPathFromRoot("src/BabyMonitor.App/Composition"));
+        var updatesFile = Path.Combine(updatesDirectory, "GitHubReleaseUpdateSource.cs");
+        var downloaderFile = Path.Combine(updatesDirectory, "ApkUpdateDownloader.cs");
         var violations = new List<string>();
 
         foreach (var filePath in ArchitectureTestSupport.FindCSharpFiles(ArchitectureTestSupport.GetPathFromRoot("src")))
         {
-            if (allowedDirectories.Any(directory => filePath.StartsWith(directory, StringComparison.OrdinalIgnoreCase)))
-            {
-                continue;
-            }
+            var allowedForStrictTokens = signalingOrRealtimeDirectories.Any(
+                directory => filePath.StartsWith(directory, StringComparison.OrdinalIgnoreCase));
+            var allowedForHttpTokens = allowedForStrictTokens
+                || filePath.StartsWith(updatesDirectory, StringComparison.OrdinalIgnoreCase)
+                || filePath.StartsWith(compositionDirectory, StringComparison.OrdinalIgnoreCase);
 
             var relativePath = Path.GetRelativePath(ArchitectureTestSupport.FindRepositoryRoot(), filePath);
             var code = ReadCodeWithoutComments(filePath);
-            foreach (var token in ForbiddenNetworkTokens)
+
+            if (!allowedForStrictTokens)
             {
-                if (ContainsForbiddenNetworkToken(code, token))
+                foreach (var token in StrictNetworkTokens)
                 {
-                    violations.Add($"{relativePath}: {token}");
+                    if (ContainsForbiddenNetworkToken(code, token))
+                    {
+                        violations.Add($"{relativePath}: {token}");
+                    }
+                }
+            }
+
+            if (!allowedForHttpTokens)
+            {
+                foreach (var token in HttpNetworkTokens)
+                {
+                    if (ContainsForbiddenNetworkToken(code, token))
+                    {
+                        violations.Add($"{relativePath}: {token}");
+                    }
                 }
             }
         }
 
+        // 009 ADR-0012: канал обновлений — только HTTPS GitHub Releases, cleartext HTTP запрещён.
+        foreach (var filePath in ArchitectureTestSupport.FindCSharpFiles(updatesDirectory))
+        {
+            var relativePath = Path.GetRelativePath(ArchitectureTestSupport.FindRepositoryRoot(), filePath);
+            if (ReadCodeWithoutComments(filePath).Contains("http://", StringComparison.Ordinal))
+            {
+                violations.Add($"{relativePath}: cleartext http:// в update URL (требуется https)");
+            }
+        }
+
+        Assert.True(
+            File.Exists(updatesFile) && ReadCodeWithoutComments(updatesFile).Contains(RequiredUpdateUrlPrefix, StringComparison.Ordinal),
+            "GitHubReleaseUpdateSource обязан использовать HTTPS-URL " + RequiredUpdateUrlPrefix + " (ADR-0012, cleartext запрещён).");
+        Assert.True(
+            File.Exists(downloaderFile) && ReadCodeWithoutComments(downloaderFile).Contains(RequiredUpdateUrlPrefix, StringComparison.Ordinal),
+            "ApkUpdateDownloader обязан использовать HTTPS-URL " + RequiredUpdateUrlPrefix + " (ADR-0012, cleartext запрещён).");
         Assert.True(
             violations.Count == 0,
-            "Socket/UdpClient/TcpClient/TcpListener/SslStream/HttpClient/HttpMessageHandler/WebRequest " +
-            "допускаются только в Infrastructure/Signaling|Realtime; signaling обязан быть TLS-only, " +
-            "cleartext-соединения в других слоях запрещены (ADR-0007): " +
+            "Socket/UdpClient/TcpClient/TcpListener/SslStream/WebRequest допускаются только в " +
+            "Infrastructure/Signaling|Realtime; HttpClient/Http* — дополнительно в Infrastructure/Updates " +
+            "(HTTPS-only, ADR-0012) и App/Composition (composition root); cleartext-соединения в других " +
+            "слоях запрещены: " +
             ArchitectureTestSupport.FormatList(violations));
     }
 

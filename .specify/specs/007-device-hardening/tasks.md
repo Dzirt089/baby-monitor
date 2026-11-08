@@ -99,8 +99,8 @@
   отображаемых полей), измерить battery/CPU во время 8h soak.
 - [-] T043 (partial) Device-retest: live counters PASS, terminal Failed standalone alarm PASS
   (Parent id=1004, importance HIGH, category=err, FGS stopped), screen-off 90 s PASS, recovery после
-  ручного рестарта PASS. Устройства заблокированы PIN — Home/background FGS, clean Stop, media-only alarm,
-  sound/vibration/DND, calls/BT/TalkBack pending owner unlock; НЕ заявляются проверенными.
+  ручного рестарта PASS, Home/background FGS PASS (20 s), Child/Parent clean Stop PASS (Parent alarm
+  снимается Stop-ом). Media-only alarm, sound/vibration/DND, calls/BT/TalkBack — NOT RUN; 100 cycles — running.
 - [ ] T044 Setup-timeout tests: Child reconnect Accept timeout, «timeout после успешного setup не срабатывает»,
   race network-change vs setup-timeout (Stale vs SetupFailure).
 - [x] T046 (v0.4.2, device PASS single-device) Child listener ждёт Parent: HandshakeTimeout только после
@@ -128,6 +128,7 @@
 | Дата | Проверка | Результат |
 |---|---|---|
 | 2026-11-08 | v0.4.4 device rogue/flood (single nova Y90) | 3 rogue TCP connect+close → Child Connecting (retry/cooldown), 5 → terminal FailStartup tls_failure (bounded, residual DoS H3/T052); crash buffer пуст; rate-limit cooldown device-observation PASS-partial |
+| 2026-11-08 | v0.4.7 100-cycle reconnect attempt | 6 циклов PASS (26 s), цикл 7 FAIL 135 s (Child Connecting, Parent alarm); НЕ пройдено, методика доработать |
 | 2026-11-08 | v0.4.7 device T053 retest | 10 s Wi-Fi flap → auto-recovery обеих MediaFlowing 26 s; ещё 3 цикла 26/29/26 s; без terminal Failed/crash; alarm снялся; PASS |
 | 2026-11-08 | v0.4.7 gates | 560/560 (Domain 38, Application 291, Infrastructure 172, Architecture 59); Debug/Release 0 warnings; format clean; vuln OK; T053 network-aware reconnect |
 | 2026-11-08 | v0.4.6 gates | 555/555 (Domain 38, Application 286, Infrastructure 172, Architecture 59); Debug/Release 0 warnings; format clean; vuln OK; T048 A/B; v0.4.5 tag orphan (Release failed) — v0.4.6 actual |

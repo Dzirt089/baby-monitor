@@ -1,5 +1,6 @@
 using System;
 using Android.Runtime;
+using Android.Util;
 using BabyMonitor.App.Composition;
 using BabyMonitor.Application.Media;
 
@@ -14,7 +15,10 @@ namespace BabyMonitor.App;
 [global::Android.App.Application]
 public sealed class BabyMonitorApplication : global::Android.App.Application, IMonitoringMediaSessionFactoryProvider
 {
+    private const string LogTag = "BabyMonitor.Updates";
+
     private IMonitoringMediaSessionFactory? _mediaSessions;
+    private UpdateComposition? _updates;
 
     /// <summary>Активационный конструктор .NET for Android.</summary>
     /// <param name="handle">JNI handle.</param>
@@ -23,6 +27,9 @@ public sealed class BabyMonitorApplication : global::Android.App.Application, IM
         : base(handle, transfer)
     {
     }
+
+    /// <summary>Composition root обновлений (009); null до <see cref="OnCreate"/>.</summary>
+    internal UpdateComposition? Updates => _updates;
 
     /// <summary>Фабрика media-сеансов приложения.</summary>
     /// <exception cref="InvalidOperationException">Application ещё не инициализирован.</exception>
@@ -34,5 +41,14 @@ public sealed class BabyMonitorApplication : global::Android.App.Application, IM
     {
         base.OnCreate();
         _mediaSessions = new MediaSessionFactory(this);
+        try
+        {
+            _updates = new UpdateComposition(this);
+        }
+        catch (Exception exception)
+        {
+            // Обновления — не критичная для мониторинга фича: при сбое composition экран их не откроет.
+            Log.Warn(LogTag, "Update composition initialization failed: " + exception.GetType().Name);
+        }
     }
 }

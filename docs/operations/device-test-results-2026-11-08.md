@@ -115,6 +115,26 @@ Privacy: device test — без аудиоданных; alarm-нотификац
 sound/vibration/DND, calls/BT/TalkBack, 100 cycles, 8h soak) без разблокировки владельцем нельзя.
 Попытка Home/background теста дала NOT RUN (screens locked); остальная матрица — pending owner unlock/времени.
 
+### v0.4.7 additional UI checks (2026-11-08, both Huawei)
+
+| # | Проверка | Результат |
+|---|---|---|
+| 1 | Home/background FGS: обе сессии MediaFlowing, нажать Home, подождать 20 s | PASS: обе flowing по нотификациям, FGS alive; открытие Activity снова показывает Running/MediaFlowing |
+| 2 | Child clean Stop через UI (кнопка ОСТАНОВИТЬ) | PASS: Ребёнок Stopped, уведомление остановлено; Parent получил standalone alarm «Связь потеряна!» (ожидаемо peer unavailable) |
+| 3 | Parent clean Stop через UI | PASS: Родитель Stopped, standalone alarm снят, уведомления очищены; crash buffers пусты |
+
+Ограничение: media-only alarm (без потери network) и звук/вибрация/DND alarm-канала не удалось корректно смоделировать/проверить на слух; calls/BT/TalkBack без оборудования — NOT RUN.
+
+### v0.4.7 100-cycle reconnect attempt (FAIL, 2026-11-08)
+
+Автоматизированный прогон: Child Wi-Fi off 10 s → on, ожидание обеих MediaFlowing, повтор.
+
+- Циклы 1–6: PASS, восстановление 26 s каждый.
+- Цикл 7: FAIL — за 135 s не восстановилось: Child «Подключение…» (Connecting), Parent alarm
+  «Связь потеряна!»; прогон остановлен, устройства очищены.
+- **100 циклов НЕ пройдены** (6 PASS, затем деградация; аналогично v0.3.1 — до 8 циклов).
+  Нужна методика с паузами/перезапуском Wi-Fi адаптера и/или другой точкой сбоя; не заявляется.
+
 ### v0.4.4 rogue/flood single-device (nova Y90, no Parent, 2026-11-08): versionCode 404 install PASS;
 Child Advertising/Media Connecting, listener 0.0.0.0:47800. Host (192.168.3.x) сделал 3 rogue TCP
 connect+close → Child остался Connecting (retry Accept/cooldown), notification «Подключение…», crash

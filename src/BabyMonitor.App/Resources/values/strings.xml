@@ -116,4 +116,34 @@
     <string name="diagnostics_error_format">{0}: {1}</string>
     <string name="diagnostics_unexpected_error">Не удалось обновить диагностику. Повторите позже.</string>
     <string name="monitoring_diagnostics_button">Диагностика</string>
+    <!-- 009: app auto-update (GitHub Releases) -->
+    <string name="updates_button">Обновления</string>
+    <string name="cd_updates_button">Открыть экран обновлений</string>
+    <string name="update_label">Обновления</string>
+    <string name="update_title">Обновления</string>
+    <string name="update_current_version_format">Текущая версия: {0}</string>
+    <string name="update_latest_version_format">Доступна версия: {0}</string>
+    <string name="update_status_idle">Проверьте наличие обновлений</string>
+    <string name="update_status_checking">Проверка обновлений…</string>
+    <string name="update_status_up_to_date">У вас последняя версия</string>
+    <string name="update_status_update_available">Доступно обновление</string>
+    <string name="update_status_downloading">Загрузка обновления…</string>
+    <string name="update_status_install_requested">Подтвердите установку в системном диалоге</string>
+    <string name="update_status_install_succeeded">Установка подтверждена</string>
+    <string name="update_status_install_cancelled">Установка отменена</string>
+    <string name="update_status_failed">Не удалось выполнить операцию</string>
+    <string name="update_check_button">ПРОВЕРИТЬ ОБНОВЛЕНИЯ</string>
+    <string name="update_install_button">СКАЧАТЬ И УСТАНОВИТЬ</string>
+    <string name="update_auto_check">Проверять автоматически раз в сутки (только Wi-Fi)</string>
+    <string name="update_back">Назад</string>
+    <string name="update_error_format">{0}: {1}</string>
+    <string name="update_network_note">Обновления скачиваются только по Wi-Fi; установку подтверждает пользователь.</string>
+    <string name="update_progress_cd">Загрузка обновления</string>
+    <string name="cd_update_check">Проверить обновления</string>
+    <string name="cd_update_install">Скачать и установить обновление</string>
+    <string name="cd_update_back">Вернуться к выбору роли</string>
+    <string name="update_available_title">Доступно обновление</string>
+    <string name="update_available_message">Доступна версия {0}. Обновить сейчас?</string>
+    <string name="update_available_now">Обновить</string>
+    <string name="update_available_later">Позже</string>
 </resources>

@@ -14,6 +14,45 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 фоновой сессии на экране выбора роли) и 008 (release readiness, owner-gated публикация/лицензия/
 дистрибуция).
 
+## [0.5.0] - 2026-11-09
+
+### Added
+
+- **Автообновление приложения (009, ADR-0012)**: репозиторий публичный по решению владельца; приложение
+  проверяет обновления из публичных GitHub Releases (asset update-manifest.json + подписанный APK).
+  - кнопка «Проверить обновления» и автоматическая проверка при запуске (не чаще 1 раза в 24 часа,
+    только Wi-Fi/LAN, отключаемо чекбоксом, настройка сохраняется);
+  - сверка packageId, schemaVersion, versionCode (только новее), размера и SHA-256 манифеста;
+    обязательная проверка, что signing certificate SHA-256 APK совпадает с установленным приложением;
+  - скачивание APK только по Wi-Fi в cache, прогресс; установка только через PackageInstaller с
+    обязательным подтверждением пользователя; при запрете «неизвестных источников» открывается экран
+    настроек; silent/background install запрещён;
+  - UI «Обновления»: текущая/доступная версия, статус, typed ошибки, кнопки проверки/установки,
+    чекбокс авто-проверки; при авто-проверке — диалог «Доступно обновление»;
+  - release workflow генерирует и прикладывает update-manifest.json к каждому release (с v0.5.0).
+- Новая иконка приложения (адаптивная, monochrome для Android 13+): «детский монитор» с месяцем,
+  звуковыми волнами и heart-индикатором; legacy/adaptive/monochrome ресурсы, preview в artifacts.
+- Тесты: Domain AppVersion (48), Application coordinator (318), Infrastructure source/downloader (232),
+  Architecture 59; всего **657/657**.
+
+### Security
+
+- Нет токенов/секретов в APK; HTTPS system trust + проверка финального redirect URI (https/host
+  allowlist); typed отказы для downgrade/equal,
+  package mismatch, hash mismatch, signature mismatch, unsupported schema; установка только
+  user-confirmed; REQUEST_INSTALL_PACKAGES — единственный новый permission (не dangerous).
+- Манифест **не подписан**: компрометация GitHub-аккаунта может подменить version/sha256/size/notes;
+  trust anchor — проверка подписи APK против установленной (чужой APK не установится), плюс
+  MaxApkSizeBytes/versionCode/downgrade. Подпись manifest — future work. Residual: GitHub
+  availability/redirect, CA-компрометация (signature anchor сохраняется), Huawei unknown-sources UX —
+  device-only.
+
+### Device status
+
+- v0.5.0 device-test pending: установить на оба Huawei, опубликовать v0.5.1, проверить manual/auto
+  check, SHA/signature, PackageInstaller установку, Wi-Fi-only и отключение; затем обновить docs/009.
+  Ранее: 007 T053 PASS, 100-cycle attempt 6 PASS/7 FAIL (не заявляется), остальная 007-матрица partial.
+
 ## [0.4.7] - 2026-11-08
 
 ### Fixed
@@ -36,8 +75,11 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
   (Domain 38, Application 291, Infrastructure 172, Architecture 59); независимое review APPROVE; CI зелёный.
 - **Device v0.4.7 T053 retest PASS** (оба Huawei на adb): Child Wi-Fi off 10 s → auto-recovery обеих
   MediaFlowing через 26 s от начала flap (16 s после включения), без ручного рестарта; ещё 3 цикла —
-  26/29/26 s, без terminal Failed/crash; alarm во время outage снялся после восстановления. Остальные
-  T040/T043-пункты (media-only alarm, звук/вибрация/DND, calls/BT/TalkBack, 100 cycles/8h soak) — NOT RUN.
+  26/29/26 s, без terminal Failed/crash; alarm во время outage снялся после восстановления.
+- **Device v0.4.7 UI**: Home/background FGS PASS (обе flowing + FGS alive после 20 s в фоне); Child clean
+  Stop → Stopped + notification removed, Parent standalone alarm (ожидаемо); Parent clean Stop → Stopped,
+  alarm снят, уведомления очищены; crash buffers пусты. Media-only alarm/звук-вибрация-DND/calls/BT/
+  TalkBack/100 cycles/8h soak/OEM — NOT RUN (100-cycle прогон выполняется).
 
 ## [0.4.6] - 2026-11-08
 

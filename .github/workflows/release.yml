@@ -415,6 +415,31 @@ jobs:
           sha256sum ./*-Signed.apk > app-release.apk.sha256
           cat app-release.apk.sha256
 
+      - name: Generate update manifest
+        run: |
+          set -euo pipefail
+          APK="$(ls artifacts/release-apk/*-Signed.apk)"
+          APK_NAME="$(basename "$APK")"
+          APK_SIZE="$(stat -c%s "$APK")"
+          APK_SHA="$(sha256sum "$APK" | awk '{print $1}')"
+          APP_ID="$(dotnet msbuild src/BabyMonitor.App/BabyMonitor.App.csproj -getProperty:ApplicationId -nologo | tail -n 1 | tr -d '[:space:]')"
+          PUBLISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          cat > artifacts/release-apk/update-manifest.json <<EOF
+          {
+            "schemaVersion": 1,
+            "packageId": "$APP_ID",
+            "versionName": "$VERSION",
+            "versionCode": $VERSION_CODE,
+            "apkAssetName": "$APK_NAME",
+            "sha256": "$APK_SHA",
+            "sizeBytes": $APK_SIZE,
+            "notes": "Release $VERSION",
+            "publishedAt": "$PUBLISHED_AT"
+          }
+          EOF
+          cat artifacts/release-apk/update-manifest.json
+          jq empty artifacts/release-apk/update-manifest.json
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -423,6 +448,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             artifacts/release-apk/*-Signed.apk \
             artifacts/release-apk/app-release.apk.sha256 \
+            artifacts/release-apk/update-manifest.json \
             --repo "$GITHUB_REPOSITORY" \
             --title "Радионяня $VERSION" \
             --generate-notes \

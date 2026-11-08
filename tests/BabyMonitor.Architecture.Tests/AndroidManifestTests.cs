@@ -4,7 +4,7 @@ namespace BabyMonitor.Architecture.Tests;
 
 /// <summary>
 /// Гигиена AndroidManifest: минимальные разрешения для discovery (002), foreground monitoring (003)
-/// и pairing-камеры (006 phase 2); отсутствие microphone permissions сверх явно необходимого
+/// pairing-камеры (006 phase 2) и автообновления (009: REQUEST_INSTALL_PACKAGES); отсутствие microphone permissions сверх явно необходимого
 /// (Parent не должен получать RECORD_AUDIO «на всякий случай»).
 /// </summary>
 public sealed class AndroidManifestTests
@@ -23,6 +23,7 @@ public sealed class AndroidManifestTests
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
+        "android.permission.REQUEST_INSTALL_PACKAGES",
     ];
 
     private static readonly string[] ForbiddenPermissions =
