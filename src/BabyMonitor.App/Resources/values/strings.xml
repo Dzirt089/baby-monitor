@@ -129,6 +129,8 @@
     <string name="update_status_update_available">Доступно обновление</string>
     <string name="update_status_downloading">Загрузка обновления…</string>
     <string name="update_status_install_requested">Подтвердите установку в системном диалоге</string>
+    <string name="update_status_install_succeeded">Установка подтверждена</string>
+    <string name="update_status_install_cancelled">Установка отменена</string>
     <string name="update_status_failed">Не удалось выполнить операцию</string>
     <string name="update_check_button">ПРОВЕРИТЬ ОБНОВЛЕНИЯ</string>
     <string name="update_install_button">СКАЧАТЬ И УСТАНОВИТЬ</string>

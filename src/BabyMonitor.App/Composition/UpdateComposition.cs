@@ -24,6 +24,7 @@ internal sealed class UpdateComposition : IAsyncDisposable
     private readonly AndroidConnectivityMonitor _connectivity;
     private readonly IUpdateSettingsStore _settings;
     private readonly IAppVersionProvider _versionProvider;
+    private readonly UpdateInstallStatusSource _installStatusSource;
     private int _disposed;
 
     /// <summary>Создаёт composition root обновлений.</summary>
@@ -38,6 +39,7 @@ internal sealed class UpdateComposition : IAsyncDisposable
 
         _versionProvider = new AndroidAppVersionProvider(applicationContext);
         _settings = new AndroidUpdateSettingsStore(applicationContext);
+        _installStatusSource = new UpdateInstallStatusSource(applicationContext);
         _connectivity = new AndroidConnectivityMonitor(applicationContext);
         _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(HttpTimeoutSeconds) };
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
@@ -63,7 +65,8 @@ internal sealed class UpdateComposition : IAsyncDisposable
     public bool AutoCheckEnabled => _settings.AutoCheckEnabled;
 
     /// <summary>Создаёт ViewModel экрана обновлений (per-Activity).</summary>
-    public UpdateViewModel CreateViewModel() => new(Coordinator, _settings, _versionProvider);
+    public UpdateViewModel CreateViewModel() =>
+        new(Coordinator, _settings, _versionProvider, _installStatusSource);
 
     /// <summary>Фоновая автопроверка при запуске (throttle/Wi-Fi gate — внутри координатора).</summary>
     /// <param name="cancellationToken">Отмена при завершении Activity.</param>
@@ -78,6 +81,7 @@ internal sealed class UpdateComposition : IAsyncDisposable
             return;
         }
 
+        _installStatusSource.Dispose();
         _httpClient.Dispose();
         await _connectivity.DisposeAsync().ConfigureAwait(false);
     }

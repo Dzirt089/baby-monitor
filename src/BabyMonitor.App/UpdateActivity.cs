@@ -17,6 +17,9 @@ namespace BabyMonitor.App;
 [Activity(Label = "@string/update_label", Exported = false)]
 public sealed class UpdateActivity : PermissionActivity
 {
+    /// <summary>Intent extra: при открытии сразу выполнить ручную проверку обновлений.</summary>
+    public const string ExtraAutoCheckOnOpen = "babymonitor.updates.auto_check_on_open";
+
     private readonly EventHandler _modelChangedHandler;
     private readonly CancellationTokenSource _lifetime = new();
     private UpdateViewModel? _model;
@@ -29,6 +32,7 @@ public sealed class UpdateActivity : PermissionActivity
     private Button? _check;
     private Button? _install;
     private Button? _back;
+    private Task? _initialCheck;
     private bool _suppressAutoCheck;
 
     /// <summary>Создаёт Activity.</summary>
@@ -73,6 +77,11 @@ public sealed class UpdateActivity : PermissionActivity
         _autoCheck!.CheckedChange += OnAutoCheckChanged;
 
         Render();
+        var autoCheckModel = _model;
+        if (autoCheckModel is not null && Intent?.GetBooleanExtra(ExtraAutoCheckOnOpen, false) == true)
+        {
+            _initialCheck = ExecuteAsync(token => autoCheckModel.CheckAsync(token));
+        }
     }
 
     /// <inheritdoc />
@@ -207,6 +216,8 @@ public sealed class UpdateActivity : PermissionActivity
         UpdateScreenStatus.UpdateAvailable => Resource.String.update_status_update_available,
         UpdateScreenStatus.Downloading => Resource.String.update_status_downloading,
         UpdateScreenStatus.InstallRequested => Resource.String.update_status_install_requested,
+        UpdateScreenStatus.InstallSucceeded => Resource.String.update_status_install_succeeded,
+        UpdateScreenStatus.InstallCancelled => Resource.String.update_status_install_cancelled,
         UpdateScreenStatus.Failed => Resource.String.update_status_failed,
         _ => Resource.String.update_status_idle
     };

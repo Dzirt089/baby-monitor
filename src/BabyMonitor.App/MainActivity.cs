@@ -59,7 +59,17 @@ public sealed class MainActivity : PermissionActivity
         StartActivity(intent);
     }
 
-    private void OpenUpdates() => StartActivity(new Intent(this, typeof(UpdateActivity)));
+    private void OpenUpdates(bool checkImmediately = false)
+    {
+        var intent = new Intent(this, typeof(UpdateActivity));
+        if (checkImmediately)
+        {
+            // Диалог «Доступно обновление»: экран сразу показывает найденное обновление.
+            intent.PutExtra(UpdateActivity.ExtraAutoCheckOnOpen, true);
+        }
+
+        StartActivity(intent);
+    }
 
     /// <summary>
     /// Запускает фоновую автопроверку обновлений, если она включена. Wi-Fi gate и суточный throttle
@@ -114,7 +124,9 @@ public sealed class MainActivity : PermissionActivity
             CultureInfo.InvariantCulture,
             GetString(Resource.String.update_available_message),
             update.Manifest.VersionName));
-        builder.SetPositiveButton(GetString(Resource.String.update_available_now), (_, _) => OpenUpdates());
+        builder.SetPositiveButton(
+            GetString(Resource.String.update_available_now),
+            (_, _) => OpenUpdates(checkImmediately: true));
         builder.SetNegativeButton(GetString(Resource.String.update_available_later), (_, _) => { });
         builder.Show();
     }

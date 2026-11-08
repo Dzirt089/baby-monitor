@@ -313,6 +313,107 @@ public sealed class ApkUpdateDownloaderTests
     }
 
     [Fact]
+    public async Task Размер_apk_больше_максимума_отклоняется_без_запроса()
+    {
+        var apkBytes = UpdateTestData.CreateApkBytes(512);
+        var manifest = UpdateTestData.CreateManifest(apkBytes, sizeBytes: UpdateLimits.MaxApkSizeBytes + 1);
+        var handler = new FakeHttpMessageHandler((_, _) => Task.FromResult(UpdateTestData.BytesResponse(apkBytes)));
+        using var httpClient = new HttpClient(handler);
+        using var cache = new TempCacheDirectory();
+        var downloader = new ApkUpdateDownloader(httpClient, cache.Path);
+
+        var result = await downloader.DownloadAsync(manifest, null, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(AppUpdateErrorCodes.InvalidManifest, result.Error!.Code);
+        Assert.Equal(0, handler.CallCount);
+        Assert.Empty(cache.GetFileNames());
+    }
+
+    [Fact]
+    public async Task Слишком_длинное_имя_апк_отклоняется_без_запроса()
+    {
+        var apkBytes = UpdateTestData.CreateApkBytes(512);
+        var longName = new string('a', UpdateLimits.MaxApkAssetNameLength) + ".apk";
+        var manifest = UpdateTestData.CreateManifest(apkBytes, longName);
+        var handler = new FakeHttpMessageHandler((_, _) => Task.FromResult(UpdateTestData.BytesResponse(apkBytes)));
+        using var httpClient = new HttpClient(handler);
+        using var cache = new TempCacheDirectory();
+        var downloader = new ApkUpdateDownloader(httpClient, cache.Path);
+
+        var result = await downloader.DownloadAsync(manifest, null, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(AppUpdateErrorCodes.InvalidManifest, result.Error!.Code);
+        Assert.Equal(0, handler.CallCount);
+    }
+
+    [Theory]
+    [InlineData("http://github.com/Dzirt089/baby-monitor/releases/latest/download/BabyMonitor-0.5.1.apk")]
+    [InlineData("https://evil.example/BabyMonitor-0.5.1.apk")]
+    [InlineData("https://github.com.evil.example/BabyMonitor-0.5.1.apk")]
+    public async Task Финальный_redirect_на_недопустимый_адрес_даёт_download_failed(string finalUri)
+    {
+        var apkBytes = UpdateTestData.CreateApkBytes(1024);
+        var manifest = UpdateTestData.CreateManifest(apkBytes);
+        var handler = new FakeHttpMessageHandler((_, _) =>
+        {
+            var response = UpdateTestData.BytesResponse(apkBytes);
+            response.RequestMessage = new HttpRequestMessage(HttpMethod.Get, finalUri);
+            return Task.FromResult(response);
+        });
+        using var httpClient = new HttpClient(handler);
+        using var cache = new TempCacheDirectory();
+        var downloader = new ApkUpdateDownloader(httpClient, cache.Path);
+
+        var result = await downloader.DownloadAsync(manifest, null, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(AppUpdateErrorCodes.DownloadFailed, result.Error!.Code);
+        Assert.Empty(cache.GetFileNames());
+    }
+
+    [Fact]
+    public async Task Финальный_redirect_на_githubusercontent_допускается()
+    {
+        var apkBytes = UpdateTestData.CreateApkBytes(1024);
+        var manifest = UpdateTestData.CreateManifest(apkBytes);
+        var handler = new FakeHttpMessageHandler((_, _) =>
+        {
+            var response = UpdateTestData.BytesResponse(apkBytes);
+            response.RequestMessage = new HttpRequestMessage(
+                HttpMethod.Get,
+                "https://release-assets.githubusercontent.com/github-production-release-asset/BabyMonitor-0.5.1.apk");
+            return Task.FromResult(response);
+        });
+        using var httpClient = new HttpClient(handler);
+        using var cache = new TempCacheDirectory();
+        var downloader = new ApkUpdateDownloader(httpClient, cache.Path);
+
+        var result = await downloader.DownloadAsync(manifest, null, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error?.Code);
+        Assert.Equal(apkBytes, await File.ReadAllBytesAsync(result.Value.FilePath));
+    }
+
+    [Fact]
+    public async Task Таймаут_загрузки_по_TimeProvider_даёт_download_failed()
+    {
+        var apkBytes = UpdateTestData.CreateApkBytes(1024);
+        var manifest = UpdateTestData.CreateManifest(apkBytes);
+        var handler = new FakeHttpMessageHandler((_, _) => Task.FromResult(UpdateTestData.BytesResponse(apkBytes)));
+        using var httpClient = new HttpClient(handler);
+        using var cache = new TempCacheDirectory();
+        var downloader = new ApkUpdateDownloader(httpClient, cache.Path, new ImmediateTimerTimeProvider());
+
+        var result = await downloader.DownloadAsync(manifest, null, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(AppUpdateErrorCodes.DownloadFailed, result.Error!.Code);
+        Assert.Empty(cache.GetFileNames());
+    }
+
+    [Fact]
     public async Task Повторная_загрузка_перезаписывает_существующий_файл()
     {
         var apkBytes = UpdateTestData.CreateApkBytes(2048);

@@ -30,16 +30,22 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
   - UI «Обновления»: текущая/доступная версия, статус, typed ошибки, кнопки проверки/установки,
     чекбокс авто-проверки; при авто-проверке — диалог «Доступно обновление»;
   - release workflow генерирует и прикладывает update-manifest.json к каждому release (с v0.5.0).
-- Тесты: Domain AppVersion (48), Application coordinator (310), Infrastructure source/downloader (219),
-  Architecture 59; всего **636/636**.
+- Новая иконка приложения (адаптивная, monochrome для Android 13+): «детский монитор» с месяцем,
+  звуковыми волнами и heart-индикатором; legacy/adaptive/monochrome ресурсы, preview в artifacts.
+- Тесты: Domain AppVersion (48), Application coordinator (318), Infrastructure source/downloader (232),
+  Architecture 59; всего **657/657**.
 
 ### Security
 
-- Нет токенов/секретов в APK; HTTPS system trust; no cleartext; typed отказы для downgrade/equal,
+- Нет токенов/секретов в APK; HTTPS system trust + проверка финального redirect URI (https/host
+  allowlist); typed отказы для downgrade/equal,
   package mismatch, hash mismatch, signature mismatch, unsupported schema; установка только
   user-confirmed; REQUEST_INSTALL_PACKAGES — единственный новый permission (не dangerous).
-- Манифест не подписан; trust anchor — проверка подписи APK против установленной. Residual: GitHub
-  availability/redirect и Huawei unknown-sources UX — device-only.
+- Манифест **не подписан**: компрометация GitHub-аккаунта может подменить version/sha256/size/notes;
+  trust anchor — проверка подписи APK против установленной (чужой APK не установится), плюс
+  MaxApkSizeBytes/versionCode/downgrade. Подпись manifest — future work. Residual: GitHub
+  availability/redirect, CA-компрометация (signature anchor сохраняется), Huawei unknown-sources UX —
+  device-only.
 
 ### Device status
 

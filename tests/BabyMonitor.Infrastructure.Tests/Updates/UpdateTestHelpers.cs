@@ -21,12 +21,17 @@ internal sealed class FakeHttpMessageHandler : HttpMessageHandler
 
     public int CallCount => Requests.Count;
 
-    protected override Task<HttpResponseMessage> SendAsync(
+    protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
         Requests.Add(request);
-        return _handler(request, cancellationToken);
+        var response = await _handler(request, cancellationToken).ConfigureAwait(false);
+
+        // Как и реальный SocketsHttpHandler: финальный RequestUri ответа доступен для проверки
+        // redirect-цепочки. Тест может подменить его явно (http/чужой хост) — тогда не перезаписываем.
+        response.RequestMessage ??= request;
+        return response;
     }
 }
 

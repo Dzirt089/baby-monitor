@@ -255,6 +255,84 @@ public sealed class GitHubReleaseUpdateSourceTests
     }
 
     [Fact]
+    public async Task Размер_apk_больше_максимума_даёт_invalid_manifest()
+    {
+        var apkBytes = UpdateTestData.CreateApkBytes(256);
+        var json = UpdateTestData.CreateManifestJson(
+            apkBytes,
+            manifest => manifest["sizeBytes"] = UpdateLimits.MaxApkSizeBytes + 1);
+        var handler = new FakeHttpMessageHandler((_, _) => Task.FromResult(UpdateTestData.JsonResponse(json)));
+        using var httpClient = new HttpClient(handler);
+        var source = new GitHubReleaseUpdateSource(httpClient);
+
+        var result = await source.GetLatestManifestAsync(CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(AppUpdateErrorCodes.InvalidManifest, result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task Слишком_длинное_имя_апк_ассета_отклоняется()
+    {
+        var apkBytes = UpdateTestData.CreateApkBytes(256);
+        var longName = new string('a', UpdateLimits.MaxApkAssetNameLength) + ".apk";
+        var json = UpdateTestData.CreateManifestJson(apkBytes, manifest => manifest["apkAssetName"] = longName);
+        var handler = new FakeHttpMessageHandler((_, _) => Task.FromResult(UpdateTestData.JsonResponse(json)));
+        using var httpClient = new HttpClient(handler);
+        var source = new GitHubReleaseUpdateSource(httpClient);
+
+        var result = await source.GetLatestManifestAsync(CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(AppUpdateErrorCodes.InvalidManifest, result.Error!.Code);
+    }
+
+    [Theory]
+    [InlineData("http://github.com/Dzirt089/baby-monitor/releases/latest/download/update-manifest.json")]
+    [InlineData("https://evil.example/update-manifest.json")]
+    [InlineData("https://github.com.evil.example/update-manifest.json")]
+    public async Task Финальный_redirect_на_недопустимый_адрес_даёт_network(string finalUri)
+    {
+        var apkBytes = UpdateTestData.CreateApkBytes(256);
+        var json = UpdateTestData.CreateManifestJson(apkBytes);
+        var handler = new FakeHttpMessageHandler((_, _) =>
+        {
+            var response = UpdateTestData.JsonResponse(json);
+            response.RequestMessage = new HttpRequestMessage(HttpMethod.Get, finalUri);
+            return Task.FromResult(response);
+        });
+        using var httpClient = new HttpClient(handler);
+        var source = new GitHubReleaseUpdateSource(httpClient);
+
+        var result = await source.GetLatestManifestAsync(CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(AppUpdateErrorCodes.Network, result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task Финальный_redirect_на_githubusercontent_допускается()
+    {
+        var apkBytes = UpdateTestData.CreateApkBytes(256);
+        var json = UpdateTestData.CreateManifestJson(apkBytes);
+        var handler = new FakeHttpMessageHandler((_, _) =>
+        {
+            var response = UpdateTestData.JsonResponse(json);
+            response.RequestMessage = new HttpRequestMessage(
+                HttpMethod.Get,
+                "https://objects.githubusercontent.com/github-production-release-asset/update-manifest.json");
+            return Task.FromResult(response);
+        });
+        using var httpClient = new HttpClient(handler);
+        var source = new GitHubReleaseUpdateSource(httpClient);
+
+        var result = await source.GetLatestManifestAsync(CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error?.Code);
+        Assert.Equal(UpdateTestData.PackageId, result.Value.PackageId);
+    }
+
+    [Fact]
     public async Task Таймаут_запроса_по_TimeProvider_даёт_network()
     {
         var handler = new FakeHttpMessageHandler(async (_, cancellationToken) =>

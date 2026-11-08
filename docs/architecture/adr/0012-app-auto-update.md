@@ -32,6 +32,22 @@ APK запрещено (утечка секрета). Play-канал (008) по
 − Huawei unknown-sources UI требует device-проверки.
 − Auto-check только online-режим; при недоступности GitHub — typed error/retry позже.
 
+## Threat model / trust boundary
+
+- **Manifest не подписан**. Компрометация GitHub-аккаунта/репозитория может подменить manifest (version/
+  sha256/size/notes). Trust anchor — подпись APK: перед установкой signing cert SHA-256 APK сравнивается
+  с установленным приложением; чужой APK установить нельзя. Подмена version/size ограничивается
+  MaxApkSizeBytes/versionCode/downgrade, но compromised manifest может показать ложную versionName —
+  accept risk до подписания manifest (future work).
+- **HTTPS/redirect**: system trust; исходный URL https github.com; финальный RequestUri после redirect
+  проверяется на https + host allowlist (github.com/githubusercontent). При компрометации CA/канала
+  signature check остаётся trust anchor; cleartext запрещён.
+- **Signing-key compromise**: обновление может установить кто угодно с ключом release; ротация ключа —
+  owner-gated 008; signature mismatch by design при смене ключа.
+- **Disk exhaustion**: MaxApkSizeBytes (200 MB) и лимит manifest 64 KiB; temp cleanup.
+- **User confirmation**: PackageInstaller PendingUserAction intent запускается приложением; silent install
+  невозможен; unknown-sources проверяется.
+
 ## Alternatives
 
 - Play In-App Updates (008/Play) — позже.

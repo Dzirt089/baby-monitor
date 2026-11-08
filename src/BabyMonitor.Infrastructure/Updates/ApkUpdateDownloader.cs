@@ -17,9 +17,7 @@ public sealed class ApkUpdateDownloader : IUpdatePackageDownloader
 
     private const string TempFilePrefix = "babymonitor-update-";
     private const string TempFileSuffix = ".apk.tmp";
-    private const int Sha256HexLength = 64;
     private const int BufferBytes = 81920;
-    private const int MinApkAssetNameLength = 5; // длиннее, чем ".apk" (имя файла без базы не допускается)
 
     private static readonly TimeSpan StaleTempFileAge = TimeSpan.FromHours(24);
     private static readonly Uri ReleaseDownloadBaseUri = new(ReleaseDownloadBaseUrl, UriKind.Absolute);
@@ -60,13 +58,30 @@ public sealed class ApkUpdateDownloader : IUpdatePackageDownloader
 
         // Защитная перепроверка полей (манифест мог прийти не от этого source-адаптера).
         if (manifest.SizeBytes <= 0
-            || !IsValidSha256(manifest.Sha256)
-            || !IsSafeApkAssetName(manifest.ApkAssetName))
+            || manifest.SizeBytes > UpdateLimits.MaxApkSizeBytes
+            || !UpdateLimits.IsValidSha256(manifest.Sha256)
+            || !UpdateLimits.IsSafeApkAssetName(manifest.ApkAssetName))
         {
             return Result<DownloadedUpdatePackage>.Failure(InvalidManifestError());
         }
 
-        var assetUri = BuildAssetUri(manifest.ApkAssetName);
+        Uri assetUri;
+        string tempPath;
+        string finalPath;
+        try
+        {
+            // LOW: построение URI/пути из недоверенного имени ассета — в try; любая ошибка = invalid_manifest.
+            assetUri = BuildAssetUri(manifest.ApkAssetName);
+            tempPath = Path.Combine(
+                _cacheDirectory,
+                TempFilePrefix + Guid.NewGuid().ToString("N") + TempFileSuffix);
+            finalPath = Path.Combine(_cacheDirectory, manifest.ApkAssetName);
+        }
+        catch (Exception exception) when (exception is ArgumentException or UriFormatException or NotSupportedException or PathTooLongException)
+        {
+            return Result<DownloadedUpdatePackage>.Failure(InvalidManifestError());
+        }
+
         try
         {
             Directory.CreateDirectory(_cacheDirectory);
@@ -82,16 +97,29 @@ public sealed class ApkUpdateDownloader : IUpdatePackageDownloader
 
         TryCleanupStaleTempFiles();
 
-        var tempPath = Path.Combine(
-            _cacheDirectory,
-            TempFilePrefix + Guid.NewGuid().ToString("N") + TempFileSuffix);
-        var finalPath = Path.Combine(_cacheDirectory, manifest.ApkAssetName);
+        // LOW: HttpClient.Timeout не ограничивает чтение уже полученного потока — общий bounded timeout
+        // на всю загрузку (через TimeProvider, как и очистка temp); caller cancellation сохраняется.
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var timeoutTimer = _timeProvider.CreateTimer(
+            static state => UpdateLimits.CancelOnTimeout((CancellationTokenSource)state!),
+            timeoutCts,
+            UpdateLimits.DownloadTimeout,
+            Timeout.InfiniteTimeSpan);
+        var operationToken = timeoutCts.Token;
+
         var completed = false;
         try
         {
             using var response = await _httpClient
-                .GetAsync(assetUri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .GetAsync(assetUri, HttpCompletionOption.ResponseHeadersRead, operationToken)
                 .ConfigureAwait(false);
+
+            // M3: финальный адрес после redirect обязан быть HTTPS на разрешённом GitHub/asset-CDN хосте.
+            if (!UpdateLimits.IsAllowedFinalUri(response.RequestMessage?.RequestUri))
+            {
+                return Result<DownloadedUpdatePackage>.Failure(DownloadFailedError());
+            }
+
             response.EnsureSuccessStatusCode();
 
             if (response.Content.Headers.ContentLength is { } contentLength
@@ -101,7 +129,7 @@ public sealed class ApkUpdateDownloader : IUpdatePackageDownloader
             }
 
             await using var source = await response.Content
-                .ReadAsStreamAsync(cancellationToken)
+                .ReadAsStreamAsync(operationToken)
                 .ConfigureAwait(false);
             await using (var destination = new FileStream(
                 tempPath,
@@ -114,22 +142,23 @@ public sealed class ApkUpdateDownloader : IUpdatePackageDownloader
             {
                 var buffer = new byte[BufferBytes];
                 long totalBytes = 0;
+                var maxDownloadBytes = Math.Min(manifest.SizeBytes, UpdateLimits.MaxApkSizeBytes);
                 int read;
-                while ((read = await source.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+                while ((read = await source.ReadAsync(buffer, operationToken).ConfigureAwait(false)) > 0)
                 {
                     totalBytes += read;
-                    if (totalBytes > manifest.SizeBytes)
+                    if (totalBytes > maxDownloadBytes)
                     {
                         // Размер уже превысил манифест: не продолжаем писать недоверенные данные.
                         return Result<DownloadedUpdatePackage>.Failure(DownloadFailedError());
                     }
 
-                    await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                    await destination.WriteAsync(buffer.AsMemory(0, read), operationToken).ConfigureAwait(false);
                     hash.AppendData(buffer, 0, read);
                     ReportProgress(progress, totalBytes, manifest.SizeBytes);
                 }
 
-                await destination.FlushAsync(cancellationToken).ConfigureAwait(false);
+                await destination.FlushAsync(operationToken).ConfigureAwait(false);
                 if (totalBytes != manifest.SizeBytes)
                 {
                     return Result<DownloadedUpdatePackage>.Failure(DownloadFailedError());
@@ -146,6 +175,11 @@ public sealed class ApkUpdateDownloader : IUpdatePackageDownloader
             completed = true;
             progress?.Report(1.0);
             return Result<DownloadedUpdatePackage>.Success(new DownloadedUpdatePackage(manifest, finalPath));
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Таймаут потоковой загрузки (не отмена вызывающего): typed download_failed, temp удалит finally.
+            return Result<DownloadedUpdatePackage>.Failure(DownloadFailedError());
         }
         catch (OperationCanceledException)
         {
@@ -245,47 +279,6 @@ public sealed class ApkUpdateDownloader : IUpdatePackageDownloader
         }
 
         progress.Report(Math.Min(1.0, (double)bytesDownloaded / totalBytes));
-    }
-
-    private static bool IsValidSha256(string value)
-    {
-        if (value.Length != Sha256HexLength)
-        {
-            return false;
-        }
-
-        foreach (var character in value)
-        {
-            if (!char.IsAsciiHexDigit(character))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool IsSafeApkAssetName(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value)
-            || value.Length < MinApkAssetNameLength
-            || value.Contains('/', StringComparison.Ordinal)
-            || value.Contains('\\', StringComparison.Ordinal)
-            || value.Contains("..", StringComparison.Ordinal)
-            || !value.EndsWith(".apk", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        foreach (var character in value)
-        {
-            if (char.IsControl(character))
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private static Error DownloadFailedError() => new(

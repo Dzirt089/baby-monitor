@@ -14,9 +14,11 @@
 
 ## Phase 3 — Platform.Android
 - [x] T006 AndroidAppVersionProvider, AndroidUpdateSettingsStore (SharedPreferences), DI/composition.
-- [x] T007 AndroidApkUpdateInstaller: cert SHA-256 compare, package/version checks, PackageInstaller,
-  FileProvider, unknown-sources intent; manifest permission REQUEST_INSTALL_PACKAGES.
-- [x] T008 Signature verification tests/adapters where possible; manual device checks.
+- [x] T007 AndroidApkUpdateInstaller: cert SHA-256 compare, package/version checks, PackageInstaller +
+  запуск системного confirmation EXTRA_INTENT, unknown-sources intent; манифест REQUEST_INSTALL_PACKAGES;
+  FileProvider не используется.
+- [-] T008 Signature verification: pure comparer вынесен в Application + tests; Android installer/receiver
+  device-only (pending T013); automated instrumentation нет.
 
 ## Phase 4 — UI
 - [x] T009 UpdateActivity/ViewModel: current/latest, check button, status/error, download+install button,
@@ -34,5 +36,5 @@
 
 | Дата | Проверка | Результат |
 |---|---|---|
-| 2026-11-09 | 009 code gates | Domain 48, Application 310, Infrastructure 219, Architecture 59 = 636/636; Debug/Release 0 warnings; format clean; vuln OK |
+| 2026-11-09 | 009 final code gates (after review fixes) | Domain 48, Application 318, Infrastructure 232, Architecture 59 = 657/657; Debug/Release 0 warnings; format clean; vuln OK; BLOCKER PendingUserAction fix + comparer/limits/redirect/timeout fixes; app icon |
 | — | — | — |

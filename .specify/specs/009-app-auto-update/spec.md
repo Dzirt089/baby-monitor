@@ -22,9 +22,10 @@
    включение/выключение авто-проверки (persisted), загрузка + проверка SHA-256/size + установка.
 3. Infrastructure: HTTPS GET манифеста (System.Text.Json, schema validation), download APK в cache,
    SHA-256/size verification; typed errors; no secrets.
-4. Platform.Android: PackageInstaller session + подтверждение пользователем; проверка подписи APK
-   (SHA-256 signing certificates) совпадает с установленной; REQUEST_INSTALL_PACKAGES; FileProvider;
-   unknown-sources flow; отказ при mismatch/downgrade.
+4. Platform.Android: PackageInstaller session + подтверждение пользователем (при STATUS_PENDING_USER_ACTION
+   приложение обязано запустить системный EXTRA_INTENT); проверка подписи APK (SHA-256 signing certificates)
+   совпадает с установленной; REQUEST_INSTALL_PACKAGES; unknown-sources flow; отказ при mismatch/downgrade.
+   FileProvider не используется (session copy).
 5. UI: экран «Обновления» с текущей/последней версией, кнопкой «Проверить обновления», статусом,
    кнопкой «Скачать и установить», чекбоксом «Проверять автоматически (раз в сутки, только Wi-Fi)».
    Авто-проверка при запуске (не чаще раза в сутки, Wi-Fi) с диалогом «Доступно обновление».

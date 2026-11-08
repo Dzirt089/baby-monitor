@@ -23,6 +23,9 @@ public sealed class AndroidApkUpdateInstaller : IUpdateInstaller
     private const string ApkSessionName = "base.apk";
     private const int InstallRequestCode = 9101;
 
+    /// <summary>PackageInstaller.SessionParams.USER_ACTION_REQUIRED (API 31+): подтверждение обязательно.</summary>
+    private const int UserActionRequired = 1;
+
     private readonly Context _context;
     private readonly PackageManager? _packageManager;
     private readonly string _packageId;
@@ -64,13 +67,24 @@ public sealed class AndroidApkUpdateInstaller : IUpdateInstaller
                 return Failure(AppUpdateErrorCodes.PackageMismatch, "Обновление относится к другому приложению.");
             }
 
+            // Cross-check: содержимое APK должно соответствовать манифесту, по которому он скачан.
+            var archiveVersionCode = PackageInfoVersionCode.Read(archive);
+            if (archiveVersionCode != package.Manifest.VersionCode
+                || (!string.IsNullOrEmpty(archive.VersionName)
+                    && !string.Equals(archive.VersionName, package.Manifest.VersionName, StringComparison.Ordinal)))
+            {
+                return Failure(
+                    AppUpdateErrorCodes.InstallFailed,
+                    "APK не соответствует манифесту обновления.");
+            }
+
             var installed = _packageManager?.GetPackageInfo(_packageId, GetSignatureFlags());
             if (installed is null)
             {
                 return Failure(AppUpdateErrorCodes.InstallFailed, "Установленное приложение не найдено.");
             }
 
-            if (PackageInfoVersionCode.Read(archive) <= PackageInfoVersionCode.Read(installed))
+            if (archiveVersionCode <= PackageInfoVersionCode.Read(installed))
             {
                 return Failure(
                     AppUpdateErrorCodes.DowngradeOrEqual,
@@ -79,7 +93,7 @@ public sealed class AndroidApkUpdateInstaller : IUpdateInstaller
 
             var apkSignatures = GetSha256Signatures(archive);
             var installedSignatures = GetSha256Signatures(installed);
-            if (!SignatureSetComparer.AreEqual(apkSignatures, installedSignatures))
+            if (!SigningCertificateSetComparer.AreEqual(apkSignatures, installedSignatures))
             {
                 return Failure(
                     AppUpdateErrorCodes.SignatureMismatch,
@@ -125,6 +139,12 @@ public sealed class AndroidApkUpdateInstaller : IUpdateInstaller
         try
         {
             var parameters = new PackageInstaller.SessionParams(PackageInstallMode.FullInstall);
+            if (OperatingSystem.IsAndroidVersionAtLeast(31))
+            {
+                // Явно требуем подтверждение пользователя (silent install запрещён, ADR-0012).
+                RequireUserAction(parameters);
+            }
+
             sessionId = installer.CreateSession(parameters);
             var session = installer.OpenSession(sessionId);
             if (session is null)
@@ -203,6 +223,10 @@ public sealed class AndroidApkUpdateInstaller : IUpdateInstaller
             output.Dispose();
         }
     }
+
+    [SupportedOSPlatform("android31.0")]
+    private static void RequireUserAction(PackageInstaller.SessionParams parameters) =>
+        parameters.SetRequireUserAction(UserActionRequired);
 
     [SupportedOSPlatform("android26.0")]
     private void OpenUnknownSourcesSettings()

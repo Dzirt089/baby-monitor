@@ -22,7 +22,6 @@ public sealed class GitHubReleaseUpdateSource : IAppUpdateSource
     internal static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(20);
 
     private const int MaxManifestBytes = 64 * 1024;
-    private const int Sha256HexLength = 64;
     private const int ReadBufferBytes = 4096;
 
     private static readonly Uri ManifestUri = new(ManifestUrl, UriKind.Absolute);
@@ -54,7 +53,7 @@ public sealed class GitHubReleaseUpdateSource : IAppUpdateSource
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using var timeoutTimer = _timeProvider.CreateTimer(
-            static state => CancelOnTimeout((CancellationTokenSource)state!),
+            static state => UpdateLimits.CancelOnTimeout((CancellationTokenSource)state!),
             timeoutCts,
             RequestTimeout,
             Timeout.InfiniteTimeSpan);
@@ -64,6 +63,14 @@ public sealed class GitHubReleaseUpdateSource : IAppUpdateSource
             using var response = await _httpClient
                 .GetAsync(ManifestUri, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token)
                 .ConfigureAwait(false);
+
+            // M3: финальный адрес после redirect-цепочки обязан быть HTTPS GitHub/asset-CDN;
+            // иначе — cleartext/чужой хост/downgrade, typed network-отказ.
+            if (!UpdateLimits.IsAllowedFinalUri(response.RequestMessage?.RequestUri))
+            {
+                return Result<AppUpdateManifest>.Failure(NetworkError());
+            }
+
             response.EnsureSuccessStatusCode();
 
             var manifestBytesResult = await ReadManifestBytesAsync(response, timeoutCts.Token).ConfigureAwait(false);
@@ -151,18 +158,20 @@ public sealed class GitHubReleaseUpdateSource : IAppUpdateSource
             }
 
             if (!TryGetRequiredNonEmptyString(root, "apkAssetName", out var apkAssetName)
-                || !IsSafeApkAssetName(apkAssetName))
+                || !UpdateLimits.IsSafeApkAssetName(apkAssetName))
             {
                 return Result<AppUpdateManifest>.Failure(InvalidManifestError());
             }
 
             if (!TryGetRequiredNonEmptyString(root, "sha256", out var sha256)
-                || !IsValidSha256(sha256))
+                || !UpdateLimits.IsValidSha256(sha256))
             {
                 return Result<AppUpdateManifest>.Failure(InvalidManifestError());
             }
 
-            if (!TryGetRequiredInt64(root, "sizeBytes", out var sizeBytes) || sizeBytes <= 0)
+            if (!TryGetRequiredInt64(root, "sizeBytes", out var sizeBytes)
+                || sizeBytes <= 0
+                || sizeBytes > UpdateLimits.MaxApkSizeBytes)
             {
                 return Result<AppUpdateManifest>.Failure(InvalidManifestError());
             }
@@ -267,60 +276,6 @@ public sealed class GitHubReleaseUpdateSource : IAppUpdateSource
 
         publishedAt = parsed;
         return true;
-    }
-
-    /// <summary>SHA-256 в hex (допускается верхний регистр; наружу манифест отдаётся lowercase).</summary>
-    private static bool IsValidSha256(string value)
-    {
-        if (value.Length != Sha256HexLength)
-        {
-            return false;
-        }
-
-        foreach (var character in value)
-        {
-            if (!char.IsAsciiHexDigit(character))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /// <summary>Имя APK-ассета: только имя файла без пути/traversal и с расширением .apk.</summary>
-    private static bool IsSafeApkAssetName(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value)
-            || value.Contains('/', StringComparison.Ordinal)
-            || value.Contains('\\', StringComparison.Ordinal)
-            || value.Contains("..", StringComparison.Ordinal)
-            || !value.EndsWith(".apk", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        foreach (var character in value)
-        {
-            if (char.IsControl(character))
-            {
-                return false;
-            }
-        }
-
-        return value.Length > ".apk".Length;
-    }
-
-    private static void CancelOnTimeout(CancellationTokenSource timeoutCts)
-    {
-        try
-        {
-            timeoutCts.Cancel();
-        }
-        catch (ObjectDisposedException)
-        {
-            // Запрос уже завершён и CTS освобождён: таймер опоздал, отмена не нужна.
-        }
     }
 
     private static Error NetworkError() => new(

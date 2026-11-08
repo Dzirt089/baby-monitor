@@ -27,7 +27,13 @@ public enum UpdateScreenStatus
     InstallRequested = 5,
 
     /// <summary>Последняя операция завершилась типизированной ошибкой.</summary>
-    Failed = 6
+    Failed = 6,
+
+    /// <summary>Установка APK подтверждена системой.</summary>
+    InstallSucceeded = 7,
+
+    /// <summary>Пользователь отменил установку APK.</summary>
+    InstallCancelled = 8
 }
 
 /// <summary>
@@ -41,6 +47,8 @@ public sealed class UpdateViewModel : IDisposable
     private readonly AppUpdateCoordinator _coordinator;
     private readonly IUpdateSettingsStore _settings;
     private readonly IAppVersionProvider _versionProvider;
+    private readonly IUpdateInstallStatusSource _installStatusSource;
+    private readonly EventHandler<UpdateInstallOutcomeEventArgs> _installOutcomeHandler;
     private readonly object _sync = new();
     private readonly string _currentVersionName;
     private int _busy;
@@ -51,24 +59,31 @@ public sealed class UpdateViewModel : IDisposable
     private string? _errorMessage;
     private double _downloadProgress;
     private bool _autoCheckEnabled;
+    private bool _installOutcomeApplied;
 
     /// <summary>Создаёт ViewModel экрана обновлений.</summary>
     /// <param name="coordinator">Application use case проверки/скачивания/установки.</param>
     /// <param name="settings">Сохранённые настройки автообновления.</param>
     /// <param name="versionProvider">Провайдер установленной версии.</param>
+    /// <param name="installStatusSource">Источник итога установки APK (live + persisted).</param>
     /// <exception cref="ArgumentNullException">Любой аргумент равен <see langword="null"/>.</exception>
     public UpdateViewModel(
         AppUpdateCoordinator coordinator,
         IUpdateSettingsStore settings,
-        IAppVersionProvider versionProvider)
+        IAppVersionProvider versionProvider,
+        IUpdateInstallStatusSource installStatusSource)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(versionProvider);
+        ArgumentNullException.ThrowIfNull(installStatusSource);
 
         _coordinator = coordinator;
         _settings = settings;
         _versionProvider = versionProvider;
+        _installStatusSource = installStatusSource;
+        _installOutcomeHandler = OnInstallOutcomeChanged;
+        _installStatusSource.OutcomeChanged += _installOutcomeHandler;
         _currentVersionName = versionProvider.GetCurrentVersion().VersionName;
         _autoCheckEnabled = settings.AutoCheckEnabled;
         _status = UpdateScreenStatus.Idle;
@@ -158,6 +173,12 @@ public sealed class UpdateViewModel : IDisposable
     /// <summary>Читает сохранённые настройки; вызывать при создании экрана.</summary>
     public void Initialize()
     {
+        var lastOutcome = _installStatusSource.TakeLastOutcome();
+        if (lastOutcome is not null)
+        {
+            ApplyInstallOutcome(lastOutcome.Value);
+        }
+
         lock (_sync)
         {
             _autoCheckEnabled = _settings.AutoCheckEnabled;
@@ -237,6 +258,12 @@ public sealed class UpdateViewModel : IDisposable
             return;
         }
 
+        lock (_sync)
+        {
+            // Новый цикл установки: прежний итог установки больше не актуален для этого запуска.
+            _installOutcomeApplied = false;
+        }
+
         SetDownloading();
         try
         {
@@ -268,8 +295,15 @@ public sealed class UpdateViewModel : IDisposable
     {
         lock (_sync)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             _disposed = true;
         }
+
+        _installStatusSource.OutcomeChanged -= _installOutcomeHandler;
     }
 
     private bool TryBeginOperation()
@@ -353,6 +387,12 @@ public sealed class UpdateViewModel : IDisposable
     {
         lock (_sync)
         {
+            if (_installOutcomeApplied)
+            {
+                // Итог установки (например, Failed из-за не запустившегося подтверждения) уже пришёл.
+                return;
+            }
+
             _status = UpdateScreenStatus.InstallRequested;
             _downloadProgress = 1;
         }
@@ -367,6 +407,43 @@ public sealed class UpdateViewModel : IDisposable
             _status = UpdateScreenStatus.Failed;
             _errorCode = error.Code;
             _errorMessage = error.Message;
+        }
+
+        RaiseChanged();
+    }
+
+    private void OnInstallOutcomeChanged(object? sender, UpdateInstallOutcomeEventArgs args)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        ApplyInstallOutcome(args.Outcome);
+    }
+
+    private void ApplyInstallOutcome(UpdateInstallOutcome outcome)
+    {
+        lock (_sync)
+        {
+            _installOutcomeApplied = true;
+            _errorCode = null;
+            _errorMessage = null;
+            switch (outcome)
+            {
+                case UpdateInstallOutcome.Succeeded:
+                    _status = UpdateScreenStatus.InstallSucceeded;
+                    _downloadProgress = 1;
+                    break;
+                case UpdateInstallOutcome.Cancelled:
+                    _status = UpdateScreenStatus.InstallCancelled;
+                    break;
+                default:
+                    _status = UpdateScreenStatus.Failed;
+                    _errorCode = AppUpdateErrorCodes.InstallFailed;
+                    _errorMessage = "Установка обновления не завершена.";
+                    break;
+            }
         }
 
         RaiseChanged();
