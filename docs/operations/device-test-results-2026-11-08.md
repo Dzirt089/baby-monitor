@@ -67,7 +67,7 @@
 
 ## v0.4.0 device smoke (2026-11-08, оба Huawei на adb)
 
-**APK**: GitHub Release v0.4.0, SHA-256 `7cf680d4…287327`, versionName 0.4.0/versionCode 400 (оба).
+**APK**: GitHub Release v0.4.0, SHA-256 `7cf680d4ebc70b9b12d778a468c2e48f8cb37ecdb25a5ac0abfb01d162287327`, versionName 0.4.0/versionCode 400 (оба).
 Установка поверх v0.3.1 (trusted store сохранён), pairing не потребовался.
 
 | # | Проверка | Результат |

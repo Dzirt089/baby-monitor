@@ -2018,8 +2018,9 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Коды, при которых terminal Failed Parent означает потерю peer-а (тревога уместна).
-    /// Отказ доверия (unauthorized_peer/unsupported_version), локальные audio-сбои и adapter_failure
-    /// не являются потерей связи и не должны включать loss-тревогу.
+    /// Включает transport/signaling-потери, потери на retry-фазе discovery (Wi-Fi off, resolve,
+    /// service_not_found) и закрытие сессии. Отказ доверия (unauthorized_peer/unsupported_version),
+    /// локальные audio-сбои и adapter_failure не являются потерей связи и не включают loss-тревогу.
     /// </summary>
     private static bool IsLossError(Error error) =>
         error.Code is RealtimeTransportErrorCodes.PeerUnavailable
@@ -2028,7 +2029,11 @@ public sealed class MonitoringMediaCoordinator : IDisposable, IAsyncDisposable
             or RealtimeTransportErrorCodes.MediaFlowLost
             or RealtimeTransportErrorCodes.MediaPathAbsent
             or RealtimeTransportErrorCodes.NetworkUnavailable
-            or RealtimeTransportErrorCodes.TlsFailure;
+            or RealtimeTransportErrorCodes.TlsFailure
+            or RealtimeTransportErrorCodes.SessionClosed
+            or DiscoveryErrorCodes.WifiUnavailable
+            or DiscoveryErrorCodes.ResolveFailed
+            or DiscoveryErrorCodes.ServiceNotFound;
 
     private static bool IsDeviceAudioFailure(Error error) =>
         error.Code is AudioErrorCodes.CaptureUnavailable

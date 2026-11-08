@@ -1176,12 +1176,14 @@ public sealed class MonitoringMediaCoordinatorTests
         Assert.True(failed.ParentAlarmActive);
     }
 
-    [Fact]
-    public async Task Parent_alarm_не_поднимается_при_unauthorized_peer_Failed()
+    [Theory]
+    [InlineData(RealtimeTransportErrorCodes.UnauthorizedPeer)]
+    [InlineData(RealtimeTransportErrorCodes.UnsupportedVersion)]
+    public async Task Parent_alarm_не_поднимается_при_отказе_доверия(string errorCode)
     {
         var harness = new Harness();
         harness.Transport.ConnectHandler = _ => Task.FromResult(Result<IRealtimeTransportSession>.Failure(
-            new Error(RealtimeTransportErrorCodes.UnauthorizedPeer, "Peer не найден в trusted store.")));
+            new Error(errorCode, "Peer отклонён до media-сессии.")));
         await using var coordinator = harness.Create(DeviceRole.Parent);
         await coordinator.StartAsync(CancellationToken.None);
 
@@ -1189,8 +1191,67 @@ public sealed class MonitoringMediaCoordinatorTests
         var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
 
         // Отказ доверия/версии — не потеря связи: loss-тревога не должна вводить пользователя в заблуждение.
-        Assert.Equal(RealtimeTransportErrorCodes.UnauthorizedPeer, failed.Error!.Code);
+        Assert.Equal(errorCode, failed.Error!.Code);
         Assert.False(failed.ParentAlarmActive);
+    }
+
+    [Theory]
+    [InlineData(RealtimeTransportErrorCodes.TlsFailure)]
+    [InlineData(RealtimeTransportErrorCodes.NetworkUnavailable)]
+    [InlineData(RealtimeTransportErrorCodes.SessionClosed)]
+    public async Task Parent_alarm_поднимается_при_loss_кодах_соединения(string errorCode)
+    {
+        var harness = new Harness();
+        harness.Transport.ConnectHandler = _ => Task.FromResult(Result<IRealtimeTransportSession>.Failure(
+            new Error(errorCode, "Соединение потеряно.")));
+        await using var coordinator = harness.Create(DeviceRole.Parent);
+        await coordinator.StartAsync(CancellationToken.None);
+
+        harness.Discovery.LastSession!.AddPeer(CreatePeer());
+        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+
+        Assert.Equal(errorCode, failed.Error!.Code);
+        Assert.True(failed.ParentAlarmActive);
+        Assert.True(coordinator.Snapshot!.ParentAlarmActive);
+    }
+
+    [Fact]
+    public async Task Parent_alarm_сохраняется_при_terminal_Failed_по_discovery_loss_после_retry()
+    {
+        var harness = new Harness();
+        var transport = new FakeRealtimeTransportSession();
+        harness.Transport.ConnectHandler = _ =>
+            Task.FromResult(Result<IRealtimeTransportSession>.Success(transport));
+        await using var coordinator = harness.Create(
+            DeviceRole.Parent,
+            policy: Harness.CreatePolicy(maxAttempts: 1));
+        await coordinator.StartAsync(CancellationToken.None);
+        harness.Discovery.LastSession!.AddPeer(CreatePeer());
+        await WaitForStateAsync(coordinator, MediaSessionState.Connected);
+        await WaitUntilAsync(() => harness.Playback.LastSession is not null, "playback стартовал");
+        transport.RaiseHeartbeat();
+        transport.PushEncodedFrame(new byte[] { 1 });
+        await WaitForStateAsync(coordinator, MediaSessionState.MediaFlowing);
+
+        transport.Fail(new Error(RealtimeTransportErrorCodes.MediaFlowLost, "Media-поток потерян."));
+        await WaitForStateAsync(coordinator, MediaSessionState.Reconnecting);
+
+        // Device-evidence (v0.4.0): Child потерял Wi-Fi, retry Parent упирается в discovery.wifi_unavailable.
+        harness.Discovery.StartError = new Error(
+            DiscoveryErrorCodes.WifiUnavailable,
+            "Wi-Fi недоступен.");
+        await AdvanceUntilAsync(harness.Time, () => harness.Discovery.StartCalls >= 2, "повторный discovery");
+        var failed = await WaitForStateAsync(coordinator, MediaSessionState.Failed);
+
+        Assert.Equal(DiscoveryErrorCodes.WifiUnavailable, failed.Error!.Code);
+        Assert.True(failed.ParentAlarmActive);
+        Assert.True(coordinator.Snapshot!.ParentAlarmActive);
+
+        // FGS при terminal Failed обязан сохранить тревогу: terminal snapshot тоже с флагом.
+        var stop = await coordinator.StopAsync(CancellationToken.None);
+        Assert.True(stop.IsSuccess);
+        Assert.Equal(MediaSessionState.Failed, stop.Value.State);
+        Assert.True(stop.Value.ParentAlarmActive);
     }
 
     private static async Task<(FakeRealtimeTransportSession Transport, FakeAudioPlaybackSession Playback)> StartFlowingParentAsync(
