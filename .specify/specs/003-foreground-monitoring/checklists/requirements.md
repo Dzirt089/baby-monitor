@@ -10,7 +10,8 @@
   FGS microphone), Parent его не запрашивает; AudioRecord/AudioTrack отсутствуют (architecture test).
 - [x] CHK-008 FGS-типы по роли (microphone/mediaPlayback) в merged manifest; architecture test.
 - [x] CHK-009 Cleanup: Stop/OnDestroy снимают уведомление; host unbind/timeout.
-- [-] CHK-010 Device-проверки (Activity destroyed, 13+/14+, Doze/OEM) — **BLOCKED: нет устройств**.
+- [-] CHK-010 Android 12 FGS/notification/screen-off/Stop PASS на 2 Huawei (2026-11-08);
+  Activity destroyed, 13+/14+, Doze/OEM — **007**.
 - [x] CHK-011 Трассируемость FR → tasks.md.
 
 ## Review Record

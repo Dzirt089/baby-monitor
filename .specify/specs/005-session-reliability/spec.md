@@ -2,10 +2,11 @@
 
 **Feature Branch**: 005-phase2-media
 **Created**: 2026-11-07 (обновлено 2026-11-08)
-**Status**: Phase 1 merged (PR #12). Phase 2 **unblocked**: ADR-0007 Accepted (2026-11-08, вариант A),
-SIPSorcery разрешён (ADR-0005, >= 10.0.17), у владельца есть 2 физических Android-устройства для
-device-проверки. До подтверждения слышимости владельцем приложение не объявляется работающей
-радионяней.
+**Status**: Phase 1 merged (PR #12); **Phase 2 реализована и device-verified** (v0.3.0/0.3.1, PR #16;
+ADR-0007 Accepted вариант A; security review APPROVE). Device pass 2026-11-08: Huawei nova Y90 +
+nova 13 Pro (Android 12) — pairing, MediaFlowing, **слышимость подтверждена владельцем**, reconnect,
+screen-off, Stop. Остаточные 007-пункты: control heartbeat/ParentLossAlarm/telemetry, OEM/soak/
+calls/BT/TalkBack. См. docs/operations/device-test-results-2026-11-08.md.
 **Input**: AGENTS.md разделы 2, 6, 7, 9, 10, 11, 15; roadmap 005; ADR-0005 (SIPSorcery),
 ADR-0007 Accepted (signaling/TLS/pinning, DTLS-SRTP), ADR-0011 (QR pairing UI, 006)
 
@@ -133,13 +134,16 @@ Parent не запрашивает RECORD_AUDIO. При перегрузке с�
 - [x] AC-005 (реализовано+тесты; реальный Android media/audio — device): Media adapter SIPSorcery (Opus/DTLS-SRTP) за IRealtimeTransport проходит общий
   contract suite; audio adapters (AudioRecord/AudioTrack) реализуют Application-порты и role
   invariants (Child send-only, Parent receive-only).
-- [ ] AC-006: End-to-end сессия «Parent подключается к Child и слышит звук» подтверждена владельцем
-  на двух устройствах (по чек-листу v0.3.0) — до этого **не подтверждено**.
-- [-] AC-007: 100 connect/disconnect/reconnect, 8h soak, Wi-Fi loss на разных интервалах,
-  звонки/audio focus, смена IP, OEM/Doze — **BLOCKED: частично** (2 устройства владельца после
-  v0.3.0; полная OEM-матрица — 007).
-- [-] AC-008: Battery drain/CPU/temperature/allocations — после device-прогонов (007).
-- [ ] AC-009 (follow-up 007): control heartbeat (ping/peers) и ParentLossAlarm интеграция в media-сеанс;
+- [x] AC-006: End-to-end сессия «Parent подключается к Child и слышит звук» **подтверждена владельцем**
+  на двух реальных устройствах (Huawei nova Y90 + nova 13 Pro, Android 12, v0.3.1, 2026-11-08;
+  pairing code 848016, MediaFlowing, Parent AudioTrack started). Детали:
+  docs/operations/device-test-results-2026-11-08.md
+- [-] AC-007: Wi-Fi loss/reconnect PASS на 2 устройствах (off/on 5 с → Connecting → MediaFlowing),
+  screen-off 12 с PASS; 100 циклов, 8h soak, звонки/audio focus, смена IP, OEM/Doze — **BLOCKED/007**
+  (нет полной матрицы/части сценариев).
+- [-] AC-008: Battery drain/CPU/temperature/allocations — PARTIAL: ~8 мин на USB-питании
+  (76 %/31 °C; 70 %/35 °C), валидный drain без зарядки — 007.
+- [ ] AC-009 (follow-up 007): control heartbeat (ping/pong) и ParentLossAlarm интеграция в media-сеанс;
   media path absent до первого аудиокадра уже детектируется watchdog-ом (Degraded/Reconnecting).
 
 ## Out of Scope

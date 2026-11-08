@@ -20,7 +20,7 @@
 
 - [x] T009 Local gates: build Debug/Release, tests, format
 - [x] T010 Emulator smoke: install/launch (pairing UI отсутствует до 006)
-- [-] T011 End-to-end pairing двух устройств (QR/код/переподключение) — **BLOCKED: нет реальных устройств**
+- [x] T011 End-to-end pairing двух устройств — PASS 2026-11-08 (paste-fallback, code совпал, trusted store); camera↔camera — 007
 - [-] T012 Keystore на OEM/API матрице — **BLOCKED: нет устройств** (007)
 - [x] T013 PR → CI → независимое ревью → merge
 

@@ -1,6 +1,12 @@
 # Device-тест 0.3.0 (2 Android-устройства) — звук/reconnect/battery
 
-**Устройства владельца**: Huawei nova 13 Pro и Huawei nova Y90 (adb недоступен — тест ручной).
+> **Частично выполнен 2026-11-08** на Huawei nova Y90 + Huawei nova 13 Pro (Android 12, v0.3.1):
+> pairing, слышимость (владелец подтвердил), MediaFlowing, reconnect Wi-Fi off/on, screen-off 12 с,
+> Stop — PASS. Не выполнены: звонки/audio focus, Bluetooth/наушники, battery без зарядки, 8h soak,
+> 100 циклов, TalkBack, camera↔camera, OEM-матрица — 007. Результаты:
+> [device-test-results-2026-11-08.md](device-test-results-2026-11-08.md).
+
+**Устройства владельца**: Huawei nova 13 Pro и Huawei nova Y90 (adb/USB-отладка использовались в прогоне 2026-11-08; часть шагов ручная).
 **Цель**: подтвердить реальную слышимость Child → Parent по локальной сети, поведение при обрыве
 сети/звонке/маршруте и ориентировочный расход батареи.
 
@@ -83,7 +89,8 @@
 4. Расход батареи за сеанс (время, %), температура.
 5. Скриншоты экранов (без QR-кодов) и, если появится adb, logcat:
    `adb logcat -d | findstr /I "BabyMonitor AndroidRuntime"` (аудио/секретов в логах нет by design).
-6. Любые падения — время, экран, шаги.
+6. Любые падения — время, экран, шаги. При наличии adb (был доступен 2026-11-08) приложить
+   `adb logcat -d` без аудио/секретов и `dumpsys audio`/`dumpsys notification` фрагменты.
 
 ## Известные ограничения 0.3.0 (не дефекты)
 

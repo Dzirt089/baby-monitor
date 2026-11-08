@@ -91,9 +91,11 @@ Phase 2 (оценка пакета SIPSorcery, версия 10.0.17 от 2026-10
 2026-11-07 — см. раздел Accepted выше. Альтернатива (thin binding к libwebrtc, Apache-2.0) остаётся
 fallback, если device matrix покажет неприемлемые метрики.
 
-Phase 3 (device matrix) — **BLOCKED**: в окружении нет реальных Android-устройств. Emulator
-(API 35) не воспроизводит акустический тракт, end-to-end latency, CPU/battery слабого устройства
-и реальные сетевые условия; замеры на emulator не считаются доказательством.
+Phase 3 (device matrix) — **частично выполнена 2026-11-08**: SIPSorcery 10.0.17 adopted (лицензия
+подтверждена владельцем), реальные Huawei nova Y90 + nova 13 Pro (Android 12): mutual TLS/pinning,
+DTLS-SRTP/Opus, MediaFlowing, owner-confirmed звук, reconnect Wi-Fi, screen-off. Полные метрики
+(latency p50/p95, CPU/battery, 100 циклов, 8h soak) и OEM-матрица — 007; emulator за доказательство
+не считается.
 
 ### Протокол device matrix (для выполнения на реальных устройствах)
 
@@ -108,7 +110,6 @@ Phase 3 (device matrix) — **BLOCKED**: в окружении нет реаль
 
 ## Проверка и критерии пересмотра
 
-Решение Accepted; device matrix (phase 3) остаётся **BLOCKED** из-за отсутствия реальных устройств —
-это проверка, а не условие принятия решения. При появлении устройств: протокол измерений (устройства,
-API, сеть, длительность), результаты в ADR; при провале device matrix или критической уязвимости
-библиотеки решение пересматривается новым ADR (fallback — thin binding libwebrtc).
+Решение Accepted; device matrix (phase 3) частично выполнена на 2 Huawei (см. выше), полная матрица
+и метрики — 007. При провале расширенной device matrix или критической уязвимости библиотеки решение
+пересматривается новым ADR (fallback — thin binding libwebrtc).

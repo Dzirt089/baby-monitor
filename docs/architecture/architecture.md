@@ -1,7 +1,8 @@
 # Архитектура: Радионяня (Baby Monitor)
 
-**Статус**: Bootstrap / not functional yet. Документ описывает целевую архитектуру и текущее
-состояние каркаса. Мониторинг, discovery, pairing, media и foreground service ещё не реализованы.
+**Статус**: реализовано и device-verified (v0.3.1, 2026-11-08): monitoring/FGS, NSD discovery, pairing,
+signaling/mutual TLS+pinning, SIPSorcery DTLS-SRTP/Opus, AudioRecord/AudioTrack. Звук подтверждён
+владельцем на двух Huawei/Android 12; расширенная OEM/soak-матрица — 007, release readiness — 008.
 
 ## 1. Контекст системы
 

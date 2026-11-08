@@ -71,7 +71,7 @@ bootstrap-спеку и понимает, что можно делать в boot
 - **FR-007**: Release workflow (push tag vX.Y.Z, workflow_dispatch dry-run) валидирует SemVer и
   CHANGELOG, повторно тестирует, подписывает только при наличии secrets в Environment release,
   считает SHA-256, создаёт GitHub Release; не создаёт теги; keystore cleanup всегда.
-- **FR-008**: Документация: README (статус Bootstrap/not functional yet, ограничения, команды,
+- **FR-008**: Документация: README (актуальный статус реализации, ограничения, команды,
   CI/release, запрет хранения secrets), vision, roadmap, architecture, constitution,
   ADR-template и ADR-0001..0009; bootstrap spec/plan/tasks/checklist.
 - **FR-009**: Git-гигиена: initial commit, feature branch bootstrap/initial-foundation, private

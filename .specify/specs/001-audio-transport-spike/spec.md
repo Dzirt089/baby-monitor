@@ -2,7 +2,7 @@
 
 **Feature Branch**: 001-audio-transport-spike
 **Created**: 2026-10-20
-**Status**: In Progress (phase 1 завершена; phase 2: оценка пакета выполнена, adoption заблокирован лицензией; device matrix заблокирован: нет реальных устройств)
+**Status**: Done (2026-11-08). Phase 1 contract suite + ADR-0005 Accepted; SIPSorcery 10.0.17 adopted (лицензия подтверждена владельцем), media-адаптер реализован в 005 и device-verified на 2 Huawei (v0.3.1: MediaFlowing, owner-confirmed звук). Расширенная device matrix/метрики — 007.
 **Input**: [ADR-0005](../../../docs/architecture/adr/0005-media-transport-library.md), [AGENTS.md](../../../AGENTS.md) разделы 4, 7, 15
 
 ## Контекст
@@ -92,7 +92,8 @@ NSD, foreground service, UI, автоподключение/reconnect-полит
 
 ## Dependencies & Assumptions
 
-- 2 реальных Android-устройства в одной Wi-Fi LAN для phase 3 (пока не предоставлены).
+- 2 реальных Android-устройства в одной Wi-Fi LAN для phase 3 предоставлены: Huawei nova Y90 +
+  nova 13 Pro; device pass (MediaFlowing, owner-confirmed звук) — 2026-11-08, расширенные метрики — 007.
 - SIPSorcery принят (ADR-0005 Accepted 2026-11-07): pin >= 10.0.17 в Directory.Packages.props,
   THIRD-PARTY-NOTICES.md; PackageReference и адаптер добавляются в 003/005 только в Infrastructure.
 - Emulator (API 35) допускается только для smoke компиляции/упаковки, не для audio-метрик.

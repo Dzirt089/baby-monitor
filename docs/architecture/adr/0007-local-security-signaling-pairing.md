@@ -72,6 +72,13 @@
 ## Проверка и критерии пересмотра
 
 005 phase 2: contract/unit тесты (pinning, недоверенный peer, replay nonce, downgrade protocol
-version, обрыв TLS, heartbeat), emulator/device smoke на двух устройствах владельца. Пересмотр —
-при обнаружении weakness, смене media-стека (ADR-0005) или решении о публичном распространении
-(шифрование/signaling вне LAN).
+version, обрыв TLS, heartbeat), emulator/device smoke на двух устройствах владельца.
+
+**Статус проверки (2026-11-08)**: на реальных Huawei nova Y90 (Child) + nova 13 Pro (Parent),
+Android 12, v0.3.1 — mutual TLS + pinning по trusted store, identity assertion, DTLS-SRTP/Opus и
+приём звука работают end-to-end (MediaFlowing на обоих, Parent AudioTrack started); слышимость
+подтверждена владельцем. Детали — docs/operations/device-test-results-2026-11-08.md. Остаточные
+риски (OEM/rate-limit/8h soak, Android 13+/14+, trusted-store tamper-evidence) — 007/008.
+
+Пересмотр — при обнаружении weakness, смене media-стека (ADR-0005) или решении о публичном
+распространении (шифрование/signaling вне LAN).

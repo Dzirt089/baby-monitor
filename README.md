@@ -3,15 +3,16 @@
 Android-приложение, которое соединяет два телефона в одной локальной Wi-Fi сети и передаёт звук
 от детского устройства к родительскому без обязательного облачного backend.
 
-> **Статус: not functional yet.**
-> Bootstrap, 001–006 merged в `main`: audio-transport контракт, NSD discovery, foreground service,
-> pairing-протокол (Android Keystore identity + trusted store), session-reliability политики и UI
-> pairing (офлайн QR-обмен, verification code, trusted devices, camera scan, diagnostics).
-> v0.3.0: signaling/media/audio реализованы в коде (mutual TLS + pinning, SIPSorcery WebRTC
-> DTLS-SRTP/Opus, AudioRecord/AudioTrack, reconnect). **Слышимость ещё не подтверждена владельцем на
-> двух устройствах**, поэтому приложение пока не объявляется рабочей радионяней. У владельца
-> два Android-устройства (Huawei nova 13 Pro, Huawei nova Y90) для device-прогонов; emulator
-> device-тесты не заменяет.
+> **Статус: передача звука подтверждена на двух реальных устройствах (2026-11-08, v0.3.1).**
+> Huawei nova Y90 (Child) + Huawei nova 13 Pro (Parent), Android 12: сопряжение по QR, передача
+> звука Child→Parent, MediaFlowing, **слышимость подтверждена владельцем**, reconnect после Wi-Fi
+> off/on, работа при выключенном экране, чистый Stop. Детали —
+> [docs/operations/device-test-results-2026-11-08.md](docs/operations/device-test-results-2026-11-08.md).
+>
+> **Не медицинское изделие.** Матрица ограничена двумя Huawei/Android 12; звонки/audio focus,
+> Bluetooth/наушники, 8h soak, 100 reconnect-циклов, battery drain без зарядки, TalkBack,
+> camera↔camera и полная OEM-матрица — **007**; signing-chain/лицензия/privacy/публичная
+> дистрибуция — **008** и только по решению владельца.
 
 ## Зачем
 

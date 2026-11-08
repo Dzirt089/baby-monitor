@@ -27,11 +27,11 @@
 - [x] T018 Независимое ревью (fresh reviewer, APPROVE WITH FIXES → findings закрыты)
 - [x] T019 PR #14 → CI → merge в main; roadmap/CHANGELOG/README обновлены (см. GitHub PR #14)
 
-## BLOCKED (внешние условия)
+## Остаточные проверки (007)
 
-- [-] T020 Device matrix: 12+/13+/14+ permission flows, camera/OEM matrix, TalkBack/a11y — **BLOCKED: нет реальных устройств** (007)
-- [-] T021 Реальный QR-обмен между двумя устройствами (камера↔камера), screen capture/OS-level — **BLOCKED: нет реальных устройств**
-- [-] T022 Media/audio реальная передача звука — **BLOCKED: 005 phase 2 (ADR-0007 Proposed + нет устройств)**
+- [-] T020 Device matrix: Android 12 permission/FGS flows PASS (2 Huawei, 2026-11-08); 13+/14+, camera/OEM matrix, TalkBack/a11y — **007**
+- [-] T021 Реальный QR-обмен камера↔камера не выполнялся (paste-fallback PASS 2026-11-08); **007**
+- [x] T022 Media/audio реальная передача звука — PASS на 2 Huawei (v0.3.1, MediaFlowing, owner-confirmed звук, 2026-11-08)
 
 ## Verification Log
 
@@ -42,4 +42,5 @@
 | 2026-11-07 | Emulator smoke (AVD API 35, 006 phase 2) | Role selection; Child pairing: QR приглашения отрендерен (host ZXing decode OK), подтверждение host-ответа, code 917491 → completed, trusted store содержит запись LocalRole=Child; Parent pairing: paste QR приглашения → verification code 441255 + response QR (host verify signature OK) → confirm → trusted store LocalRole=Parent; invalid QR → typed pairing.invalid_qr; камера Camera2 открыта/остановлена без падения; Parent monitoring Start → FGS isForeground=true, types=0x2, notification «Радионяня: родитель / Мониторинг активен» ONGOING\|FOREGROUND_SERVICE; Stop → UI «Остановлен»; Diagnostics: роль/состояние/версия/доверенное устройство; crash buffer пуст |
 | 2026-11-07 | Defect found & fixed during emulator smoke | Android Keystore SHA256withECDSA возвращает DER-подпись, BCL Ecdsa.VerifyData ожидает IEEE P1363 → реальное pairing падало invalid_signature при валидных ключах. Исправлено: PairingCrypto.TryVerifySignature принимает обе стандартные кодировки; regression tests PairingSignatureInteropTests (DER/P1363 обе стороны + tamper). Unit-тесты на BCL fake этого не ловили — дефект виден только при Android Keystore. |
 | 2026-11-07 | Independent review (fresh reviewer, APPROVE WITH FIXES) | Закрыто: (1) OCE в async void DiagnosticsActivity → отдельный catch; (2) forget→Completed dead-end → ResetFlowModelAsync для обеих ролей; (3) блокирующие \_gate.Wait()/Task.Result → non-blocking/никогда .Result (screen models и QrCameraScanner), teardown без Join на main thread; (4) усилены architecture tests (ZXing source-scan вне Qr, camera permission call-site, secret-log case-insensitive); (5) удалены мёртвые строки, camera denial через resources, diagnostics_unexpected_error; (6) PairingResponseQrCodec limit согласован с ёмкостью QR + typed qr_render_failed; (7) trusted peer скрывает scan/paste/skip; (8) spec/AC/one-sided trust residual актуализированы. Повторный emulator smoke: forget→pairing-flow, QR host decode, camera open/stop, diagnostics open/back без crash; crash buffer пуст. |
-| 2026-11-07 | BLOCKED remains | Реальный QR-обмен камера↔камера между двумя устройствами, camera/OEM matrix, TalkBack/a11y — **BLOCKED: нет реальных устройств** (007); media/audio — 005 phase 2 BLOCKED |
+| 2026-11-07 | Остаточные device-проверки | camera↔camera, camera/OEM matrix, TalkBack/a11y — 007; media/audio — реализованы в 005 phase 2 |
+| 2026-11-08 | Device pass v0.3.1 (Huawei nova Y90 + nova 13 Pro, Android 12) | pairing paste-fallback PASS (code совпал, trusted store), media/audio PASS (MediaFlowing, owner-confirmed звук), reconnect/screen-off/Stop PASS; camera↔camera/TalkBack/13+/OEM — 007 |

@@ -10,8 +10,8 @@
    notification channel, Stop action, launch intent), AndroidForegroundSessionHost (binder, видимость
    Activity, notification permission, timeout/cleanup), IActivityVisibility + MainActivity реализация,
    manifest permissions, architecture tests.
-3. **Проверки**: build/tests/format; emulator smoke install/launch + попытка adb-старта service;
-   device-проверки (**BLOCKED: нет реальных устройств**); PR → CI → независимое ревью → merge.
+3. **Проверки**: build/tests/format; emulator smoke; device-проверки на 2 Huawei/Android 12 — PASS
+   (FGS/notification/screen-off/Stop, 2026-11-08); 13+/14+/Doze — 007; PR → CI → review → merge.
 
 ## Technical Notes
 
@@ -39,7 +39,7 @@
 Activity visibility, POST_NOTIFICATIONS/RECORD_AUDIO запросы, Android 14+ FGS restrictions и
 notification работают только на Android. Contract suite в CI (net10.0) проверяет fake-хост;
 Android-адаптер покрыт build, merged-manifest architecture tests, review и emulator install smoke.
-Реальный старт service/notification — только UI (006) или instrumentation; device matrix BLOCKED.
+Реальный старт service/notification проверен через UI на 2 Huawei (2026-11-08); Android 13+/14+/Doze — 007.
 MainActivity реализует IActivityVisibility, но app-scoped host в 006 не должен хранить Activity
 ссылку: нужен app-scoped visibility-state или weak reference (зафиксировано для 006).
 
