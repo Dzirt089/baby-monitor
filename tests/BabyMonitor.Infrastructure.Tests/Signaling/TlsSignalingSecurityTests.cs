@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -205,6 +206,63 @@ public sealed class TlsSignalingSecurityTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal(RealtimeTransportErrorCodes.SignalingTimeout, result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task Клиент_отклоняет_hello_ack_с_несовместимой_версией()
+    {
+        using var peers = new SignalingTestPeers();
+        await using var rogueServer = new RogueAckServer(
+            peers.ChildKeyStore,
+            tamperEchoNonce: false,
+            tamperSignature: false,
+            helloAckProtocolVersion: 2);
+        using var timeout = SignalingLoopbackHarness.CreateTimeout();
+        var client = new TlsSignalingClient(
+            new TransportEndpoint("127.0.0.1", rogueServer.BoundPort),
+            peers.CreateParentIdentity());
+
+        var result = await client.ConnectAsync(timeout.Token);
+
+        // Подпись/nonce валидны, но версия hello_ack несовместима: типизированный отказ без сессии.
+        Assert.False(result.IsSuccess);
+        Assert.Equal(RealtimeTransportErrorCodes.UnsupportedVersion, result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task Сервер_после_аутентификации_отклоняет_offer_больше_MaxSdpBytes_без_чтения_payload() =>
+        await AssertOversizedSdpFrameRejectedAfterAuthenticationAsync(SignalingFrameType.Offer);
+
+    [Fact]
+    public async Task Сервер_после_аутентификации_отклоняет_answer_больше_MaxSdpBytes_без_чтения_payload() =>
+        await AssertOversizedSdpFrameRejectedAfterAuthenticationAsync(SignalingFrameType.Answer);
+
+    private static async Task AssertOversizedSdpFrameRejectedAfterAuthenticationAsync(SignalingFrameType frameType)
+    {
+        using var peers = new SignalingTestPeers();
+        using var timeout = SignalingLoopbackHarness.CreateTimeout();
+        var serverSession = await SignalingLoopbackHarness.StartServerAsync(
+            peers.CreateChildIdentity(),
+            new SignalingOptions(SignalingLoopbackHarness.DefaultTimeout),
+            timeout.Token);
+        await using var _ = serverSession;
+        var acceptTask = serverSession.AcceptAsync(timeout.Token);
+        await using var rawClient = await RawSignalingClient.ConnectAsync(serverSession.BoundPort, timeout.Token);
+        await rawClient.CompleteInitiatorHandshakeAsync(peers.ParentKeyStore, timeout.Token);
+        var acceptResult = await acceptTask;
+        Assert.True(acceptResult.IsSuccess, "Аутентификация должна пройти: " + acceptResult.Error?.Code);
+        await using var connection = acceptResult.Value;
+
+        // Отправляется только заголовок кадра: payload (MaxSdpBytes + 1) отсутствует. Если бы кодек
+        // читал payload до проверки лимита, тест завис бы вместо типизированной protocol-ошибки.
+        var header = new byte[SignalingProtocol.FrameHeaderBytes];
+        header[0] = (byte)frameType;
+        BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(1), (uint)(SignalingProtocol.MaxSdpBytes + 1));
+        await rawClient.WriteAsync(header, timeout.Token);
+
+        var receiveTask = connection.ReceiveAsync(timeout.Token);
+        await Assert.ThrowsAsync<SignalingProtocolException>(
+            async () => await receiveTask.WaitAsync(TimeSpan.FromSeconds(10)));
     }
 
     [Fact]

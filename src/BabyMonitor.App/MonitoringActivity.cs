@@ -35,6 +35,9 @@ public sealed class MonitoringActivity : PermissionActivity
     private Button? _start;
     private Button? _stop;
     private DeviceRole _role;
+    private string? _lastStatusText;
+    private string? _lastDiagnosticsText;
+    private string? _lastErrorText;
 
     /// <summary>Создаёт Activity.</summary>
     public MonitoringActivity()
@@ -161,7 +164,7 @@ public sealed class MonitoringActivity : PermissionActivity
         var media = snapshot?.Media;
         if (_status is not null)
         {
-            _status.Text = media is { ParentAlarmActive: true }
+            var statusText = media is { ParentAlarmActive: true }
                 ? GetString(Resource.String.monitoring_state_parent_alarm)
                 : media is null
                 ? GetString(state switch
@@ -184,6 +187,7 @@ public sealed class MonitoringActivity : PermissionActivity
                     MediaSessionState.Idle => Resource.String.monitoring_state_initial,
                     _ => Resource.String.monitoring_state_connecting
                 });
+            SetTextIfChanged(_status, statusText, ref _lastStatusText);
         }
 
         if (_diagnostics is not null)
@@ -195,12 +199,13 @@ public sealed class MonitoringActivity : PermissionActivity
             var mediaText = media is null
                 ? GetString(Resource.String.diagnostics_media_state_idle)
                 : media.State.ToString();
-            _diagnostics.Text = string.Format(
+            var diagnosticsText = string.Format(
                 System.Globalization.CultureInfo.InvariantCulture,
                 GetString(Resource.String.monitoring_diagnostics_format),
                 roleText,
                 stateText,
                 mediaText);
+            SetTextIfChanged(_diagnostics, diagnosticsText, ref _lastDiagnosticsText);
         }
 
         if (_error is not null)
@@ -209,11 +214,12 @@ public sealed class MonitoringActivity : PermissionActivity
             _error.Visibility = hasError ? ViewStates.Visible : ViewStates.Gone;
             if (hasError)
             {
-                _error.Text = string.Format(
+                var errorText = string.Format(
                     System.Globalization.CultureInfo.InvariantCulture,
                     GetString(Resource.String.monitoring_error_format),
                     _model.ErrorCode,
                     _model.ErrorMessage);
+                SetTextIfChanged(_error, errorText, ref _lastErrorText);
             }
         }
 
@@ -232,5 +238,20 @@ public sealed class MonitoringActivity : PermissionActivity
         {
             _stop.Enabled = _model.IsInitialized && !_model.IsBusy && snapshot is not null && !snapshot.IsTerminal;
         }
+    }
+
+    /// <summary>
+    /// Обновляет текст только при изменении: Render вызывается на каждый live-refresh snapshot
+    /// (~1 раз/с), и повторный setText даёт лишний layout/churn без пользы для UI.
+    /// </summary>
+    private static void SetTextIfChanged(TextView view, string text, ref string? cachedText)
+    {
+        if (string.Equals(cachedText, text, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        cachedText = text;
+        view.Text = text;
     }
 }

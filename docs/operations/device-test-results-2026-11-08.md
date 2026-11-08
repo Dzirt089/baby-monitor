@@ -89,3 +89,14 @@ terminal Failed Parent срабатывает для любых ошибок —
 
 **Не заявляется:** звук/вибрация alarm-канала, terminal-Failed standalone alarm, media-only alarm —
 пока не проверены; слышимость v0.3.1 остаётся подтверждённой ранее.
+
+
+### Single-device smoke v0.4.1 (Child nova Y90, Parent phone у владельца)
+
+После установки v0.4.1 (versionCode 401, SHA `1cfe0498a99dec2c6993e253d1fd59e80d53bca920db047461f70ab772610218`):
+install/launch/role/UI PASS, crash buffer пуст. Но запуск Child-сеанса **без Parent**: через ~10 s
+terminal Failed `realtime.signaling_timeout` вместо ожидания Parent (Advertising). Причина —
+`TlsSignalingServerSession.AcceptAsync` применял HandshakeTimeout к TCP-ожиданию клиента. Исправление — v0.4.2 (T046): таймаут только после TCP accept (TLS+hello), ожидание peer без таймаута
+(tests: pending accept > HandshakeTimeout, late peer accepted, cancel/dispose paths). Device-retest v0.4.2
+на оставшемся nova Y90: Child без Parent должен оставаться Advertising — выполняется после установки. На v0.4.1 двухдевайсовая сессия ранее поднималась (v0.4.0 smoke), но этот сценарий
+блокировал запуск Child до Parent.

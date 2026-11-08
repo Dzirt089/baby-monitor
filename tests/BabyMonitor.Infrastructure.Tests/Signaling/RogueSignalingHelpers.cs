@@ -162,13 +162,19 @@ internal sealed class RogueAckServer : IAsyncDisposable
     private readonly FakePairingKeyStore _responderKeys;
     private readonly bool _tamperEchoNonce;
     private readonly bool _tamperSignature;
+    private readonly ushort _helloAckProtocolVersion;
 
-    public RogueAckServer(FakePairingKeyStore responderKeys, bool tamperEchoNonce, bool tamperSignature)
+    public RogueAckServer(
+        FakePairingKeyStore responderKeys,
+        bool tamperEchoNonce,
+        bool tamperSignature,
+        ushort helloAckProtocolVersion = SignalingProtocol.CurrentVersion)
     {
         ArgumentNullException.ThrowIfNull(responderKeys);
         _responderKeys = responderKeys;
         _tamperEchoNonce = tamperEchoNonce;
         _tamperSignature = tamperSignature;
+        _helloAckProtocolVersion = helloAckProtocolVersion;
         _listener = new TcpListener(IPAddress.Loopback, 0);
         _listener.Start();
         _serveTask = Task.Run(ServeAsync);
@@ -237,8 +243,10 @@ internal sealed class RogueAckServer : IAsyncDisposable
             signature[^1] ^= 0xFF;
         }
 
+        // Подпись считается по транскрипту текущей версии (как его вычислит клиент): отказ в тесте
+        // с несовместимой версией должен быть вызван только полем protocolVersion в hello_ack.
         var helloAck = new SignalingHelloAck(
-            SignalingProtocol.CurrentVersion,
+            _helloAckProtocolVersion,
             echoNonce,
             responderNonce,
             initiatorCertificateHash,
