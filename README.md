@@ -8,9 +8,10 @@ Android-приложение, которое соединяет два теле�
 > pairing-протокол (Android Keystore identity + trusted store), session-reliability политики и UI
 > pairing (офлайн QR-обмен, verification code, trusted devices, camera scan, diagnostics).
 > Передача аудио/media, сетевой signaling и автоматическое переподключение runtime-сессии не
-> реализованы (005 phase 2 — следующий этап: signaling/media/audio, ADR-0007 вариант A — к
-> принятию). Приложение пока не выполняет функции радионяни. Для device-проверок у владельца есть
-> два физических Android-устройства; emulator device-тесты не заменяет.
+> реализованы (005 phase 2 — следующий этап: signaling/media/audio; design и Application-порты
+> готовятся в PR 005 phase 2, ADR-0007 вариант A — к принятию в этом PR). Приложение пока не
+> выполняет функции радионяни. У владельца есть два физических Android-устройства для
+> device-прогона v0.2.0; emulator device-тесты не заменяет.
 
 ## Зачем
 
