@@ -5,6 +5,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Media/signaling stack (005 phase 2, ADR-0005/ADR-0007): WebRTC audio-only, DTLS-SRTP,
+         Opus; пакет изолирован в Infrastructure (Application/Domain его не видят). -->
+    <PackageReference Include="SIPSorcery" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\BabyMonitor.Application\BabyMonitor.Application.csproj" />
     <ProjectReference Include="..\BabyMonitor.Domain\BabyMonitor.Domain.csproj" />
   </ItemGroup>
