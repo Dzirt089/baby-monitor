@@ -98,6 +98,18 @@
 Privacy: device test — без аудиоданных; alarm-нотификация не содержит PII. Sound/vibration не подтверждены
 человеком (только channel importance/category).
 
+## v0.4.7 T053 retest: 10 s Wi-Fi flap auto-recovery (PASS, 2026-11-08)
+
+Оба Huawei на adb, v0.4.7 (versionCode 407), старт Parent+Child, обе MediaFlowing.
+
+| # | Сценарий | Результат |
+|---|---|---|
+| 1 | Child Wi-Fi off 10 s → on | PASS: auto-recovery обеих MediaFlowing через 26 s от начала flap (16 s после включения Wi-Fi), без ручного рестарта, alarm Parent appeared во время outage и снялся после восстановления |
+| 2 | Ещё 3 цикла 10 s off/on | PASS: 26 s / 29 s / 26 s, без terminal Failed, без crash |
+| 3 | Crash buffers после | пусты |
+
+**Вывод:** T053 фикс подтверждён на устройстве (auto-reconnect переживает 10 s Wi-Fi flap).
+
 ### v0.4.4 rogue/flood single-device (nova Y90, no Parent, 2026-11-08): versionCode 404 install PASS;
 Child Advertising/Media Connecting, listener 0.0.0.0:47800. Host (192.168.3.x) сделал 3 rogue TCP
 connect+close → Child остался Connecting (retry Accept/cooldown), notification «Подключение…», crash

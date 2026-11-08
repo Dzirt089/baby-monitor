@@ -33,9 +33,11 @@ Device-прогон v0.3.1 (2026-11-08, Huawei nova Y90 + nova 13 Pro, Android 1
 ### Verification
 
 - Debug/Release build 0 warnings; format clean; vuln scan чистый; тесты **560/560**
-  (Domain 38, Application 291, Infrastructure 172, Architecture 59); независимое review — после PR.
-- Device v0.4.7 retest pending (10 s Wi-Fi flap → auto-recovery), двухдевайсовые T040/T043 остаются
-  частичными; sound/vibration/DND/calls/BT/TalkBack/100 cycles/8h soak — NOT RUN.
+  (Domain 38, Application 291, Infrastructure 172, Architecture 59); независимое review APPROVE; CI зелёный.
+- **Device v0.4.7 T053 retest PASS** (оба Huawei на adb): Child Wi-Fi off 10 s → auto-recovery обеих
+  MediaFlowing через 26 s от начала flap (16 s после включения), без ручного рестарта; ещё 3 цикла —
+  26/29/26 s, без terminal Failed/crash; alarm во время outage снялся после восстановления. Остальные
+  T040/T043-пункты (media-only alarm, звук/вибрация/DND, calls/BT/TalkBack, 100 cycles/8h soak) — NOT RUN.
 
 ## [0.4.6] - 2026-11-08
 

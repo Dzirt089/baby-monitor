@@ -3,14 +3,15 @@
 Android-приложение, которое соединяет два телефона в одной локальной Wi-Fi сети и передаёт звук
 от детского устройства к родительскому без обязательного облачного backend.
 
-> **Статус: v0.4.6, передача звука подтверждена владельцем на двух реальных устройствах (v0.3.1).**
+> **Статус: v0.4.7, передача звука подтверждена владельцем на двух реальных устройствах (v0.3.1).**
 > Huawei nova Y90 (Child) + Huawei nova 13 Pro (Parent), Android 12: сопряжение по QR, передача
 > звука Child→Parent, MediaFlowing, **слышимость подтверждена владельцем**, screen-off, чистый Stop.
-> v0.4.x: control heartbeat, ParentLossAlarm «Связь потеряна!» и telemetry; на v0.4.4 two-device
-> проверены live telemetry, alarm при Wi-Fi off (≤5 s, high-importance notification) и terminal Failed
-> со standalone alarm, screen-off 90 s. **Известный дефект T053:** auto-reconnect после 10 s Wi-Fi flap
-> не восстановился (оба сеанса terminal Failed) — исправление в работе; жёсткий Stop/reconnect-матрица
-> не заявляется. Детали и ограничения —
+> v0.4.x: control heartbeat, ParentLossAlarm «Связь потеряна!» и telemetry; v0.4.7 T053 retest PASS:
+> 10 s Wi-Fi flap → auto-recovery обеих MediaFlowing через 26 s (ещё 3 цикла 26/29/26 s), без ручного
+> рестарта/crash; alarm снимается после восстановления. Ранее v0.4.4: live telemetry, alarm ≤5 s,
+> terminal Failed + standalone high-importance alarm, screen-off 90 s. Остальная device-матрица
+> (media-only alarm, звук/вибрация/DND, calls/BT/TalkBack, 100 cycles/8h soak, OEM) — 007, не заявлена.
+> Детали и ограничения —
 > [docs/operations/device-test-results-2026-11-08.md](docs/operations/device-test-results-2026-11-08.md).
 >
 > **Не медицинское изделие.** Матрица ограничена двумя Huawei/Android 12; звонки/audio focus,
