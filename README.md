@@ -3,18 +3,20 @@
 Android-приложение, которое соединяет два телефона в одной локальной Wi-Fi сети и передаёт звук
 от детского устройства к родительскому без обязательного облачного backend.
 
-> **Статус: передача звука подтверждена на двух реальных устройствах (2026-11-08, v0.3.1).**
-> v0.4.0 добавляет control heartbeat, ParentLossAlarm (тревога «Связь потеряна!») и telemetry
-> в диагностику; device-проверка этих функций ещё не выполнена (нужен adb на втором телефоне).
+> **Статус: v0.4.5, передача звука подтверждена владельцем на двух реальных устройствах (v0.3.1).**
 > Huawei nova Y90 (Child) + Huawei nova 13 Pro (Parent), Android 12: сопряжение по QR, передача
-> звука Child→Parent, MediaFlowing, **слышимость подтверждена владельцем**, reconnect после Wi-Fi
-> off/on, работа при выключенном экране, чистый Stop. Детали —
+> звука Child→Parent, MediaFlowing, **слышимость подтверждена владельцем**, screen-off, чистый Stop.
+> v0.4.x: control heartbeat, ParentLossAlarm «Связь потеряна!» и telemetry; на v0.4.4 two-device
+> проверены live telemetry, alarm при Wi-Fi off (≤5 s, high-importance notification) и terminal Failed
+> со standalone alarm, screen-off 90 s. **Известный дефект T053:** auto-reconnect после 10 s Wi-Fi flap
+> не восстановился (оба сеанса terminal Failed) — исправление в работе; жёсткий Stop/reconnect-матрица
+> не заявляется. Детали и ограничения —
 > [docs/operations/device-test-results-2026-11-08.md](docs/operations/device-test-results-2026-11-08.md).
 >
 > **Не медицинское изделие.** Матрица ограничена двумя Huawei/Android 12; звонки/audio focus,
 > Bluetooth/наушники, 8h soak, 100 reconnect-циклов, battery drain без зарядки, TalkBack,
-> camera↔camera и полная OEM-матрица — **007**; signing-chain/лицензия/privacy/публичная
-> дистрибуция — **008** и только по решению владельца.
+> camera↔camera, media-only alarm, звук/вибрация/DND alarm-канала и полная OEM-матрица — **007**;
+> signing-chain/лицензия/privacy/публичная дистрибуция — **008** и только по решению владельца.
 
 ## Зачем
 
@@ -146,8 +148,11 @@ approval на GitHub Free для private-репозитория недоступ
    «поверх»: подпись постоянным release keystore не меняется.
 4. Чек-лист проверок для текущей сборки — в [docs/operations/](docs/operations/).
 
-Тестовая сборка **не является рабочей радионяней**: передача звука появится в 0.3.0 и будет
-считаться подтверждённой только после прогона владельцем на двух устройствах.
+Тестовая сборка **не является рабочей радионяней** и не медицинское изделие: передача звука
+подтверждена владельцем на v0.3.1 (Huawei pair, Android 12); актуальные device-результаты и
+открытые ограничения (T053 auto-reconnect, soak/100 cycles/OEM/calls/BT/TalkBack) —
+[docs/operations/device-test-results-2026-11-08.md](docs/operations/device-test-results-2026-11-08.md).
+Полная release readiness matrix (AGENTS §16) не пройдена.
 
 ## Подпись и секреты
 

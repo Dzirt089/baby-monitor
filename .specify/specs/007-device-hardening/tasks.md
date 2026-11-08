@@ -85,7 +85,7 @@
 - [ ] T039 Проверить, что при выборе другой роли во время активной сессии UI не создаёт вторую
   сессию/не теряет управление; typed error/подсказка.
 
-## Phase 7 — device-проверка v0.4.1 (T040/T043)
+## Phase 7 — device-проверка (T040/T043, v0.4.4 partial)
 
 - [-] T040 (v0.4.1 retest pending) Проверить на 2 устройствах: heartbeat/pong, срабатывание ParentLossAlarm «Связь потеряна!»
   (heartbeat loss и media-only loss), звук/вибрация/DND alarm-канала, terminal Failed Parent alarm,
