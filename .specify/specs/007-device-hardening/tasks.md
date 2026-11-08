@@ -97,6 +97,8 @@
 - [-] T042 (v0.4.2, частично) Live-refresh 1/s переопубликовывает SnapshotChanged → FGS Notify и UI Render каждую секунду;
   оптимизировать (обновлять уведомление только при изменении текста/флага; UI — при изменении
   отображаемых полей), измерить battery/CPU во время 8h soak.
+- [-] T043 (partial; v0.4.4/v0.4.7) Device-retest: устройства заблокированы PIN — дальнейшие проверки
+  (Home/background FGS, clean Stop, media-only alarm, sound/vibration/DND, calls/BT/TalkBack) pending owner unlock.
 - [-] T043 (partial, v0.4.4) Device-retest: live counters PASS, terminal Failed standalone alarm PASS
   (Parent id=1004, importance HIGH, category=err, FGS stopped), screen-off 90 s PASS, recovery после
   ручного рестарта PASS; media-only alarm, звук/вибрация/DND, calls/BT/TalkBack — NOT RUN.
