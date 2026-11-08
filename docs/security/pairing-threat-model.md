@@ -166,6 +166,10 @@
   метрикам.
 - LAN availability: rogue mDNS/TCP connect+close может временно помешать старту; bounded retry/
   rate-limit handshake — 007 (H3/H5), trust/pinning не обходится.
+- Control heartbeat (v0.4.0): ping/pong идёт по уже аутентифицированному TLS control-каналу; потеря
+  pong > 15 s → typed heartbeat_missed/Degraded/Reconnecting; ParentLossAlarm (15 s) поднимает
+  локальную тревогу. Обе стороны должны быть обновлены; старый peer не отвечает pong → heartbeat_missed.
+  Rate-limit/backoff неудачных handshake и тюнинг порогов по device-метрикам — 007.
 - Trusted store — private SharedPreferences без tamper-evidence; компрометация файла потребует
   pairing/UI решения (008/007).
 - Android SslStream + ephemeral mutual TLS проверены на 2 Huawei/Android 12; 13+/14+ и OEM

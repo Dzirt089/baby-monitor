@@ -1,6 +1,6 @@
 # Implementation Plan: 007 — Device hardening & field reliability
 
-**Spec**: [spec.md](spec.md) · **Status**: In Progress (device pass 2026-11-08 частично выполнен)
+**Spec**: [spec.md](spec.md) · **Status**: In Progress — reliability code v0.4.0 реализован (heartbeat/alarm/telemetry, 498/498 tests); device pass v0.3.1 частично выполнен, device-проверка v0.4.0 — BLOCKED (adb nova 13 Pro)
 
 ## Технический подход
 
